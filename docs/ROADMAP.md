@@ -12,13 +12,18 @@ stage.
 - Fireball: explosions, craters, debris, spreading fire
 - RTS camera and tool HUD
 
+## Milestone 0.5: Art style pass ✅
+- Stylised-realism look: baked textures, triplanar surfaces, lush grass
+- Lighting moods with volumetric fog (day, golden hour, misty dawn, night)
+- Rebuilt buildings, trees, villagers and a high-poly skinned creature
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)
-- [ ] Water shader with waves and foam; better sky / day-night cycle
-- [ ] Terrain texture splatting (grass / dirt / rock textures from Poly Haven)
-- [ ] Creature: head looks at the target, casting animation, idle fidgets
-- [ ] Settings menu (resolution, shadows, mouse sensitivity)
+- [ ] Slow automatic day-night cycle built on the lighting moods
+- [ ] Chimney smoke, flowers, fences, market stalls and other village props
+- [ ] Creature: idle fidgets, roar, facial expressions
+- [ ] Settings menu (resolution, shadows, grass, mouse sensitivity)
 
 ## Milestone 2: RTS foundations
 - [ ] Selection system: click and box-select, selection circles
@@ -38,7 +43,7 @@ stage.
 - [ ] MultiMesh / instancing for trees and villagers, LODs, object pooling
 - [ ] Optional hand-made or AI-assisted models (Blender, TRELLIS, Hunyuan3D),
   exported as `.glb` (add Git LFS when binary assets arrive)
-- [ ] Rigged creature with Godot's IK modifiers instead of primitive limbs
+- [ ] More creature species (edit the shape list in `tools/bake_creature.py`)
 
 ## Process
 - Work on short-lived branches, open a PR, merge when the game still runs.

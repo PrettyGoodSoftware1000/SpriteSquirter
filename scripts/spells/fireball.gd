@@ -29,7 +29,7 @@ func _ready() -> void:
 	core.height = 2.0
 	var core_mat := StandardMaterial3D.new()
 	core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	core_mat.albedo_color = Color(1.0, 0.85, 0.3)
+	core_mat.albedo_color = Color(4.0, 3.0, 1.0)
 	core.material = core_mat
 	var core_node := MeshInstance3D.new()
 	core_node.mesh = core
@@ -42,7 +42,7 @@ func _ready() -> void:
 	var glow_mat := StandardMaterial3D.new()
 	glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	glow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glow_mat.albedo_color = Color(1.0, 0.4, 0.05, 0.6)
+	glow_mat.albedo_color = Color(2.5, 0.9, 0.1, 0.6)
 	glow.material = glow_mat
 	_glow = MeshInstance3D.new()
 	_glow.mesh = glow

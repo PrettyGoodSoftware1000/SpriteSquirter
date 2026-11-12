@@ -15,12 +15,15 @@ const MODE_HINTS := [
 	"Hold left mouse to smooth bumps.  [ ] change brush size.",
 	"Click to place the building. R = new random design. Esc = cancel.",
 ]
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find creature\nRight-click move   F fireball   1-7 tools   N new world"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find creature\nRight-click move   F fireball   1-7 tools   L lighting   G grass detail   N new world"
 
 var _buttons: Array[Button] = []
 var _hint: Label
 var _brush: Label
 var _stats: Label
+var _mood: Label
+var _mood_name := ""
+var _grass_name := "High"
 
 
 func _ready() -> void:
@@ -71,6 +74,9 @@ func _ready() -> void:
 	regen.pressed.connect(func() -> void: regenerate_requested.emit())
 	row.add_child(regen)
 
+	_mood = Label.new()
+	box.add_child(_mood)
+
 	_stats = Label.new()
 	_stats.modulate = Color(1, 1, 1, 0.8)
 	box.add_child(_stats)
@@ -95,6 +101,20 @@ func set_mode(mode: int) -> void:
 
 func set_brush(radius: float) -> void:
 	_brush.text = "Brush radius: %d m" % roundi(radius)
+
+
+func set_mood(mood_name: String) -> void:
+	_mood_name = mood_name
+	_refresh_settings()
+
+
+func set_grass(level_name: String) -> void:
+	_grass_name = level_name
+	_refresh_settings()
+
+
+func _refresh_settings() -> void:
+	_mood.text = "Lighting (L): %s    Grass (G): %s" % [_mood_name, _grass_name]
 
 
 func set_stats(text: String) -> void:

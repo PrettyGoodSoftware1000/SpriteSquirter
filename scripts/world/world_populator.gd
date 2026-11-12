@@ -8,6 +8,7 @@ static func populate(parent: Node3D, terrain: Terrain, world_seed: int) -> void:
 	rng.seed = world_seed + 1234
 	_place_villages(parent, terrain, rng)
 	_place_trees(parent, terrain, rng)
+	_place_rocks(parent, terrain, rng)
 
 
 static func _place_villages(parent: Node3D, terrain: Terrain, rng: RandomNumberGenerator) -> void:
@@ -23,7 +24,7 @@ static func _place_villages(parent: Node3D, terrain: Terrain, rng: RandomNumberG
 			var p := c + Vector2(cos(a), sin(a)) * rng.randf_range(5.0, r)
 			var free := true
 			for other in placed:
-				if other.distance_to(p) < 8.5:
+				if other.distance_to(p) < 9.5:
 					free = false
 					break
 			if not free:
@@ -33,6 +34,7 @@ static func _place_villages(parent: Node3D, terrain: Terrain, rng: RandomNumberG
 			b.position = Vector3(p.x, terrain.get_height(p.x, p.y), p.y)
 			# Doors face the middle of the village.
 			b.rotation.y = atan2(c.x - p.x, c.y - p.y)
+			terrain.add_bare(b.position, b.footprint + 1.5, 0.9)
 			placed.append(p)
 		for k in rng.randi_range(14, 22):
 			spawn_villager(parent, terrain, Vector3(c.x, 0.0, c.y), r)
@@ -75,8 +77,36 @@ static func _place_trees(parent: Node3D, terrain: Terrain, rng: RandomNumberGene
 				break
 		if in_village:
 			continue
-		var tree := BuildingFactory.create_tree(rng)
+		var tree := FloraFactory.create_tree(rng)
 		parent.add_child(tree)
 		tree.position = Vector3(x, h, z)
 		tree.rotation.y = rng.randf() * TAU
+		count += 1
+
+
+static func _place_rocks(parent: Node3D, terrain: Terrain, rng: RandomNumberGenerator) -> void:
+	var count := 0
+	for attempt in 2000:
+		if count >= 110:
+			break
+		var x := rng.randf_range(-120.0, 120.0)
+		var z := rng.randf_range(-120.0, 120.0)
+		var h := terrain.get_height(x, z)
+		if h < -0.5:
+			continue
+		# Boulders gather on slopes and shores, with a few strays in the fields.
+		var steep := terrain.get_normal(x, z).y < 0.9
+		if not steep and h > 1.2 and rng.randf() > 0.08:
+			continue
+		var near_village := false
+		for site in terrain.village_sites:
+			var r: float = site.radius
+			if Vector2(x, z).distance_to(site.pos) < r:
+				near_village = true
+				break
+		if near_village:
+			continue
+		var rock := FloraFactory.create_rock(rng)
+		parent.add_child(rock)
+		rock.position = Vector3(x, h, z)
 		count += 1

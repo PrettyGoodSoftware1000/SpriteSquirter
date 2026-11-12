@@ -5,6 +5,9 @@ extends Node3D
 ## Heights live in one flat array of (SIZE + 1)^2 samples spaced 1 m apart and
 ## centred on the origin, so the world spans x/z in [-HALF, HALF]. The visible
 ## mesh is split into chunks, and editing only rebuilds the chunks it touches.
+##
+## Heights, scorch marks and the bare-ground mask are also kept in textures
+## that the terrain, grass and water shaders read (see Art.bind_terrain).
 
 signal changed(center: Vector3, radius: float)
 
@@ -19,39 +22,38 @@ const WATER_LEVEL := 0.0
 const MIN_HEIGHT := -10.0
 const MAX_HEIGHT := 60.0
 
-const COLOR_SAND := Color(0.80, 0.70, 0.46)
-const COLOR_GRASS := Color(0.36, 0.62, 0.20)
-const COLOR_GRASS_DARK := Color(0.21, 0.45, 0.15)
-const COLOR_MEADOW := Color(0.62, 0.68, 0.28)
-const COLOR_ROCK := Color(0.42, 0.38, 0.36)
-const COLOR_SNOW := Color(0.95, 0.96, 1.0)
-const COLOR_SCORCH := Color(0.07, 0.06, 0.05)
-
 var heights := PackedFloat32Array()
 ## 0..1 burn darkness per sample, painted by fire and explosions.
 var scorch := PackedFloat32Array()
+## 0..1 bare ground per sample (village squares, roads, under buildings).
+var bare := PackedFloat32Array()
 ## Flat areas picked for villages: {"pos": Vector2, "radius": float, "height": float}.
 var village_sites: Array[Dictionary] = []
+
+var grass: Grass
 
 var _chunks: Array[MeshInstance3D] = []
 var _dirty := {}
 var _collision_dirty := false
 var _collision_timer := 0.0
 var _shape := HeightMapShape3D.new()
-var _material := StandardMaterial3D.new()
-var _color_noise := FastNoiseLite.new()
+var _height_tex: ImageTexture
+var _scorch_tex: ImageTexture
+var _bare_tex: ImageTexture
+var _height_tex_dirty := false
+var _scorch_tex_dirty := false
+var _bare_tex_dirty := false
 
 
 func _ready() -> void:
-	_material.vertex_color_use_as_albedo = true
-	_material.vertex_color_is_srgb = true
-	_material.roughness = 0.95
 	for cz in CHUNKS:
 		for cx in CHUNKS:
 			var mi := MeshInstance3D.new()
 			mi.name = "Chunk_%d_%d" % [cx, cz]
 			add_child(mi)
 			_chunks.append(mi)
+	grass = Grass.new()
+	add_child(grass)
 	var body := StaticBody3D.new()
 	body.name = "Collision"
 	body.collision_layer = 1
@@ -71,6 +73,15 @@ func _process(delta: float) -> void:
 			_collision_timer = 0.2
 			_collision_dirty = false
 			_shape.map_data = heights
+	if _height_tex_dirty:
+		_height_tex_dirty = false
+		_height_tex.update(_to_image(heights))
+	if _scorch_tex_dirty:
+		_scorch_tex_dirty = false
+		_scorch_tex.update(_to_image(scorch))
+	if _bare_tex_dirty:
+		_bare_tex_dirty = false
+		_bare_tex.update(_to_image(bare))
 
 
 # --- Generation -------------------------------------------------------------
@@ -92,18 +103,23 @@ func generate(world_seed: int) -> void:
 	mask.frequency = 0.007
 	mask.fractal_octaves = 2
 
-	_color_noise.seed = world_seed + 99
-	_color_noise.frequency = 0.05
-
 	heights.resize(N * N)
 	scorch.resize(N * N)
 	scorch.fill(0.0)
+	bare.resize(N * N)
+	bare.fill(0.0)
 	for j in N:
 		for i in N:
 			heights[j * N + i] = _natural_height(i - HALF, j - HALF, base, mask)
 
 	_pick_village_sites(rng)
 	_flatten_village_sites()
+	_paint_village_ground(world_seed)
+
+	_height_tex = ImageTexture.create_from_image(_to_image(heights))
+	_scorch_tex = ImageTexture.create_from_image(_to_image(scorch))
+	_bare_tex = ImageTexture.create_from_image(_to_image(bare))
+	Art.bind_terrain(_height_tex, _scorch_tex, _bare_tex)
 
 	_shape.map_width = N
 	_shape.map_depth = N
@@ -179,6 +195,48 @@ func _flatten_village_sites() -> void:
 				var t := 1.0 - smoothstep(r, reach, d)
 				var k := j * N + i
 				heights[k] = lerpf(heights[k], target, t)
+
+
+## Marks worn dirt in the village squares and along roads between villages.
+func _paint_village_ground(world_seed: int) -> void:
+	var noise := FastNoiseLite.new()
+	noise.seed = world_seed + 5
+	noise.frequency = 0.09
+	# Each village gets a road to the nearest village placed before it.
+	var roads: Array[PackedVector2Array] = []
+	for k in range(1, village_sites.size()):
+		var from: Vector2 = village_sites[k].pos
+		var best: Vector2 = village_sites[0].pos
+		for m in k:
+			var other: Vector2 = village_sites[m].pos
+			if from.distance_to(other) < from.distance_to(best):
+				best = other
+		roads.append(PackedVector2Array([from, best]))
+	for j in N:
+		for i in N:
+			var p := Vector2(i - HALF, j - HALF)
+			var wobble := noise.get_noise_2d(p.x, p.y)
+			var value := 0.0
+			for s in village_sites:
+				var r: float = s.radius
+				var d := p.distance_to(s.pos)
+				if d < r:
+					value = maxf(value, (1.0 - smoothstep(r * 0.25, r * 0.8, d)) * (0.55 + 0.5 * wobble))
+			for road in roads:
+				var d := _segment_distance(p, road[0], road[1]) + wobble * 2.5
+				if d < 3.0:
+					value = maxf(value, (1.0 - smoothstep(0.8, 2.6, d)) * 0.75)
+			bare[j * N + i] = clampf(value, 0.0, 1.0)
+
+
+func _segment_distance(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
+func _to_image(data: PackedFloat32Array) -> Image:
+	return Image.create_from_data(N, N, false, Image.FORMAT_RF, data.to_byte_array())
 
 
 # --- Queries ----------------------------------------------------------------
@@ -283,11 +341,23 @@ func apply_brush(center: Vector3, radius: float, mode: Brush, amount: float, tar
 			heights[k] = clampf(h, MIN_HEIGHT, MAX_HEIGHT)
 	_mark_dirty(i0, j0, i1, j1)
 	_collision_dirty = true
+	_height_tex_dirty = true
 	changed.emit(center, radius)
 
 
-## Darkens the ground (burn marks). Purely visual.
+## Darkens the ground (burn marks) and burns the grass away.
 func add_scorch(center: Vector3, radius: float, amount: float) -> void:
+	_paint(scorch, center, radius, amount)
+	_scorch_tex_dirty = true
+
+
+## Wears the grass away to bare dirt (around buildings, on paths).
+func add_bare(center: Vector3, radius: float, amount: float) -> void:
+	_paint(bare, center, radius, amount)
+	_bare_tex_dirty = true
+
+
+func _paint(data: PackedFloat32Array, center: Vector3, radius: float, amount: float) -> void:
 	var i0 := clampi(floori(center.x + HALF - radius), 0, SIZE)
 	var i1 := clampi(ceili(center.x + HALF + radius), 0, SIZE)
 	var j0 := clampi(floori(center.z + HALF - radius), 0, SIZE)
@@ -299,8 +369,7 @@ func add_scorch(center: Vector3, radius: float, amount: float) -> void:
 				continue
 			var k := j * N + i
 			var w := 1.0 - smoothstep(radius * 0.3, radius, d)
-			scorch[k] = minf(1.0, scorch[k] + amount * w)
-	_mark_dirty(i0, j0, i1, j1)
+			data[k] = minf(1.0, data[k] + amount * w)
 
 
 func _sample(source: PackedFloat32Array, i: int, j: int) -> float:
@@ -331,20 +400,15 @@ func _build_chunk(cx: int, cz: int) -> void:
 	var n := CHUNK + 1
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
-	var colors := PackedColorArray()
 	verts.resize(n * n)
 	normals.resize(n * n)
-	colors.resize(n * n)
 	var k := 0
 	for lj in n:
 		for li in n:
 			var i := cx * CHUNK + li
 			var j := cz * CHUNK + lj
-			var h := heights[j * N + i]
-			var nrm := _grid_normal(i, j)
-			verts[k] = Vector3(i - HALF, h, j - HALF)
-			normals[k] = nrm
-			colors[k] = _grid_color(i, j, h, nrm)
+			verts[k] = Vector3(i - HALF, heights[j * N + i], j - HALF)
+			normals[k] = _grid_normal(i, j)
 			k += 1
 
 	var indices := PackedInt32Array()
@@ -369,11 +433,10 @@ func _build_chunk(cx: int, cz: int) -> void:
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, _material)
+	mesh.surface_set_material(0, Art.terrain())
 	_chunks[cz * CHUNKS + cx].mesh = mesh
 
 
@@ -387,20 +450,3 @@ func _grid_normal(i: int, j: int) -> Vector3:
 	var hd := _grid_height(i, j - 1)
 	var hu := _grid_height(i, j + 1)
 	return Vector3(hl - hr, 2.0, hd - hu).normalized()
-
-
-func _grid_color(i: int, j: int, h: float, nrm: Vector3) -> Color:
-	var x := i - HALF
-	var z := j - HALF
-	var variation := (_color_noise.get_noise_2d(x, z) + 1.0) * 0.5
-	var c := COLOR_GRASS.lerp(COLOR_GRASS_DARK, variation)
-	for s in village_sites:
-		var r: float = s.radius
-		var d := Vector2(x, z).distance_to(s.pos)
-		if d < r + 4.0:
-			c = c.lerp(COLOR_MEADOW, (1.0 - smoothstep(r - 6.0, r + 4.0, d)) * 0.6)
-	c = COLOR_SAND.lerp(c, smoothstep(0.3, 1.3, h))
-	var slope := 1.0 - nrm.y
-	c = c.lerp(COLOR_ROCK, smoothstep(0.16, 0.36, slope))
-	c = c.lerp(COLOR_SNOW, smoothstep(24.0, 29.0, h) * (1.0 - smoothstep(0.3, 0.5, slope)))
-	return c.lerp(COLOR_SCORCH, scorch[j * N + i])

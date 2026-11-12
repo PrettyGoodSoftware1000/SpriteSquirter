@@ -10,8 +10,11 @@ const DEBRIS_LIFETIME := 11.0
 var _fire_lights_in_use := 0
 
 var _flame_mesh: QuadMesh
+var _ember_mesh: QuadMesh
 var _smoke_mesh: QuadMesh
+var _dust_mesh: QuadMesh
 var _fire_gradient: Gradient
+var _ember_gradient: Gradient
 var _smoke_gradient: Gradient
 var _dust_gradient: Gradient
 var _grow_shrink: Curve
@@ -20,22 +23,30 @@ var _debris: Array[Dictionary] = []
 
 
 func _ready() -> void:
-	var soft := _soft_circle_texture()
-	_flame_mesh = _particle_quad(soft, BaseMaterial3D.BLEND_MODE_MIX, 1.6)
-	_smoke_mesh = _particle_quad(soft, BaseMaterial3D.BLEND_MODE_MIX, 2.0)
-	_fire_gradient = _gradient([0.0, 0.2, 0.55, 1.0], [
-		Color(1.0, 0.9, 0.35, 1.0),
-		Color(1.0, 0.5, 0.05, 1.0),
-		Color(0.85, 0.15, 0.02, 0.8),
-		Color(0.25, 0.08, 0.04, 0.0)])
-	_smoke_gradient = _gradient([0.0, 0.15, 1.0], [
-		Color(0.16, 0.14, 0.13, 0.0),
-		Color(0.15, 0.14, 0.13, 0.7),
-		Color(0.35, 0.34, 0.34, 0.0)])
+	_flame_mesh = _sprite_quad("flame", 2.3)
+	_ember_mesh = _sprite_quad("ember", 0.22)
+	_smoke_mesh = _sprite_quad("smoke", 2.8)
+	_dust_mesh = _sprite_quad("dust", 2.0)
+	# Particle colours multiply the sprite: flames stay bright, then redden
+	# and fade; smoke and dust fade in and out.
+	_fire_gradient = _gradient([0.0, 0.45, 0.8, 1.0], [
+		Color(1.0, 1.0, 1.0, 1.0),
+		Color(1.0, 0.85, 0.7, 1.0),
+		Color(0.9, 0.45, 0.3, 0.7),
+		Color(0.5, 0.15, 0.1, 0.0)])
+	_ember_gradient = _gradient([0.0, 0.7, 1.0], [
+		Color(1.0, 1.0, 1.0, 1.0),
+		Color(1.0, 0.7, 0.5, 1.0),
+		Color(1.0, 0.4, 0.2, 0.0)])
+	_smoke_gradient = _gradient([0.0, 0.15, 0.6, 1.0], [
+		Color(0.14, 0.12, 0.11, 0.0),
+		Color(0.16, 0.14, 0.13, 0.75),
+		Color(0.3, 0.29, 0.29, 0.5),
+		Color(0.45, 0.45, 0.46, 0.0)])
 	_dust_gradient = _gradient([0.0, 0.15, 1.0], [
-		Color(0.62, 0.55, 0.42, 0.0),
-		Color(0.6, 0.53, 0.4, 0.6),
-		Color(0.7, 0.65, 0.55, 0.0)])
+		Color(0.58, 0.5, 0.38, 0.0),
+		Color(0.58, 0.5, 0.38, 0.65),
+		Color(0.68, 0.62, 0.52, 0.0)])
 	_grow_shrink = Curve.new()
 	_grow_shrink.add_point(Vector2(0.0, 0.35))
 	_grow_shrink.add_point(Vector2(0.25, 1.0))
@@ -102,6 +113,27 @@ func make_flames(size: float) -> CPUParticles3D:
 	return p
 
 
+## Glowing sparks that drift up from a fire.
+func make_embers(size: float) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.mesh = _ember_mesh
+	p.amount = clampi(int(8 * size), 4, 20)
+	p.lifetime = 2.2
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.5 * size
+	p.direction = Vector3.UP
+	p.spread = 35.0
+	p.gravity = Vector3(0.6, 1.2, 0.3)
+	p.initial_velocity_min = 1.5 * size
+	p.initial_velocity_max = 4.0 * size
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.2
+	p.color_ramp = _ember_gradient
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
+
+
 func make_smoke(size: float) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.mesh = _smoke_mesh
@@ -119,6 +151,8 @@ func make_smoke(size: float) -> CPUParticles3D:
 	p.scale_amount_max = 2.8 * size
 	p.scale_amount_curve = _grow
 	p.color_ramp = _smoke_gradient
+	p.angle_min = -180.0
+	p.angle_max = 180.0
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return p
 
@@ -162,11 +196,13 @@ func spawn_explosion(pos: Vector3, radius: float) -> void:
 	fireball.damping_max = radius * 1.5
 	_spawn_oneshot(fireball, pos + Vector3.UP, 2.0)
 
-	var sparks := _burst(_flame_mesh, _fire_gradient, 40, 1.3, radius * 1.2, radius * 2.6, 0.25, 0.6, Vector3(0, -14, 0))
+	var sparks := _burst(_ember_mesh, _ember_gradient, 60, 1.5, radius * 1.2, radius * 2.8, 0.8, 2.2, Vector3(0, -14, 0))
 	_spawn_oneshot(sparks, pos + Vector3.UP, 2.5)
 
 	var smoke := _burst(_smoke_mesh, _smoke_gradient, 36, 3.5, radius * 0.25, radius * 0.8, 3.0, 6.5, Vector3(0.4, 1.4, 0.2))
 	smoke.scale_amount_curve = _grow
+	smoke.angle_min = -180.0
+	smoke.angle_max = 180.0
 	smoke.damping_min = radius * 0.2
 	smoke.damping_max = radius * 0.4
 	_spawn_oneshot(smoke, pos + Vector3.UP * 1.5, 5.0)
@@ -174,7 +210,7 @@ func spawn_explosion(pos: Vector3, radius: float) -> void:
 	_spawn_dirt(pos, radius)
 
 	# Bright core that swells and fades.
-	var flash_mat := _glow_material(Color(1.0, 0.55, 0.1, 0.9))
+	var flash_mat := _glow_material(Color(3.0, 1.6, 0.4, 0.9))
 	flash_mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	var sphere := SphereMesh.new()
 	sphere.radius = 1.0
@@ -192,7 +228,7 @@ func spawn_explosion(pos: Vector3, radius: float) -> void:
 	tw.chain().tween_callback(flash.queue_free)
 
 	# Shockwave ring along the ground.
-	var ring_mat := _glow_material(Color(1.0, 0.85, 0.6, 0.8))
+	var ring_mat := _glow_material(Color(2.0, 1.4, 0.8, 0.8))
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.85
 	torus.outer_radius = 1.0
@@ -221,19 +257,21 @@ func spawn_explosion(pos: Vector3, radius: float) -> void:
 
 
 func _spawn_dirt(pos: Vector3, radius: float) -> void:
-	var dirt := _burst(_smoke_mesh, _dust_gradient, 30, 1.8, radius * 0.8, radius * 1.6, 1.2, 2.6, Vector3(0, -9, 0))
+	var dirt := _burst(_dust_mesh, _dust_gradient, 30, 1.8, radius * 0.8, radius * 1.6, 1.2, 2.6, Vector3(0, -9, 0))
 	dirt.direction = Vector3.UP
 	dirt.spread = 45.0
 	_spawn_oneshot(dirt, pos, 3.0)
 
 
 func spawn_dust(pos: Vector3, size: float) -> void:
-	var dust := _burst(_smoke_mesh, _dust_gradient, 22, 1.6, 3.0 * size, 6.0 * size, 1.2 * size, 2.6 * size, Vector3(0, 0.4, 0))
+	var dust := _burst(_dust_mesh, _dust_gradient, 22, 1.6, 3.0 * size, 6.0 * size, 1.2 * size, 2.6 * size, Vector3(0, 0.4, 0))
 	dust.spread = 90.0
 	dust.flatness = 0.85
 	dust.damping_min = 4.0 * size
 	dust.damping_max = 6.0 * size
 	dust.scale_amount_curve = _grow
+	dust.angle_min = -180.0
+	dust.angle_max = 180.0
 	_spawn_oneshot(dust, pos + Vector3.UP * 0.3, 2.5)
 
 
@@ -323,29 +361,11 @@ func _glow_material(color: Color) -> StandardMaterial3D:
 	return mat
 
 
-func _particle_quad(tex: Texture2D, blend: BaseMaterial3D.BlendMode, size: float) -> QuadMesh:
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = blend
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	mat.vertex_color_use_as_albedo = true
-	mat.albedo_texture = tex
+func _sprite_quad(kind: String, size: float) -> QuadMesh:
 	var quad := QuadMesh.new()
 	quad.size = Vector2(size, size)
-	quad.material = mat
+	quad.material = Art.particle(kind)
 	return quad
-
-
-func _soft_circle_texture() -> GradientTexture2D:
-	var tex := GradientTexture2D.new()
-	tex.gradient = _gradient([0.0, 0.5, 1.0], [Color(1, 1, 1, 1), Color(1, 1, 1, 0.45), Color(1, 1, 1, 0)])
-	tex.width = 64
-	tex.height = 64
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(1.0, 0.5)
-	return tex
 
 
 func _gradient(offsets: Array, colors: Array) -> Gradient:

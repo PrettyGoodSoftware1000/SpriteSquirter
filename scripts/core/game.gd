@@ -6,6 +6,10 @@ extends Node
 
 ## Seed for the current world. Kept here so it survives a scene reload.
 var world_seed: int = 0
+## Lighting mood, kept here so it survives generating a new world.
+var mood_index: int = 0
+## Index into Grass.DENSITY_LEVELS (0 = full detail).
+var grass_level: int = 0
 
 var world_root: Node3D
 var terrain: Terrain

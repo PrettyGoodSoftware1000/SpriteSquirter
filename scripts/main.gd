@@ -14,6 +14,7 @@ var mode: Mode = Mode.COMMAND
 var brush_radius := 8.0
 
 var terrain: Terrain
+var atmosphere: Atmosphere
 var creature: Creature
 var camera_rig: RtsCamera
 var hud: Hud
@@ -38,8 +39,12 @@ var _ghost_material := StandardMaterial3D.new()
 
 func _ready() -> void:
 	_rng.seed = Game.world_seed
+	Grass.density = Grass.DENSITY_LEVELS[Game.grass_level]
 	Game.world_root = self
-	_setup_environment()
+	atmosphere = Atmosphere.new()
+	atmosphere.name = "Atmosphere"
+	add_child(atmosphere)
+	atmosphere.set_mood(Game.mood_index, 0.0)
 
 	terrain = Terrain.new()
 	terrain.name = "Terrain"
@@ -77,6 +82,8 @@ func _ready() -> void:
 	hud.mode_selected.connect(func(m: int) -> void: _set_mode(m as Mode))
 	hud.regenerate_requested.connect(_regenerate)
 	hud.set_brush(brush_radius)
+	hud.set_mood(atmosphere.mood_name())
+	hud.set_grass(Grass.DENSITY_NAMES[Game.grass_level])
 
 	_setup_brush_ring()
 	_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -122,6 +129,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_BRACKETRIGHT:
 				brush_radius = clampf(brush_radius + 1.5, BRUSH_MIN, BRUSH_MAX)
 				hud.set_brush(brush_radius)
+			KEY_G:
+				_cycle_grass()
+			KEY_L:
+				atmosphere.next_mood()
+				Game.mood_index = atmosphere.mood_index
+				hud.set_mood(atmosphere.mood_name())
 			KEY_N:
 				_regenerate()
 		return
@@ -188,6 +201,13 @@ func _sculpt(pos: Vector3, delta: float) -> void:
 			terrain.apply_brush(pos, brush_radius, Terrain.Brush.SMOOTH, 6.0 * delta)
 
 
+func _cycle_grass() -> void:
+	Game.grass_level = (Game.grass_level + 1) % Grass.DENSITY_LEVELS.size()
+	Grass.density = Grass.DENSITY_LEVELS[Game.grass_level]
+	terrain.grass.rebuild()
+	hud.set_grass(Grass.DENSITY_NAMES[Game.grass_level])
+
+
 func _regenerate() -> void:
 	Game.world_seed = randi()
 	get_tree().reload_current_scene()
@@ -252,6 +272,7 @@ func _place_building() -> void:
 		var t := node as Destructible
 		if Vector2(t.global_position.x - p.x, t.global_position.z - p.z).length() < footprint + 1.5:
 			t.remove_from_group("destructibles")
+			t.remove_from_group("grounded")
 			t.remove_from_group("trees")
 			t.queue_free()
 	var rng := RandomNumberGenerator.new()
@@ -260,6 +281,7 @@ func _place_building() -> void:
 	add_child(b)
 	b.global_position = Vector3(p.x, h, p.z)
 	b.rotation.y = _ghost_rotation
+	terrain.add_bare(b.global_position, footprint + 1.5, 0.9)
 	Game.effects.spawn_dust(b.global_position, clampf(footprint * 0.6, 0.8, 2.5))
 	# Every new house brings a couple of new villagers.
 	for k in 2:
@@ -275,11 +297,11 @@ func _pick_ground(screen_pos: Vector2) -> Variant:
 
 
 func _on_terrain_changed(center: Vector3, radius: float) -> void:
-	# Keep buildings and trees sitting on the ground after it is reshaped.
-	for node in get_tree().get_nodes_in_group("destructibles"):
-		var d := node as Destructible
+	# Keep buildings, trees and rocks sitting on the ground after it is reshaped.
+	for node in get_tree().get_nodes_in_group("grounded"):
+		var d := node as Node3D
 		var flat := Vector2(d.global_position.x - center.x, d.global_position.z - center.z).length()
-		if flat < radius + d.footprint:
+		if flat < radius + 6.0:
 			d.global_position.y = terrain.get_height(d.global_position.x, d.global_position.z)
 
 
@@ -332,52 +354,10 @@ func _update_brush_ring() -> void:
 		_ring_mesh.surface_end()
 
 
-func _setup_environment() -> void:
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.30, 0.50, 0.86)
-	sky_mat.sky_horizon_color = Color(0.74, 0.82, 0.92)
-	sky_mat.ground_horizon_color = Color(0.74, 0.82, 0.92)
-	sky_mat.ground_bottom_color = Color(0.25, 0.32, 0.38)
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
-
-	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.6
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.glow_enabled = true
-	env.glow_intensity = 0.5
-	env.glow_bloom = 0.05
-	env.ssao_enabled = true
-	env.fog_enabled = true
-	env.fog_light_color = Color(0.74, 0.82, 0.92)
-	env.fog_density = 0.0008
-	env.fog_aerial_perspective = 0.15
-	var world_env := WorldEnvironment.new()
-	world_env.environment = env
-	add_child(world_env)
-
-	var sun := DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.rotation_degrees = Vector3(-52.0, -35.0, 0.0)
-	sun.light_color = Color(1.0, 0.96, 0.88)
-	sun.light_energy = 1.2
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 300.0
-	add_child(sun)
-
-
 func _add_water() -> void:
-	var water_mat := StandardMaterial3D.new()
-	water_mat.albedo_color = Color(0.16, 0.42, 0.62, 0.78)
-	water_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	water_mat.roughness = 0.08
-	water_mat.metallic = 0.3
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(900, 900)
-	plane.material = water_mat
+	plane.size = Vector2(1400, 1400)
+	plane.material = Art.water()
 	var water := MeshInstance3D.new()
 	water.name = "Water"
 	water.mesh = plane
@@ -385,11 +365,9 @@ func _add_water() -> void:
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(water)
 
-	var bed_mat := StandardMaterial3D.new()
-	bed_mat.albedo_color = Color(0.55, 0.5, 0.38)
 	var bed_plane := PlaneMesh.new()
-	bed_plane.size = Vector2(900, 900)
-	bed_plane.material = bed_mat
+	bed_plane.size = Vector2(1400, 1400)
+	bed_plane.material = Art.surface("dirt", Color(0.50, 0.44, 0.32), Color(0.38, 0.34, 0.26), {"scale": 0.1})
 	var bed := MeshInstance3D.new()
 	bed.name = "Seabed"
 	bed.mesh = bed_plane

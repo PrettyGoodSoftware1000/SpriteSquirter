@@ -1,0 +1,19 @@
+# Godot 4 generated files
+.godot/
+.import/
+/android/
+
+# Exports
+/build/
+/export/
+*.pck
+*.exe
+*.x86_64
+*.zip
+
+# Editor / OS clutter
+.DS_Store
+Thumbs.db
+*.tmp
+.vscode/
+.idea/

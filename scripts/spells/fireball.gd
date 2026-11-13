@@ -18,8 +18,8 @@ func launch(from: Vector3, to: Vector3) -> void:
 	_from = from
 	_to = to
 	var d := from.distance_to(to)
-	_duration = clampf(d / 40.0, 0.3, 2.2)
-	_arc = clampf(d * 0.18, 1.0, 22.0)
+	_duration = clampf(d / 75.0, 0.25, 1.6)
+	_arc = clampf(d * 0.04, 0.4, 5.0)
 	global_position = from
 
 

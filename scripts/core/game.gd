@@ -10,6 +10,8 @@ var world_seed: int = 0
 var mood_index: int = 0
 ## Index into Grass.DENSITY_LEVELS (0 = full detail).
 var grass_level: int = 0
+## Whether the dev menu (~) is open.
+var dev_menu := false
 
 var world_root: Node3D
 var terrain: Terrain

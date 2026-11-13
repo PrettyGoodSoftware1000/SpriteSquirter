@@ -1,6 +1,6 @@
 class_name Creature
 extends Node3D
-## The giant two-legged creature.
+## The giant creature: a gloomy tortoise that walks on two legs.
 ##
 ## The model (assets/creature/creature.glb) is a single skinned mesh on a
 ## skeleton, sculpted by tools/bake_creature.py. All animation is procedural:
@@ -15,11 +15,11 @@ const MODEL := "res://assets/creature/creature.glb"
 ## Height of the ankle joint above the sole of the foot.
 const ANKLE_HEIGHT := 0.75
 
-@export var max_speed := 5.0
-@export var turn_speed := 1.5
-@export var step_distance := 2.1
-@export var step_time := 0.6
-@export var step_height := 1.4
+@export var max_speed := 3.6
+@export var turn_speed := 1.2
+@export var step_distance := 1.6
+@export var step_time := 0.7
+@export var step_height := 0.9
 
 var has_target := false
 var target := Vector3.ZERO
@@ -76,17 +76,11 @@ func move_to(pos: Vector3) -> void:
 	_look_at = pos
 
 
-func cast_fireball(at: Vector3) -> void:
-	_cast_timer = 0.8
-	_look_at = at
-	var fb := Fireball.new()
-	Game.world_root.add_child(fb)
-	fb.launch(mouth_position(), at)
-
-
-## World position just in front of the mouth.
-func mouth_position() -> Vector3:
-	return _skel.global_transform * (_skel.get_bone_global_pose(_bone["head"]) * Vector3(0.0, -0.3, 2.6))
+## Makes the creature look at something startling (such as a fireball
+## landing) and gasp.
+func watch(pos: Vector3) -> void:
+	_look_at = pos
+	_cast_timer = 0.9
 
 
 func _process(delta: float) -> void:
@@ -121,8 +115,10 @@ func _update_locomotion(delta: float) -> void:
 	rotation.y = heading
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
 	var p := global_position + fwd * speed * delta
-	p.x = clampf(p.x, -118.0, 118.0)
-	p.z = clampf(p.z, -118.0, 118.0)
+	if not Game.terrain.is_inside(p.x, p.z):
+		# Never step off the edge of the island.
+		p = global_position
+		has_target = false
 	# Body height follows the feet and the ground under the belly.
 	var feet_y := (_foot_target_y(0) + _foot_target_y(1)) * 0.5
 	var under := Game.terrain.get_height(p.x, p.z)
@@ -154,6 +150,8 @@ func _update_feet(delta: float) -> void:
 			_step_t[k] = 0.0
 			_step_from[k] = _plant[k]
 			var land := homes[k] + fwd * speed * _current_step_time() * 0.8
+			if not Game.terrain.is_inside(land.x, land.z):
+				land = homes[k]
 			land.y = Game.terrain.get_height(land.x, land.z)
 			_step_to[k] = land
 
@@ -229,18 +227,17 @@ func _update_body(delta: float) -> void:
 	var want_yaw := clampf(angle_difference(heading, atan2(to.x, to.z)), -0.7, 0.7) if to.length() > 3.0 else 0.0
 	_look_yaw = lerpf(_look_yaw, want_yaw + sin(_time * 0.6) * 0.08, 1.0 - exp(-4.0 * delta))
 	var casting := _cast_timer > 0.0
-	var nod := -_bob * 0.12 - (0.3 if casting else 0.0) - _lean * 0.8
+	# The tortoise hangs its head, and lifts it when something startles it.
+	var nod := 0.16 - _bob * 0.12 - (0.3 if casting else 0.0) - _lean * 0.8
 	_skel.set_bone_pose_rotation(_bone["neck"], Quaternion.from_euler(Vector3(nod * 0.5, _look_yaw * 0.5, 0.0)))
 	_skel.set_bone_pose_rotation(_bone["head"], Quaternion.from_euler(Vector3(nod * 0.5, _look_yaw * 0.5, _sway * 0.5)))
-	_jaw = lerpf(_jaw, 0.55 if casting else 0.04 + 0.03 * breath, 1.0 - exp(-14.0 * delta))
+	_jaw = lerpf(_jaw, 0.4 if casting else 0.03 + 0.02 * breath, 1.0 - exp(-14.0 * delta))
 	_skel.set_bone_pose_rotation(_bone["jaw"], Quaternion(Vector3.RIGHT, _jaw))
 
 	# Arms hang from the bind pose and swing against the legs.
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
 	var stride := (_foot_pos(0) - _foot_pos(1)).dot(fwd)
 	var swing_targets: Array[float] = [stride * 0.16, -stride * 0.16]
-	if casting:
-		swing_targets[1] = -2.1
 	for k in 2:
 		var side := "l" if k == 0 else "r"
 		_arm_swing[k] = lerpf(_arm_swing[k], swing_targets[k], blend)
@@ -324,39 +321,30 @@ func _build() -> void:
 	var hide := ShaderMaterial.new()
 	hide.shader = Art.shader("creature")
 	hide.set_shader_parameter("detail_tex", Art.tex("hide_detail"))
+	hide.next_pass = Art.outline(1.0)
 	for node in model.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
 		mi.material_override = hide
 		mi.extra_cull_margin = 6.0
 
-	# Glowing eyes, attached to the head bone.
+	# Sad eyes with heavy lids, attached to the head bone.
 	var attach := BoneAttachment3D.new()
 	_skel.add_child(attach)
 	attach.bone_name = "head"
-	var iris := StandardMaterial3D.new()
-	iris.albedo_color = Color(0.95, 0.75, 0.15)
-	iris.emission_enabled = true
-	iris.emission = Color(1.0, 0.7, 0.1)
-	iris.emission_energy_multiplier = 1.6
-	iris.roughness = 0.15
-	var pupil := StandardMaterial3D.new()
-	pupil.albedo_color = Color(0.02, 0.02, 0.02)
-	pupil.roughness = 0.1
+	var eyes := MeshBuilder.new()
+	var lids := MeshBuilder.new()
 	for sx in [-1.0, 1.0]:
-		var eye_mesh := SphereMesh.new()
-		eye_mesh.radius = 0.3
-		eye_mesh.height = 0.6
-		eye_mesh.material = iris
-		var eye := MeshInstance3D.new()
-		eye.mesh = eye_mesh
-		attach.add_child(eye)
-		eye.position = Vector3(sx * 0.66, 0.42, 1.06)
-		var slit_mesh := SphereMesh.new()
-		slit_mesh.radius = 0.5
-		slit_mesh.height = 1.0
-		slit_mesh.material = pupil
-		var slit := MeshInstance3D.new()
-		slit.mesh = slit_mesh
-		eye.add_child(slit)
-		slit.position = Vector3(sx * 0.06, 0.0, 0.2)
-		slit.scale = Vector3(0.14, 0.42, 0.25)
+		var s: float = sx
+		var centre := Vector3(s * 0.74, 0.5, 1.22)
+		eyes.color = Color(0.96, 0.94, 0.84)
+		eyes.add_blob(Vector3(0.34, 0.34, 0.3), Transform3D(Basis(), centre), null, 0.0, 6, 10)
+		eyes.color = Color(0.05, 0.04, 0.04)
+		eyes.add_blob(Vector3(0.15, 0.17, 0.1), Transform3D(Basis(), centre + Vector3(-s * 0.04, -0.1, 0.24)), null, 0.0, 5, 8)
+		# The lid droops towards the outside of the face: instant gloom.
+		lids.color = Color(0.36, 0.38, 0.2)
+		lids.add_blob(Vector3(0.42, 0.3, 0.38), Transform3D(Basis(Vector3.BACK, -s * 0.38), centre + Vector3(s * 0.03, 0.2, 0.02)), null, 0.0, 6, 10)
+	for builder in [eyes, lids]:
+		var mesh := MeshInstance3D.new()
+		mesh.mesh = (builder as MeshBuilder).commit()
+		mesh.material_override = Art.paint("plaster", 0.25)
+		attach.add_child(mesh)

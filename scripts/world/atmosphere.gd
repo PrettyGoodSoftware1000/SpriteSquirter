@@ -1,6 +1,7 @@
 class_name Atmosphere
 extends Node3D
-## Sky, sun, fog and colour grading. A "mood" is one complete lighting
+## Sky, sun, fog and colour grading. The sun always sits low enough (never
+## overhead) for the cel shading to show the shape of things. A "mood" is one complete lighting
 ## setup; switching moods blends every value smoothly, which shifts the
 ## whole world's colours away from the base palette (green meadow by day,
 ## orange haze at golden hour, blue mist at dawn, firelight at night).
@@ -10,13 +11,13 @@ signal mood_changed(mood_name: String)
 const MOODS := [
 	{
 		"name": "Meadow day",
-		"sun_elevation": 46.0, "sun_azimuth": -38.0,
+		"sun_elevation": 33.0, "sun_azimuth": -38.0,
 		"sun_color": Color(1.0, 0.93, 0.76), "sun_energy": 1.8,
 		"ambient_color": Color(0.56, 0.72, 0.84), "ambient_energy": 0.9,
-		"sky_top": Color(0.26, 0.46, 0.80), "sky_horizon": Color(0.80, 0.85, 0.80), "sky_ground": Color(0.62, 0.72, 0.68),
-		"cloud_color": Color(1.0, 0.99, 0.96), "cloud_shade": Color(0.62, 0.67, 0.76), "cloud_cover": 0.45, "sun_glow": 1.0,
-		"fog_color": Color(0.70, 0.80, 0.74), "fog_density": 0.0006,
-		"mist_density": 0.0028, "mist_color": Color(0.88, 0.95, 0.86),
+		"sky_top": Color(0.20, 0.46, 0.88), "sky_horizon": Color(0.66, 0.84, 0.96), "sky_ground": Color(0.42, 0.62, 0.90),
+		"cloud_color": Color(1.0, 0.99, 0.96), "cloud_shade": Color(0.70, 0.78, 0.92), "cloud_cover": 0.36, "sun_glow": 1.0,
+		"fog_color": Color(0.66, 0.82, 0.94), "fog_density": 0.0003,
+		"mist_density": 0.0012, "mist_color": Color(0.88, 0.95, 0.86),
 		"saturation": 1.12, "window_glow": 0.0, "particle_light": Color(1, 1, 1),
 	},
 	{
@@ -43,7 +44,7 @@ const MOODS := [
 	},
 	{
 		"name": "Night",
-		"sun_elevation": 38.0, "sun_azimuth": 150.0,
+		"sun_elevation": 30.0, "sun_azimuth": 150.0,
 		"sun_color": Color(0.45, 0.58, 1.0), "sun_energy": 0.6,
 		"ambient_color": Color(0.16, 0.24, 0.48), "ambient_energy": 1.1,
 		"sky_top": Color(0.012, 0.02, 0.07), "sky_horizon": Color(0.10, 0.14, 0.30), "sky_ground": Color(0.07, 0.10, 0.22),
@@ -79,23 +80,17 @@ func _ready() -> void:
 	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	_env.tonemap_white = 6.0
 	_env.glow_enabled = true
-	_env.glow_intensity = 0.7
-	_env.glow_bloom = 0.06
-	_env.glow_hdr_threshold = 1.0
+	# Only things that really glow (fire, crystals, windows) should bloom.
+	_env.glow_intensity = 0.45
+	_env.glow_bloom = 0.0
+	_env.glow_hdr_threshold = 1.4
 	_env.ssao_enabled = true
 	_env.ssao_radius = 2.0
-	_env.ssao_intensity = 1.6
-	_env.ssil_enabled = true
+	_env.ssao_intensity = 1.0
 	_env.fog_enabled = true
 	_env.fog_sun_scatter = 0.25
 	_env.fog_aerial_perspective = 0.25
 	_env.fog_sky_affect = 0.0
-	_env.volumetric_fog_enabled = true
-	_env.volumetric_fog_length = 260.0
-	_env.volumetric_fog_anisotropy = 0.72
-	_env.volumetric_fog_detail_spread = 1.6
-	_env.volumetric_fog_ambient_inject = 0.35
-	_env.volumetric_fog_sky_affect = 0.25
 	_env.adjustment_enabled = true
 	_env.adjustment_contrast = 1.06
 	var world_env := WorldEnvironment.new()
@@ -107,10 +102,9 @@ func _ready() -> void:
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	_sun.directional_shadow_max_distance = 330.0
 	_sun.directional_shadow_blend_splits = true
-	_sun.light_angular_distance = 0.7
+	_sun.light_angular_distance = 0.15
 	_sun.shadow_bias = 0.06
 	_sun.shadow_normal_bias = 1.6
-	_sun.light_volumetric_fog_energy = 1.4
 	add_child(_sun)
 
 	_current = MOODS[0].duplicate()
@@ -160,9 +154,8 @@ func _apply(m: Dictionary) -> void:
 	_env.ambient_light_color = m.ambient_color
 	_env.ambient_light_energy = m.ambient_energy
 	_env.fog_light_color = m.fog_color
-	_env.fog_density = m.fog_density
-	_env.volumetric_fog_density = m.mist_density
-	_env.volumetric_fog_albedo = m.mist_color
+	# Flat distance haze only: volumetric fog smears the clean cel-shaded shapes.
+	_env.fog_density = m.fog_density + m.mist_density * 0.2
 	_env.adjustment_saturation = m.saturation
 	_sky_material.set_shader_parameter("top_color", m.sky_top)
 	_sky_material.set_shader_parameter("horizon_color", m.sky_horizon)

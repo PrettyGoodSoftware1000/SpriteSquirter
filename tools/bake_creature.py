@@ -23,36 +23,36 @@ import numpy as np
 from skimage import measure
 
 OUT = Path(__file__).resolve().parent.parent / "assets" / "creature" / "creature.glb"
-CELL = float(sys.argv[1]) if len(sys.argv) > 1 else 0.1
+CELL = float(sys.argv[1]) if len(sys.argv) > 1 else 0.08
 
 # --- Colours (r, g, b, scaliness) ---------------------------------------------
-SKIN = (0.20, 0.36, 0.24, 1.0)
-SKIN_DARK = (0.12, 0.23, 0.20, 1.0)
-BELLY = (0.74, 0.62, 0.34, 0.55)
-HORN = (0.86, 0.80, 0.64, 0.0)
-SPIKE = (0.10, 0.36, 0.38, 0.25)
-GUM = (0.45, 0.14, 0.12, 0.0)
+SKIN = (0.46, 0.48, 0.25, 1.0)
+SKIN_DARK = (0.33, 0.36, 0.19, 1.0)
+SHELL = (0.36, 0.23, 0.12, 0.9)
+SHELL_RIM = (0.50, 0.36, 0.19, 0.3)
+BELLY = (0.68, 0.52, 0.31, 0.75)
+HORN = (0.88, 0.83, 0.66, 0.0)
 
 # --- Skeleton: name -> (parent, joint position) -------------------------------
 BONES = {
-    "pelvis": (None, (0.0, 5.4, 0.0)),
-    "spine": ("pelvis", (0.0, 6.6, 0.1)),
-    "chest": ("spine", (0.0, 8.2, 0.35)),
-    "neck": ("chest", (0.0, 10.0, 0.7)),
-    "head": ("neck", (0.0, 10.9, 1.0)),
-    "jaw": ("head", (0.0, 10.55, 1.25)),
-    "tail1": ("pelvis", (0.0, 5.2, -1.3)),
-    "tail2": ("tail1", (0.0, 4.6, -2.8)),
-    "tail3": ("tail2", (0.0, 4.1, -4.2)),
-    "tail4": ("tail3", (0.0, 3.8, -5.4)),
+    "pelvis": (None, (0.0, 3.9, 0.0)),
+    "spine": ("pelvis", (0.0, 5.0, 0.1)),
+    "chest": ("spine", (0.0, 6.6, 0.2)),
+    "neck": ("chest", (0.0, 8.1, 0.6)),
+    "head": ("neck", (0.0, 9.5, 1.0)),
+    "jaw": ("head", (0.0, 9.25, 1.3)),
+    "tail1": ("pelvis", (0.0, 3.6, -1.7)),
+    "tail2": ("tail1", (0.0, 3.4, -2.2)),
+    "tail3": ("tail2", (0.0, 3.2, -2.7)),
+    "tail4": ("tail3", (0.0, 3.05, -3.1)),
 }
 for side, sx in (("l", -1.0), ("r", 1.0)):
-    BONES[f"arm_upper_{side}"] = ("chest", (sx * 2.3, 9.1, 0.4))
-    BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 3.4, 7.4, 0.5))
-    BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 4.1, 5.8, 1.0))
-    BONES[f"thigh_{side}"] = ("pelvis", (sx * 1.35, 5.2, 0.0))
-    BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.5, 2.9, 0.7))
-    BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.5, 0.75, -0.1))
+    BONES[f"arm_upper_{side}"] = ("chest", (sx * 2.75, 7.2, 0.5))
+    BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 3.6, 5.5, 0.7))
+    BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 4.0, 4.0, 1.1))
+    BONES[f"thigh_{side}"] = ("pelvis", (sx * 1.45, 3.7, 0.1))
+    BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.6, 2.1, 0.6))
+    BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.6, 0.7, 0.0))
 BONE_NAMES = list(BONES)
 
 shapes = []  # dicts: kind, params, bone, colour, blend
@@ -74,77 +74,50 @@ def hole(centre, radius, blend=0.12):
 
 
 def build_shapes():
-    # Torso
-    ellipsoid((0, 5.3, -0.1), (2.0, 1.5, 1.7), "pelvis")
-    ellipsoid((0, 6.7, 0.45), (2.25, 2.0, 2.0), "spine")
-    ellipsoid((0, 6.9, 1.5), (1.55, 1.9, 1.0), "spine", BELLY)
-    ellipsoid((0, 8.5, 0.3), (2.3, 1.7, 1.65), "chest")
-    ellipsoid((0, 8.6, 1.35), (1.5, 1.2, 0.7), "chest", BELLY)
-    ellipsoid((0, 9.4, -0.35), (1.9, 1.0, 1.3), "chest", SKIN_DARK)
-    cone((0, 9.6, 0.4), (0, 10.6, 0.8), 1.2, 1.0, "neck")
-    cone((0, 9.5, 1.1), (0, 10.3, 1.35), 0.7, 0.6, "neck", BELLY)
+    # Shell on the back, with a paler rim, and the body tucked inside it.
+    ellipsoid((0, 5.9, -1.0), (3.35, 3.4, 2.3), "spine", SHELL, 0.3)
+    ellipsoid((0, 5.9, -0.3), (3.6, 3.6, 0.75), "spine", SHELL_RIM, 0.3)
+    ellipsoid((0, 4.3, 0.2), (2.3, 1.5, 1.7), "pelvis")
+    ellipsoid((0, 5.6, 0.5), (2.6, 2.6, 1.8), "spine")
+    ellipsoid((0, 5.5, 1.7), (2.15, 2.5, 0.85), "spine", BELLY, 0.3)
+    ellipsoid((0, 7.0, 0.5), (2.5, 1.6, 1.6), "chest")
 
-    # Head
-    ellipsoid((0, 11.2, 1.0), (1.35, 1.2, 1.45), "head")
-    ellipsoid((0, 11.72, 1.85), (1.15, 0.36, 0.55), "head", SKIN_DARK, 0.3)
-    cone((0, 10.95, 1.6), (0, 10.82, 2.95), 0.95, 0.68, "head")
-    ellipsoid((0, 11.0, 3.3), (0.52, 0.4, 0.36), "head", SKIN_DARK, 0.3)
-    cone((0, 10.3, 1.25), (0, 10.22, 2.8), 0.72, 0.5, "jaw", BELLY, 0.25)
-    # Crest and back spines
-    for a, b, bone in [((0, 12.2, 0.6), (0, 13.0, 0.0), "head"), ((0, 11.9, -0.1), (0, 12.5, -0.8), "head"),
-                       ((0, 10.7, -0.5), (0, 11.4, -1.4), "neck"), ((0, 9.7, -1.3), (0, 10.4, -2.3), "chest"),
-                       ((0, 8.5, -1.5), (0, 8.9, -2.6), "chest"), ((0, 7.2, -1.6), (0, 7.4, -2.7), "spine"),
-                       ((0, 6.0, -1.6), (0, 6.0, -2.6), "pelvis")]:
-        cone(a, b, 0.42, 0.05, bone, SPIKE, 0.3)
-
+    # Neck and head
+    cone((0, 7.5, 0.6), (0, 9.1, 1.0), 1.15, 0.92, "neck")
+    ellipsoid((0, 8.3, 1.45), (0.7, 0.9, 0.5), "neck", SKIN_DARK, 0.4)
+    ellipsoid((0, 9.9, 1.2), (1.5, 1.12, 1.5), "head")
+    ellipsoid((0, 9.62, 2.25), (1.08, 0.72, 0.85), "head", SKIN, 0.4)
+    ellipsoid((0, 9.12, 1.95), (0.98, 0.42, 0.95), "jaw", SKIN_DARK, 0.25)
     # Tail
-    tail = [((0, 5.2, -1.3), 1.3), ((0, 4.6, -2.8), 1.02), ((0, 4.1, -4.2), 0.76), ((0, 3.8, -5.4), 0.52), ((0, 3.75, -6.5), 0.26)]
-    for i in range(4):
-        cone(tail[i][0], tail[i + 1][0], tail[i][1], tail[i + 1][1], f"tail{i + 1}")
-        top = np.array(tail[i][0]) * 0.5 + np.array(tail[i + 1][0]) * 0.5 + np.array((0, tail[i + 1][1] * 0.8, 0))
-        cone(top, top + np.array((0, 0.7 - i * 0.1, -0.5)), 0.3, 0.04, f"tail{i + 1}", SPIKE, 0.25)
-    ellipsoid((0, 3.75, -6.85), (0.5, 0.42, 0.62), "tail4", SKIN_DARK, 0.3)
-    for sx in (-1, 1):
-        cone((sx * 0.3, 3.8, -6.9), (sx * 0.95, 4.0, -7.2), 0.2, 0.03, "tail4", HORN, 0.15)
+    cone((0, 3.7, -1.5), (0, 3.05, -3.2), 0.62, 0.14, "tail2", SKIN, 0.4)
 
     for side, sx in (("l", -1.0), ("r", 1.0)):
-        # Face details
-        ellipsoid((sx * 0.92, 10.85, 1.3), (0.55, 0.6, 0.72), "head")
-        ellipsoid((sx * 1.42, 11.35, 0.45), (0.22, 0.62, 0.5), "head", SKIN_DARK, 0.25)
-        cone((sx * 0.85, 12.0, 0.6), (sx * 1.55, 12.95, 0.3), 0.44, 0.32, "head", HORN, 0.2)
-        cone((sx * 1.55, 12.95, 0.3), (sx * 1.8, 13.85, 0.75), 0.32, 0.15, "head", HORN, 0.1)
-        cone((sx * 1.8, 13.85, 0.75), (sx * 1.6, 14.35, 1.3), 0.15, 0.03, "head", HORN, 0.08)
-        cone((sx * 0.46, 10.55, 2.95), (sx * 0.46, 9.95, 3.02), 0.14, 0.02, "head", HORN, 0.1)
-        for k in range(3):
-            z = 2.45 - k * 0.42
-            cone((sx * (0.6 + k * 0.05), 10.5, z), (sx * (0.62 + k * 0.05), 10.15, z), 0.1, 0.02, "head", HORN, 0.08)
-        hole((sx * 0.66, 11.32, 2.08), 0.36)
-        hole((sx * 0.22, 11.08, 3.62), 0.1, 0.05)
+        # Heavy brows that slope down and out, eye sockets, nostrils.
+        ellipsoid((sx * 0.8, 10.5, 1.95), (0.62, 0.22, 0.5), "head", SKIN_DARK, 0.25)
+        hole((sx * 0.74, 10.0, 2.3), 0.37)
+        hole((sx * 0.2, 9.75, 3.08), 0.07, 0.04)
 
-        # Arms (held out a little so the skin separates cleanly from the body)
-        ellipsoid((sx * 2.3, 9.1, 0.4), (0.98, 0.92, 0.92), f"arm_upper_{side}")
-        cone((sx * 2.3, 9.1, 0.4), (sx * 3.4, 7.4, 0.5), 0.8, 0.6, f"arm_upper_{side}", SKIN, 0.4)
-        cone((sx * 3.4, 7.4, 0.5), (sx * 4.1, 5.8, 1.0), 0.68, 0.48, f"arm_lower_{side}", SKIN, 0.3)
-        ellipsoid((sx * 3.72, 6.9, 0.5), (0.3, 0.5, 0.3), f"arm_lower_{side}", SPIKE, 0.25)
-        ellipsoid((sx * 4.25, 5.35, 1.15), (0.56, 0.58, 0.6), f"hand_{side}", SKIN, 0.3)
-        for k, dx in enumerate((-0.38, 0.0, 0.38)):
-            base = np.array((sx * 4.25 + dx, 5.1, 1.4))
-            mid = base + np.array((dx * 0.25, -0.55, 0.3))
-            cone(base, mid, 0.22, 0.16, f"hand_{side}", SKIN, 0.2)
-            cone(mid, mid + np.array((dx * 0.1, -0.5, 0.22)), 0.14, 0.02, f"hand_{side}", HORN, 0.06)
+        # Arms hang at the sides
+        ellipsoid((sx * 2.75, 7.2, 0.5), (0.95, 0.95, 0.95), f"arm_upper_{side}")
+        cone((sx * 2.75, 7.2, 0.5), (sx * 3.6, 5.5, 0.7), 0.85, 0.72, f"arm_upper_{side}", SKIN, 0.4)
+        cone((sx * 3.6, 5.5, 0.7), (sx * 4.0, 4.0, 1.1), 0.74, 0.6, f"arm_lower_{side}", SKIN, 0.3)
+        ellipsoid((sx * 4.05, 3.65, 1.2), (0.62, 0.55, 0.66), f"hand_{side}", SKIN_DARK, 0.3)
+        for dx in (-0.36, 0.0, 0.36):
+            base = np.array((sx * 4.05 + dx, 3.3, 1.5))
+            cone(base, base + np.array((dx * 0.2, -0.55, 0.3)), 0.19, 0.03, f"hand_{side}", HORN, 0.08)
 
-        # Legs
-        cone((sx * 1.35, 5.2, 0.0), (sx * 1.5, 2.9, 0.7), 1.28, 0.85, f"thigh_{side}", SKIN, 0.5)
-        ellipsoid((sx * 1.5, 2.9, 1.05), (0.55, 0.6, 0.45), f"shin_{side}", SKIN_DARK, 0.3)
-        cone((sx * 1.5, 2.9, 0.7), (sx * 1.5, 0.95, -0.1), 0.86, 0.6, f"shin_{side}", SKIN, 0.35)
-        ellipsoid((sx * 1.5, 2.0, -0.2), (0.68, 0.9, 0.7), f"shin_{side}", SKIN, 0.4)
-        ellipsoid((sx * 1.5, 0.55, 0.6), (0.9, 0.55, 1.35), f"foot_{side}", SKIN, 0.3)
-        ellipsoid((sx * 1.5, 0.5, -0.4), (0.62, 0.5, 0.56), f"foot_{side}", SKIN, 0.3)
-        for dx in (-0.55, 0.0, 0.55):
-            base = np.array((sx * 1.5 + dx, 0.42, 1.55))
-            mid = base + np.array((dx * 0.35, -0.08, 0.7))
-            cone(base, mid, 0.36, 0.27, f"foot_{side}", SKIN, 0.2)
-            cone(mid, mid + np.array((dx * 0.1, -0.1, 0.55)), 0.22, 0.03, f"foot_{side}", HORN, 0.06)
+        # Short, thick legs
+        cone((sx * 1.45, 3.7, 0.1), (sx * 1.6, 2.1, 0.6), 1.38, 1.08, f"thigh_{side}", SKIN, 0.5)
+        cone((sx * 1.6, 2.1, 0.6), (sx * 1.6, 0.9, 0.0), 1.08, 0.95, f"shin_{side}", SKIN, 0.35)
+        ellipsoid((sx * 1.6, 0.55, 0.45), (1.08, 0.58, 1.25), f"foot_{side}", SKIN_DARK, 0.3)
+        for dx in (-0.6, 0.0, 0.6):
+            base = np.array((sx * 1.6 + dx, 0.42, 1.45))
+            cone(base, base + np.array((dx * 0.15, -0.12, 0.6)), 0.3, 0.05, f"foot_{side}", HORN, 0.08)
+
+    # A down-turned mouth carved into the snout.
+    for k in range(11):
+        x = -0.85 + 1.7 * k / 10.0
+        hole((x, 9.42 - 0.3 * (x / 0.85) ** 2, 3.02 - 0.45 * (x / 0.85) ** 2), 0.075, 0.05)
 
 
 # --- Distance functions -------------------------------------------------------
@@ -191,7 +164,7 @@ def lumps(p):
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
     n = np.sin(1.7 * x + 1.3 * y) * np.sin(2.1 * y + 0.7 * z) * np.sin(1.9 * z + 1.1 * x)
     n2 = np.sin(4.3 * x - 2.1 * z) * np.sin(3.7 * y + 1.9 * x) * np.sin(4.1 * z + 2.3 * y)
-    return 0.05 * n + 0.025 * n2
+    return 0.02 * n + 0.01 * n2
 
 
 def field(p, per_shape=False):
@@ -212,8 +185,8 @@ def field(p, per_shape=False):
 # --- Meshing --------------------------------------------------------------------
 
 def build_mesh():
-    lo = np.array((-5.3, -0.4, -7.9))
-    hi = np.array((5.3, 14.9, 4.3))
+    lo = np.array((-5.2, -0.4, -4.0))
+    hi = np.array((5.2, 11.8, 3.8))
     dims = np.ceil((hi - lo) / CELL).astype(int) + 1
     axes = [lo[i] + np.arange(dims[i]) * CELL for i in range(3)]
     volume = np.empty(dims, dtype=np.float32)
@@ -247,9 +220,9 @@ def paint_and_skin(verts, normals):
     colours = wc @ np.array([s["colour"] for s in shapes])
     rgb, scaly = colours[:, :3], colours[:, 3:]
     # Darker along the back and under the body, lighter where the sun hits.
-    shade = 1.0 - 0.3 * np.clip(-normals[:, 2], 0, 1) * scaly[:, 0] - 0.2 * np.clip(-normals[:, 1], 0, 1)
-    mottle = 1.0 + 0.12 * np.sin(verts[:, 0] * 2.3 + verts[:, 1] * 1.1) * np.sin(verts[:, 1] * 2.9 + verts[:, 2] * 1.7)
-    rgb = np.clip(rgb * shade[:, None] * mottle[:, None], 0, 1)
+    # Cel shading wants flat colour, so only the underside is darkened a little.
+    shade = 1.0 - 0.15 * np.clip(-normals[:, 1], 0, 1)
+    rgb = np.clip(rgb * shade[:, None], 0, 1)
     colours = np.concatenate((rgb, scaly), axis=1)
 
     # Skin weights: each shape belongs to a bone; shapes that blend share.

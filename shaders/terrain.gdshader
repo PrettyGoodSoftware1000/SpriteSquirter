@@ -30,6 +30,10 @@ void vertex() {
 }
 
 void fragment() {
+	// Everything below this height is the void around the floating island.
+	if (w_pos.y < -14.0) {
+		discard;
+	}
 	vec3 n = normalize(w_nrm);
 	vec2 muv = (w_pos.xz + 128.5) / 257.0;
 	float scorch = texture(scorch_tex, muv).r;
@@ -46,9 +50,9 @@ void fragment() {
 
 	vec3 grass = mix(grass_a, grass_b, nz.r);
 	grass = mix(grass, grass_dry, smoothstep(0.5, 0.8, nz.g) * 0.45);
-	grass *= 0.5 + 0.7 * gd.r;
-	vec3 dirt = mix(dirt_a, dirt_b, dd.g) * (0.45 + 0.75 * dd.r);
-	vec3 sand = sand_color * (0.6 + 0.5 * dd.r);
+	grass *= mix(0.86, 1.0, smoothstep(0.6, 0.64, gd.r));
+	vec3 dirt = mix(dirt_a, dirt_b, smoothstep(0.45, 0.5, dd.g)) * mix(0.85, 1.0, smoothstep(0.6, 0.64, dd.r));
+	vec3 sand = sand_color * mix(0.9, 1.0, smoothstep(0.6, 0.64, dd.r));
 
 	float dirt_w = smoothstep(0.25, 0.55, bare + (nz2.b - 0.5) * 0.4);
 	float sand_w = 1.0 - smoothstep(0.35, 1.1, h + (nz2.r - 0.5) * 0.6);
@@ -59,7 +63,7 @@ void fragment() {
 	vec3 flat_n = mix(gn, dn, dirt_w);
 	albedo = mix(albedo, sand, sand_w);
 	flat_n = mix(flat_n, dn * vec3(0.4, 0.4, 1.0), sand_w);
-	vec3 ground_n = normalize(vec3(n.x + flat_n.x * 0.7, n.y, n.z + flat_n.y * 0.7));
+	vec3 ground_n = normalize(vec3(n.x + flat_n.x * 0.15, n.y, n.z + flat_n.y * 0.15));
 
 	// Rock, projected from three sides so cliffs do not stretch.
 	vec3 w = pow(abs(n), vec3(5.0));
@@ -69,11 +73,12 @@ void fragment() {
 	vec3 tx = texture(rock_normal, rp.zy).xyz * 2.0 - 1.0;
 	vec3 ty = texture(rock_normal, rp.xz).xyz * 2.0 - 1.0;
 	vec3 tz = texture(rock_normal, rp.xy).xyz * 2.0 - 1.0;
-	tx = vec3(tx.xy + n.zy, abs(tx.z) * n.x);
-	ty = vec3(ty.xy + n.xz, abs(ty.z) * n.y);
-	tz = vec3(tz.xy + n.xy, abs(tz.z) * n.z);
+	tx = vec3(tx.xy * 0.3 + n.zy, abs(tx.z) * n.x);
+	ty = vec3(ty.xy * 0.3 + n.xz, abs(ty.z) * n.y);
+	tz = vec3(tz.xy * 0.3 + n.xy, abs(tz.z) * n.z);
 	vec3 rock_n = normalize(tx.zyx * w.x + ty.xzy * w.y + tz.xyz * w.z);
-	vec3 rock = mix(rock_a, rock_b, rd.g) * (0.35 + 0.9 * rd.r);
+	// Flat rock tones with ink lines in the cracks.
+	vec3 rock = mix(rock_a, rock_b, smoothstep(0.45, 0.5, rd.g)) * mix(0.2, 1.0, smoothstep(0.4, 0.5, rd.r));
 
 	albedo = mix(albedo, rock, rock_w);
 	vec3 final_n = normalize(mix(ground_n, rock_n, rock_w));
@@ -85,7 +90,9 @@ void fragment() {
 	albedo = mix(albedo, vec3(0.03, 0.027, 0.025) * (0.6 + 0.8 * dd.r), clamp(scorch * 0.95, 0.0, 1.0));
 
 	ALBEDO = albedo;
-	ROUGHNESS = mix(0.92, 0.7, snow_w);
-	SPECULAR = 0.25;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
 	NORMAL = normalize((VIEW_MATRIX * vec4(final_n, 0.0)).xyz);
 }
+
+#include "res://shaders/toon.gdshaderinc"

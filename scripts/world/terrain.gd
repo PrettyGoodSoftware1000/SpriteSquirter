@@ -1,6 +1,10 @@
 class_name Terrain
 extends Node3D
-## Editable heightmap terrain.
+## Editable heightmap terrain, shaped as an island floating in the sky.
+##
+## Samples outside the island's wobbly outline are dropped to VOID_HEIGHT
+## and not drawn; a rocky underside hangs below the rim. Rivers are carved
+## below WATER_LEVEL and pour over the edge as waterfalls.
 ##
 ## Heights live in one flat array of (SIZE + 1)^2 samples spaced 1 m apart and
 ## centred on the origin, so the world spans x/z in [-HALF, HALF]. The visible
@@ -21,6 +25,8 @@ const CHUNKS := 8 # SIZE / CHUNK
 const WATER_LEVEL := 0.0
 const MIN_HEIGHT := -10.0
 const MAX_HEIGHT := 60.0
+const VOID_HEIGHT := -60.0
+const ISLAND_RADIUS := 116.0
 
 var heights := PackedFloat32Array()
 ## 0..1 burn darkness per sample, painted by fire and explosions.
@@ -29,6 +35,8 @@ var scorch := PackedFloat32Array()
 var bare := PackedFloat32Array()
 ## Flat areas picked for villages: {"pos": Vector2, "radius": float, "height": float}.
 var village_sites: Array[Dictionary] = []
+## Centre lines of the rivers, from the spring out to the island's edge.
+var rivers: Array[PackedVector2Array] = []
 
 var grass: Grass
 
@@ -43,6 +51,9 @@ var _bare_tex: ImageTexture
 var _height_tex_dirty := false
 var _scorch_tex_dirty := false
 var _bare_tex_dirty := false
+var _edge_noise := FastNoiseLite.new()
+var _island := PackedByteArray()
+var _extras: Node3D
 
 
 func _ready() -> void:
@@ -103,6 +114,9 @@ func generate(world_seed: int) -> void:
 	mask.frequency = 0.007
 	mask.fractal_octaves = 2
 
+	_edge_noise.seed = world_seed + 3
+	_edge_noise.frequency = 0.55
+
 	heights.resize(N * N)
 	scorch.resize(N * N)
 	scorch.fill(0.0)
@@ -112,9 +126,11 @@ func generate(world_seed: int) -> void:
 		for i in N:
 			heights[j * N + i] = _natural_height(i - HALF, j - HALF, base, mask)
 
+	_carve_rivers(rng)
 	_pick_village_sites(rng)
 	_flatten_village_sites()
 	_paint_village_ground(world_seed)
+	_cut_out_island()
 
 	_height_tex = ImageTexture.create_from_image(_to_image(heights))
 	_scorch_tex = ImageTexture.create_from_image(_to_image(scorch))
@@ -127,6 +143,126 @@ func generate(world_seed: int) -> void:
 	for idx in _chunks.size():
 		_dirty[idx] = true
 	_rebuild_dirty_chunks()
+	_build_extras()
+
+
+## Distance from the centre to the island's edge in the given direction.
+func edge_radius(angle: float) -> float:
+	return ISLAND_RADIUS * (0.86 + 0.14 * _edge_noise.get_noise_2d(cos(angle), sin(angle)))
+
+
+func _carve_rivers(rng: RandomNumberGenerator) -> void:
+	rivers.clear()
+	var spring := Vector2(rng.randf_range(-18.0, 18.0), rng.randf_range(-18.0, 18.0))
+	var first := rng.randf() * TAU
+	for angle in [first, first + PI + rng.randf_range(-0.7, 0.7)]:
+		var dir := Vector2(cos(angle), sin(angle))
+		var side := Vector2(-dir.y, dir.x)
+		var length := edge_radius(angle) + 6.0 - spring.dot(dir)
+		var phase := rng.randf() * TAU
+		var path := PackedVector2Array()
+		for k in 90:
+			var t := k / 89.0
+			path.append(spring + dir * length * t + side * sin(t * 7.5 + phase) * 13.0 * sin(t * PI))
+		rivers.append(path)
+		for p in path:
+			_stamp_river(p, 2.6, 8.5)
+	# A pond where the rivers rise.
+	_stamp_river(spring, 7.0, 14.0)
+
+
+func _stamp_river(p: Vector2, bed: float, bank: float) -> void:
+	var i0 := clampi(floori(p.x + HALF - bank), 0, SIZE)
+	var i1 := clampi(ceili(p.x + HALF + bank), 0, SIZE)
+	var j0 := clampi(floori(p.y + HALF - bank), 0, SIZE)
+	var j1 := clampi(ceili(p.y + HALF + bank), 0, SIZE)
+	for j in range(j0, j1 + 1):
+		for i in range(i0, i1 + 1):
+			var d := Vector2(i - HALF, j - HALF).distance_to(p)
+			if d < bank:
+				var k := j * N + i
+				heights[k] = minf(heights[k], lerpf(-1.5, maxf(heights[k], 1.2), smoothstep(bed, bank, d)))
+
+
+func _river_distance(p: Vector2) -> float:
+	var best := 1000.0
+	for path in rivers:
+		for q in path:
+			best = minf(best, p.distance_to(q))
+	return best
+
+
+## Drops everything outside the island's outline into the void.
+func _cut_out_island() -> void:
+	_island.resize(N * N)
+	for j in N:
+		for i in N:
+			var p := Vector2(i - HALF, j - HALF)
+			var inside := p.length() < edge_radius(p.angle())
+			_island[j * N + i] = 1 if inside else 0
+			if not inside:
+				heights[j * N + i] = VOID_HEIGHT
+
+
+## Builds the rocky underside of the island, the waterfalls and the water.
+func _build_extras() -> void:
+	if _extras != null:
+		_extras.queue_free()
+	_extras = Node3D.new()
+	_extras.name = "IslandExtras"
+	add_child(_extras)
+
+	var lump := FastNoiseLite.new()
+	lump.seed = _edge_noise.seed + 1
+	lump.frequency = 0.9
+	var under := func(u: float, v: float) -> Vector3:
+		var a := u * TAU
+		var r := edge_radius(a)
+		var rim_y := get_height(cos(a) * (r - 3.0), sin(a) * (r - 3.0))
+		var bulge := 1.0 + 0.22 * lump.get_noise_3d(cos(a) * 2.0, sin(a) * 2.0, v * 3.0) * sin(v * PI)
+		var depth := 62.0 + 26.0 * lump.get_noise_2d(cos(a) * 1.3 + 7.0, sin(a) * 1.3)
+		var shrink := pow(1.0 - v, 0.75)
+		return Vector3(cos(a) * (r + 1.6) * shrink * bulge, minf(rim_y, 3.0) - 1.5 - depth * pow(v, 1.25), sin(a) * (r + 1.6) * shrink * bulge)
+	var mb := MeshBuilder.new()
+	mb.add_grid(96, 12, under)
+	var underside := MeshInstance3D.new()
+	underside.name = "Underside"
+	underside.mesh = mb.commit()
+	underside.material_override = Art.nature("rock")
+	_extras.add_child(underside)
+
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(SIZE, SIZE)
+	var water := MeshInstance3D.new()
+	water.name = "Water"
+	water.mesh = plane
+	water.material_override = Art.water()
+	water.position.y = WATER_LEVEL
+	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_extras.add_child(water)
+
+	for path in rivers:
+		var mouth := path[path.size() - 1]
+		var angle := mouth.angle()
+		var out := Vector2(cos(angle), sin(angle))
+		var rim := out * (edge_radius(angle) - 0.5)
+		var across := Vector3(-out.y, 0.0, out.x)
+		var sheet := func(u: float, v: float) -> Vector3:
+			var push := 5.0 * (1.0 - exp(-5.0 * v))
+			return across * (u - 0.5) * 8.5 + Vector3(out.x, 0.0, out.y) * push + Vector3(0.0, 0.05 - 80.0 * v * v, 0.0)
+		var fall := MeshBuilder.new()
+		fall.add_grid(6, 24, sheet)
+		var fall_mesh := MeshInstance3D.new()
+		fall_mesh.name = "Waterfall"
+		fall_mesh.mesh = fall.commit()
+		fall_mesh.material_override = Art.waterfall()
+		fall_mesh.position = Vector3(rim.x, WATER_LEVEL, rim.y)
+		fall_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_extras.add_child(fall_mesh)
+		if is_instance_valid(Game.effects):
+			var mist := Game.effects.make_mist(4.0)
+			_extras.add_child(mist)
+			mist.position = fall_mesh.position + Vector3(out.x, 0.0, out.y) * 4.0 + Vector3(0, -3.0, 0)
 
 
 func _natural_height(x: float, z: float, base: FastNoiseLite, mask: FastNoiseLite) -> float:
@@ -136,9 +272,9 @@ func _natural_height(x: float, z: float, base: FastNoiseLite, mask: FastNoiseLit
 	var plains := 1.8 + n * 4.0
 	var hills := 5.0 + pow((n + 1.0) * 0.5, 1.5) * 36.0
 	var h := lerpf(plains, hills, hilliness)
-	# Sink the map edges into the sea so the world reads as an island.
-	var edge := maxf(absf(x), absf(z)) / HALF
-	return lerpf(h, -4.0, smoothstep(0.78, 0.98, edge))
+	# Level the land out towards the rim so the edge of the island is walkable.
+	var edge := Vector2(x, z).length() / ISLAND_RADIUS
+	return lerpf(h, 2.4 + n * 1.5, smoothstep(0.62, 0.95, edge))
 
 
 func _pick_village_sites(rng: RandomNumberGenerator) -> void:
@@ -149,15 +285,17 @@ func _pick_village_sites(rng: RandomNumberGenerator) -> void:
 		var attempts := 0
 		while village_sites.size() < wanted and attempts < 400:
 			attempts += 1
-			var p := Vector2(rng.randf_range(-82.0, 82.0), rng.randf_range(-82.0, 82.0))
-			var too_close := false
+			var p := Vector2(rng.randf_range(-74.0, 74.0), rng.randf_range(-74.0, 74.0))
+			var too_close := p.length() > 72.0
+			var r := rng.randf_range(15.0, 21.0)
+			if _river_distance(p) < r + 5.0:
+				continue
 			for s in village_sites:
 				if p.distance_to(s.pos) < 58.0:
 					too_close = true
 					break
 			if too_close:
 				continue
-			var r := rng.randf_range(15.0, 21.0)
 			var h := get_height(p.x, p.y)
 			if h < 1.0 or h > 14.0 or _relief(p, r) > max_relief:
 				continue
@@ -266,8 +404,10 @@ func get_normal(x: float, z: float) -> Vector3:
 	return Vector3(hl - hr, 2.0, hd - hu).normalized()
 
 
+## True if the point is on the island (not out in the void).
 func is_inside(x: float, z: float) -> bool:
-	return absf(x) < HALF - 1.0 and absf(z) < HALF - 1.0
+	var p := Vector2(x, z)
+	return p.length() < edge_radius(p.angle()) - 2.0
 
 
 func average_height(center: Vector3, radius: float) -> float:
@@ -322,10 +462,10 @@ func apply_brush(center: Vector3, radius: float, mode: Brush, amount: float, tar
 	for j in range(j0, j1 + 1):
 		for i in range(i0, i1 + 1):
 			var d := Vector2(i - HALF - center.x, j - HALF - center.z).length()
-			if d > radius:
+			var k := j * N + i
+			if d > radius or _island[k] == 0:
 				continue
 			var w := 1.0 - smoothstep(radius * hardness, radius, d)
-			var k := j * N + i
 			var h := heights[k]
 			match mode:
 				Brush.RAISE:

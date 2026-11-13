@@ -1,10 +1,9 @@
 class_name FloraFactory
 extends RefCounted
-## Generates trees, bushes and boulders. A handful of mesh variants per
-## kind are built once and shared, so hundreds of plants stay cheap.
-##
-## Canopies are clumps of leaf cards whose normals point away from the
-## middle of the clump, which makes them shade like soft rounded volumes.
+## Generates trees, bushes and boulders in a cartoon style: fat curvy
+## trunks and lumpy blob canopies with ink outlines. A handful of mesh
+## variants per kind are built once and shared, so hundreds of plants stay
+## cheap. Colours come from the nature palette (see Art.nature).
 
 const VARIANTS := 5
 
@@ -49,7 +48,7 @@ static func create_rock(rng: RandomNumberGenerator) -> MeshInstance3D:
 		_build_rocks()
 	var mi := MeshInstance3D.new()
 	mi.mesh = _rocks[rng.randi() % _rocks.size()]
-	mi.material_override = Art.rock()
+	mi.material_override = Art.nature("rock")
 	var s := rng.randf_range(0.5, 1.0) * (2.4 if rng.randf() < 0.15 else 1.0)
 	mi.scale = Vector3(s, s * rng.randf_range(0.7, 1.1), s)
 	mi.rotation = Vector3(rng.randf_range(-0.2, 0.2), rng.randf() * TAU, rng.randf_range(-0.2, 0.2))
@@ -70,108 +69,112 @@ static func _plant(kind: String, variant: int) -> Dictionary:
 			"bush":
 				_plants[key] = _make_bush(rng)
 			"autumn":
-				_plants[key] = _make_broadleaf(rng, Art.foliage(Art.AUTUMN_DARK, Art.AUTUMN_LIGHT))
+				_plants[key] = _make_swirl(rng)
 			_:
-				_plants[key] = _make_broadleaf(rng, Art.foliage(Art.LEAF_DARK, Art.LEAF_LIGHT))
+				_plants[key] = _make_broadleaf(rng)
 	return _plants[key]
 
 
-static func _make_broadleaf(rng: RandomNumberGenerator, leaves: Material) -> Dictionary:
-	var h := rng.randf_range(4.6, 6.6)
-	var lean := Vector3(rng.randf_range(-0.6, 0.6), 0, rng.randf_range(-0.6, 0.6))
-	var trunk_pts := PackedVector3Array([Vector3(0, -1.0, 0), Vector3(0, 0.3, 0), lean * 0.3 + Vector3(0, h * 0.4, 0),
-		lean * 0.7 + Vector3(0, h * 0.75, 0), lean + Vector3(0, h, 0)])
-	var wood := MeshBuilder.new()
-	wood.add_tube(trunk_pts, PackedFloat32Array([0.6, 0.42, 0.33, 0.25, 0.14]), 9)
-	wood.ground_shade(0, 0.0, 1.5, 0.2)
+static func _lumpy(rng: RandomNumberGenerator) -> FastNoiseLite:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	noise.seed = rng.randi()
+	noise.frequency = 0.35
+	return noise
 
+
+## A curvy trunk with a few branches, each ending in a lumpy blob of leaves.
+static func _make_broadleaf(rng: RandomNumberGenerator) -> Dictionary:
+	var h := rng.randf_range(4.6, 6.6)
+	var lean := Vector3(rng.randf_range(-0.9, 0.9), 0, rng.randf_range(-0.9, 0.9))
+	var trunk_pts := PackedVector3Array([Vector3(0, -1.0, 0), Vector3(0, 0.3, 0), lean * 0.5 + Vector3(0, h * 0.4, 0),
+		lean * 0.4 + Vector3(0, h * 0.75, 0), lean + Vector3(0, h, 0)])
+	var wood := MeshBuilder.new()
+	wood.add_tube(trunk_pts, PackedFloat32Array([0.75, 0.5, 0.38, 0.3, 0.2]), 9)
+	var noise := _lumpy(rng)
 	var canopy := [MeshBuilder.new(), MeshBuilder.new()]
-	var puffs: Array[Vector3] = [lean + Vector3(0, h + 0.6, 0)]
-	var branches := rng.randi_range(3, 4)
+	var top := lean + Vector3(0, h + 0.8, 0)
+	canopy[0].add_blob(Vector3(2.5, 2.0, 2.5) * rng.randf_range(0.9, 1.15), Transform3D(Basis(), top), noise, 0.22, 9, 14)
+	var branches := rng.randi_range(2, 4)
 	var spin := rng.randf() * TAU
 	for k in branches:
 		var a := spin + TAU * k / branches + rng.randf_range(-0.4, 0.4)
-		var t := rng.randf_range(0.5, 0.85)
-		var from := trunk_pts[2].lerp(trunk_pts[4], (t - 0.4) / 0.6)
+		var from := trunk_pts[2].lerp(trunk_pts[4], rng.randf_range(0.2, 0.7))
 		var out := Vector3(cos(a), 0, sin(a))
-		var length := rng.randf_range(1.8, 3.0)
-		var tip := from + out * length + Vector3(0, length * rng.randf_range(0.45, 0.9), 0)
-		var mid := from.lerp(tip, 0.5) + Vector3(0, -0.25, 0) + out * 0.3
-		wood.add_tube(PackedVector3Array([from - out * 0.1, mid, tip]), PackedFloat32Array([0.16, 0.11, 0.05]), 6)
-		puffs.append(tip + Vector3(0, 0.3, 0))
-	for k in puffs.size():
-		var r := rng.randf_range(1.7, 2.3) if k == 0 else rng.randf_range(1.4, 2.0)
-		_add_puff(canopy[k % 2], rng, puffs[k], r, 46, 0.25 + 0.6 * clampf((puffs[k].y - h * 0.6) / (h * 0.6), 0.0, 1.0))
+		var length := rng.randf_range(1.8, 2.8)
+		var tip := from + out * length + Vector3(0, length * rng.randf_range(0.3, 0.7), 0)
+		wood.add_tube(PackedVector3Array([from - out * 0.1, from.lerp(tip, 0.5) + Vector3(0, -0.3, 0), tip]), PackedFloat32Array([0.2, 0.15, 0.1]), 6)
+		var r := rng.randf_range(1.3, 1.9)
+		canopy[(k + 1) % 2].add_blob(Vector3(r, r * 0.85, r), Transform3D(Basis(), tip + Vector3(0, r * 0.4, 0)), noise, 0.22, 8, 12)
 	return {
-		"parts": [{"mesh": wood.commit(), "material": Art.bark()},
-			{"mesh": canopy[0].commit(), "material": leaves}, {"mesh": canopy[1].commit(), "material": leaves}],
-		"height": h + 2.4, "footprint": 1.3,
+		"parts": [{"mesh": wood.commit(), "material": Art.nature("bark")},
+			{"mesh": canopy[0].commit(), "material": Art.nature("leaf")}, {"mesh": canopy[1].commit(), "material": Art.nature("leaf")}],
+		"height": h + 2.8, "footprint": 1.3,
 	}
 
 
+## A tall tree made of stacked, scalloped cones.
 static func _make_pine(rng: RandomNumberGenerator) -> Dictionary:
 	var h := rng.randf_range(8.0, 11.0)
-	var lean := Vector3(rng.randf_range(-0.4, 0.4), 0, rng.randf_range(-0.4, 0.4))
+	var lean := Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5))
 	var wood := MeshBuilder.new()
-	wood.add_tube(PackedVector3Array([Vector3(0, -1.0, 0), Vector3(0, 0.3, 0), lean * 0.5 + Vector3(0, h * 0.5, 0), lean + Vector3(0, h, 0)]),
-		PackedFloat32Array([0.5, 0.36, 0.22, 0.04]), 9)
-	wood.ground_shade(0, 0.0, 1.5, 0.2)
+	wood.add_tube(PackedVector3Array([Vector3(0, -1.0, 0), Vector3(0, 0.3, 0), lean * 0.3 + Vector3(0, h * 0.4, 0)]),
+		PackedFloat32Array([0.6, 0.42, 0.3]), 9)
 	var canopy := [MeshBuilder.new(), MeshBuilder.new()]
-	var tiers := 8
+	var tiers := rng.randi_range(4, 5)
 	for i in tiers:
-		var t := i / float(tiers - 1)
-		var y := lerpf(h * 0.24, h * 0.98, t)
-		var length := lerpf(3.0, 0.8, t) * rng.randf_range(0.9, 1.1)
-		var count := 9 - int(t * 4.0)
-		var centre := lean * (y / h) + Vector3(0, y, 0)
-		var spin := rng.randf() * TAU
-		var droop := lerpf(0.5, 0.15, t)
-		for k in count:
-			var a := spin + TAU * k / count
-			var out := Vector3(cos(a), 0, sin(a))
-			var along := (out * cos(droop) - Vector3.UP * sin(droop)) * length * 0.5
-			var side := Vector3(-sin(a), 0, cos(a)) * length * 0.55
-			var mb: MeshBuilder = canopy[i % 2]
-			mb.color = Color(clampf(0.25 + 0.55 * t + rng.randf_range(-0.08, 0.12), 0.0, 1.0), 0.6, 0.0)
-			mb.add_card(centre + along * 0.9, side, -along, (out * 0.55 + Vector3.UP * 0.85).normalized())
-	_add_puff(canopy[0], rng, lean + Vector3(0, h + 0.2, 0), 0.7, 8, 0.9)
-	var leaves := Art.foliage(Art.PINE_DARK, Art.PINE_LIGHT)
+		var t := i / float(tiers)
+		var y := lerpf(h * 0.22, h * 0.8, t)
+		var r := lerpf(2.7, 1.1, t) * rng.randf_range(0.9, 1.1)
+		var th := (h - y) * 0.75 if i == tiers - 1 else h * 0.34
+		var profile := PackedVector2Array([Vector2(r * 0.3, th * 0.3), Vector2(r, 0.0), Vector2(r, 0.0), Vector2(r * 0.5, th * 0.45), Vector2(0.0, th)])
+		var mb: MeshBuilder = canopy[i % 2]
+		var from := mb.add_lathe(profile, 14, Transform3D(Basis(Vector3.UP, rng.randf() * TAU), lean * t + Vector3(0, y, 0)), 7, 0.1)
+		mb.bend(from, y, y + th, Vector3(rng.randf_range(-0.4, 0.4), 0, rng.randf_range(-0.4, 0.4)))
 	return {
-		"parts": [{"mesh": wood.commit(), "material": Art.bark()},
-			{"mesh": canopy[0].commit(), "material": leaves}, {"mesh": canopy[1].commit(), "material": leaves}],
-		"height": h + 0.8, "footprint": 1.2,
+		"parts": [{"mesh": wood.commit(), "material": Art.nature("bark")},
+			{"mesh": canopy[0].commit(), "material": Art.nature("pine")}, {"mesh": canopy[1].commit(), "material": Art.nature("pine")}],
+		"height": h + 0.5, "footprint": 1.2,
+	}
+
+
+## A surreal tree: a trunk that curls over, tipped with a bright ball.
+static func _make_swirl(rng: RandomNumberGenerator) -> Dictionary:
+	var h := rng.randf_range(4.5, 7.0)
+	var a := rng.randf() * TAU
+	var out := Vector3(cos(a), 0, sin(a))
+	var pts := PackedVector3Array([Vector3(0, -1.0, 0), Vector3(0, 0.3, 0)])
+	var radii := PackedFloat32Array([0.6, 0.42])
+	for k in range(1, 9):
+		var t := k / 8.0
+		var curl := t * t * 4.2
+		pts.append(Vector3(0, h * minf(t * 1.25, 1.0), 0) + out * (sin(curl) * 1.6 * t) + Vector3(0, (cos(curl) - 1.0) * 1.2 * t, 0))
+		radii.append(lerpf(0.36, 0.12, t))
+	var wood := MeshBuilder.new()
+	wood.add_tube(pts, radii, 8)
+	var noise := _lumpy(rng)
+	var ball := MeshBuilder.new()
+	var r := rng.randf_range(1.1, 1.6)
+	ball.add_blob(Vector3(r, r, r), Transform3D(Basis(), pts[pts.size() - 1]), noise, 0.15, 9, 14)
+	var puff := MeshBuilder.new()
+	puff.add_blob(Vector3(1.5, 1.1, 1.5), Transform3D(Basis(), pts[5] + Vector3(0, 0.6, 0)), noise, 0.2, 8, 12)
+	return {
+		"parts": [{"mesh": wood.commit(), "material": Art.nature("bark")},
+			{"mesh": ball.commit(), "material": Art.nature("accent")}, {"mesh": puff.commit(), "material": Art.nature("accent")}],
+		"height": h + 1.5, "footprint": 1.2,
 	}
 
 
 static func _make_bush(rng: RandomNumberGenerator) -> Dictionary:
 	var mb := MeshBuilder.new()
-	var count := rng.randi_range(1, 3)
+	var noise := _lumpy(rng)
 	var top := 0.0
-	for k in count:
+	for k in rng.randi_range(1, 3):
 		var r := rng.randf_range(0.7, 1.15)
-		var c := Vector3(rng.randf_range(-0.8, 0.8), r * 0.7, rng.randf_range(-0.8, 0.8)) if k > 0 else Vector3(0, r * 0.75, 0)
-		_add_puff(mb, rng, c, r, 24, 0.35)
+		var c := Vector3(rng.randf_range(-0.8, 0.8), r * 0.6, rng.randf_range(-0.8, 0.8)) if k > 0 else Vector3(0, r * 0.65, 0)
+		mb.add_blob(Vector3(r, r * 0.85, r), Transform3D(Basis(), c), noise, 0.2, 7, 10)
 		top = maxf(top, c.y + r)
-	return {"parts": [{"mesh": mb.commit(), "material": Art.foliage(Art.LEAF_DARK, Art.LEAF_LIGHT.lerp(Art.GRASS_TIP, 0.5))}],
-		"height": top, "footprint": 1.0}
-
-
-## A round clump of leaf cards. `tone` (0..1) shifts it darker or lighter.
-static func _add_puff(mb: MeshBuilder, rng: RandomNumberGenerator, centre: Vector3, radius: float, cards: int, tone: float) -> void:
-	for k in cards:
-		var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.45, 1), rng.randf_range(-1, 1)).normalized()
-		var pos := centre + dir * radius * rng.randf_range(0.4, 1.0) * Vector3(1, 0.8, 1)
-		var facing := (dir + Vector3(rng.randf_range(-0.6, 0.6), rng.randf_range(-0.6, 0.6), rng.randf_range(-0.6, 0.6))).normalized()
-		var right := facing.cross(Vector3.UP)
-		if right.length_squared() < 0.01:
-			right = Vector3.RIGHT
-		right = right.normalized().rotated(facing, rng.randf() * TAU)
-		var up := right.cross(facing)
-		var size := radius * rng.randf_range(0.45, 0.7)
-		var shade := (pos - centre + Vector3.UP * radius * 0.4).normalized()
-		var bright := clampf(tone * 0.5 + 0.45 * (dir.y * 0.5 + 0.5) + rng.randf_range(-0.1, 0.15), 0.0, 1.0)
-		mb.color = Color(bright, 1.0, 0.0)
-		mb.add_card(pos, right * size, up * size, shade)
+	return {"parts": [{"mesh": mb.commit(), "material": Art.nature("leaf")}], "height": top, "footprint": 1.0}
 
 
 static func _build_rocks() -> void:
@@ -187,7 +190,6 @@ static func _build_rocks() -> void:
 			var r := Vector3(rng.randf_range(0.8, 1.4), rng.randf_range(0.6, 1.1), rng.randf_range(0.8, 1.4)) * (1.0 if k == 0 else 0.6)
 			var pos := Vector3.ZERO if k == 0 else Vector3(rng.randf_range(-1.2, 1.2), -0.1, rng.randf_range(-1.2, 1.2))
 			mb.add_blob(r, Transform3D(Basis(Vector3.UP, rng.randf() * TAU), pos + Vector3(0, r.y * 0.35, 0)), noise, 0.35, 10, 14)
-		mb.ground_shade(0, 0.0, 0.6, 0.22)
 		_rocks.append(mb.commit())
 
 

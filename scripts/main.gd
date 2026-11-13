@@ -1,10 +1,12 @@
 extends Node3D
 ## Entry point. Builds the world, then turns mouse and keyboard input into
-## actions: moving the creature, casting fireballs, sculpting terrain and
-## placing buildings.
+## actions: moving the creature, casting fireballs and placing buildings.
+## The terrain sculpting tools, weather, palettes and world generation live
+## in the dev menu (press ~).
 
-enum Mode { COMMAND, FIREBALL, RAISE, LOWER, FLATTEN, SMOOTH, BUILD }
+enum Mode { COMMAND, FIREBALL, BUILD, RAISE, LOWER, FLATTEN, SMOOTH }
 
+const PLAYER_MODES := 3
 const BRUSH_MIN := 3.0
 const BRUSH_MAX := 30.0
 const SCULPT_RATE := 8.0
@@ -46,12 +48,6 @@ func _ready() -> void:
 	add_child(atmosphere)
 	atmosphere.set_mood(Game.mood_index, 0.0)
 
-	terrain = Terrain.new()
-	terrain.name = "Terrain"
-	add_child(terrain)
-	terrain.generate(Game.world_seed)
-	Game.terrain = terrain
-
 	var effects := Effects.new()
 	effects.name = "Effects"
 	add_child(effects)
@@ -62,7 +58,12 @@ func _ready() -> void:
 	add_child(fire)
 	Game.fire = fire
 
-	_add_water()
+	terrain = Terrain.new()
+	terrain.name = "Terrain"
+	add_child(terrain)
+	Game.terrain = terrain
+	terrain.generate(Game.world_seed)
+
 	WorldPopulator.populate(self, terrain, Game.world_seed)
 
 	creature = Creature.new()
@@ -81,9 +82,14 @@ func _ready() -> void:
 	add_child(hud)
 	hud.mode_selected.connect(func(m: int) -> void: _set_mode(m as Mode))
 	hud.regenerate_requested.connect(_regenerate)
+	hud.mood_selected.connect(_set_mood)
+	hud.palette_selected.connect(_set_palette)
+	hud.grass_requested.connect(_cycle_grass)
 	hud.set_brush(brush_radius)
-	hud.set_mood(atmosphere.mood_name())
+	hud.set_mood(atmosphere.mood_index)
+	hud.set_palette(Art.palette_index)
 	hud.set_grass(Grass.DENSITY_NAMES[Game.grass_level])
+	hud.set_dev_visible(Game.dev_menu)
 
 	_setup_brush_ring()
 	_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -111,10 +117,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key and key.pressed and not key.echo:
 		var number: int = key.physical_keycode - KEY_1
-		if number >= 0 and number < Mode.size():
+		if number >= 0 and number < (Mode.size() if Game.dev_menu else PLAYER_MODES):
 			_set_mode(number as Mode)
 			return
 		match key.physical_keycode:
+			KEY_QUOTELEFT:
+				_toggle_dev_menu()
 			KEY_ESCAPE:
 				_set_mode(Mode.COMMAND)
 			KEY_F:
@@ -123,20 +131,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				camera_rig.focus_on(creature.global_position)
 			KEY_R:
 				_reroll_ghost()
-			KEY_BRACKETLEFT:
-				brush_radius = clampf(brush_radius - 1.5, BRUSH_MIN, BRUSH_MAX)
-				hud.set_brush(brush_radius)
-			KEY_BRACKETRIGHT:
-				brush_radius = clampf(brush_radius + 1.5, BRUSH_MIN, BRUSH_MAX)
-				hud.set_brush(brush_radius)
-			KEY_G:
-				_cycle_grass()
-			KEY_L:
-				atmosphere.next_mood()
-				Game.mood_index = atmosphere.mood_index
-				hud.set_mood(atmosphere.mood_name())
-			KEY_N:
-				_regenerate()
+		if Game.dev_menu:
+			_dev_key(key.physical_keycode)
 		return
 
 	var button := event as InputEventMouseButton
@@ -145,6 +141,25 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_left_click()
 		elif button.button_index == MOUSE_BUTTON_RIGHT and _cursor_hit != null:
 			_command_move(_cursor_hit)
+
+
+## Shortcuts that only work while the dev menu is open.
+func _dev_key(keycode: int) -> void:
+	match keycode:
+		KEY_BRACKETLEFT:
+			brush_radius = clampf(brush_radius - 1.5, BRUSH_MIN, BRUSH_MAX)
+			hud.set_brush(brush_radius)
+		KEY_BRACKETRIGHT:
+			brush_radius = clampf(brush_radius + 1.5, BRUSH_MIN, BRUSH_MAX)
+			hud.set_brush(brush_radius)
+		KEY_L:
+			_set_mood((atmosphere.mood_index + 1) % Atmosphere.MOODS.size())
+		KEY_P:
+			_set_palette(Art.palette_index + 1)
+		KEY_G:
+			_cycle_grass()
+		KEY_N:
+			_regenerate()
 
 
 # --- Actions ------------------------------------------------------------------
@@ -159,6 +174,13 @@ func _set_mode(m: Mode) -> void:
 	elif _ghost != null:
 		_ghost.queue_free()
 		_ghost = null
+
+
+func _toggle_dev_menu() -> void:
+	Game.dev_menu = not Game.dev_menu
+	hud.set_dev_visible(Game.dev_menu)
+	if not Game.dev_menu and mode >= PLAYER_MODES:
+		_set_mode(Mode.COMMAND)
 
 
 func _on_left_click() -> void:
@@ -178,15 +200,26 @@ func _on_left_click() -> void:
 
 
 func _command_move(pos: Vector3) -> void:
+	if not terrain.is_inside(pos.x, pos.z):
+		return
 	creature.move_to(pos)
 	Game.effects.spawn_marker(pos)
 
 
+## Fireballs are thrown by the player: they leave from the mouse cursor and
+## fly to the spot on the ground under it.
 func _cast_fireball() -> void:
 	if _cursor_hit == null or _fireball_cooldown > 0.0:
 		return
 	_fireball_cooldown = FIREBALL_COOLDOWN
-	creature.cast_fireball(_cursor_hit)
+	var target: Vector3 = _cursor_hit
+	var mouse := get_viewport().get_mouse_position()
+	var cam := camera_rig.camera
+	var from := cam.project_ray_origin(mouse) + cam.project_ray_normal(mouse) * 5.0
+	var fb := Fireball.new()
+	add_child(fb)
+	fb.launch(from, target)
+	creature.watch(target)
 
 
 func _sculpt(pos: Vector3, delta: float) -> void:
@@ -199,6 +232,17 @@ func _sculpt(pos: Vector3, delta: float) -> void:
 			terrain.apply_brush(pos, brush_radius, Terrain.Brush.FLATTEN, 6.0 * delta, _flatten_height)
 		Mode.SMOOTH:
 			terrain.apply_brush(pos, brush_radius, Terrain.Brush.SMOOTH, 6.0 * delta)
+
+
+func _set_mood(index: int) -> void:
+	atmosphere.set_mood(index)
+	Game.mood_index = index
+	hud.set_mood(index)
+
+
+func _set_palette(index: int) -> void:
+	Art.set_palette(index)
+	hud.set_palette(Art.palette_index)
 
 
 func _cycle_grass() -> void:
@@ -248,7 +292,7 @@ func _update_ghost() -> void:
 
 
 func _can_place(p: Vector3, footprint: float) -> bool:
-	if absf(p.x) > 118.0 or absf(p.z) > 118.0:
+	if not terrain.is_inside(p.x, p.z):
 		return false
 	if terrain.get_height(p.x, p.z) < Terrain.WATER_LEVEL + 0.4:
 		return false
@@ -293,7 +337,11 @@ func _place_building() -> void:
 
 func _pick_ground(screen_pos: Vector2) -> Variant:
 	var cam := camera_rig.camera
-	return terrain.raycast(cam.project_ray_origin(screen_pos), cam.project_ray_normal(screen_pos))
+	var hit: Variant = terrain.raycast(cam.project_ray_origin(screen_pos), cam.project_ray_normal(screen_pos))
+	# Ignore the floor of the void around the island.
+	if hit != null and (hit as Vector3).y < -20.0:
+		return null
+	return hit
 
 
 func _on_terrain_changed(center: Vector3, radius: float) -> void:
@@ -319,8 +367,10 @@ func _creature_start() -> Vector3:
 
 func _update_stats() -> void:
 	var tree := get_tree()
-	hud.set_stats("Villagers %d   Buildings %d   Trees %d   Fires %d   FPS %d" % [
-		tree.get_nodes_in_group("villagers").size(),
+	var goblins := tree.get_nodes_in_group("goblins").size()
+	hud.set_stats("Villagers %d   Goblins %d   Buildings %d\nTrees %d   Fires %d   FPS %d" % [
+		tree.get_nodes_in_group("villagers").size() - goblins,
+		goblins,
 		tree.get_nodes_in_group("buildings").size(),
 		tree.get_nodes_in_group("trees").size(),
 		Game.fire.count(),
@@ -352,24 +402,3 @@ func _update_brush_ring() -> void:
 			var z: float = c.z + sin(a) * r
 			_ring_mesh.surface_add_vertex(Vector3(x, terrain.get_height(x, z) + 0.25, z))
 		_ring_mesh.surface_end()
-
-
-func _add_water() -> void:
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(1400, 1400)
-	plane.material = Art.water()
-	var water := MeshInstance3D.new()
-	water.name = "Water"
-	water.mesh = plane
-	water.position.y = Terrain.WATER_LEVEL
-	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(water)
-
-	var bed_plane := PlaneMesh.new()
-	bed_plane.size = Vector2(1400, 1400)
-	bed_plane.material = Art.surface("dirt", Color(0.50, 0.44, 0.32), Color(0.38, 0.34, 0.26), {"scale": 0.1})
-	var bed := MeshInstance3D.new()
-	bed.name = "Seabed"
-	bed.mesh = bed_plane
-	bed.position.y = -4.5
-	add_child(bed)

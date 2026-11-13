@@ -1,7 +1,9 @@
 shader_type spatial;
-// Stylised textured surface for buildings, rocks, trunks and villagers.
+// Cel-shaded textured surface for buildings, rocks, trees and villagers.
 // Textures are projected from three sides in object space (triplanar), so
 // meshes need no UVs and pieces keep their texture when they fly apart.
+// The texture is reduced to two flat tones plus black "ink" lines in its
+// gaps (mortar, plank joints, scale edges), like a comic drawing.
 
 uniform sampler2D detail_tex : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D normal_tex : filter_linear_mipmap_anisotropic, repeat_enable;
@@ -9,8 +11,8 @@ uniform vec3 color_a : source_color = vec3(0.6);
 uniform vec3 color_b : source_color = vec3(0.45);
 uniform vec3 moss_color : source_color = vec3(0.2, 0.34, 0.1);
 uniform float tex_scale = 0.4;
-uniform float normal_strength = 1.0;
-uniform float roughness = 0.85;
+uniform float normal_strength = 0.3;
+uniform float ink = 0.8;
 uniform float moss = 0.0;
 uniform vec3 glow_color : source_color = vec3(0.0);
 uniform float glow_energy = 0.0;
@@ -43,10 +45,14 @@ void fragment() {
 	vec3 obj_n = normalize(tx.zyx * w.x + ty.xzy * w.y + tz.xyz * w.z);
 	vec3 world_n = normalize(MODEL_NORMAL_MATRIX * obj_n);
 
+	// Two flat tones and ink lines from the texture brightness.
+	float tone = mix(0.8, 1.0, smoothstep(0.66, 0.7, d.r));
+	float line = mix(1.0 - ink, 1.0, smoothstep(0.42, 0.5, d.r));
 	// Vertex colours are authored like colour-picker values, so convert them.
-	vec3 albedo = mix(color_a, color_b, d.g) * (0.3 + 0.9 * d.r) * tint * pow(max(COLOR.rgb, vec3(0.0)), vec3(2.2));
-	float moss_w = moss * smoothstep(0.35, 0.8, world_n.y + (d.b - 0.5) * 0.5);
-	albedo = mix(albedo, moss_color * (0.6 + 0.6 * d.r), moss_w);
+	vec3 paint = tint * pow(max(COLOR.rgb, vec3(0.0)), vec3(2.2));
+	vec3 albedo = mix(color_a, color_b, d.g) * tone * line * paint;
+	float moss_w = moss * smoothstep(0.5, 0.56, world_n.y + (d.b - 0.5) * 0.5);
+	albedo = mix(albedo, moss_color * tone, moss_w);
 
 	// Burning: char the surface and let embers glow in the cracks.
 	float flicker = 0.7 + 0.3 * sin(TIME * 9.0 + o_pos.x * 3.0 + o_pos.y * 5.0);
@@ -55,8 +61,10 @@ void fragment() {
 	albedo = mix(albedo, vec3(0.035, 0.03, 0.028) * (0.5 + d.r), smoothstep(0.0, 0.85, burn));
 
 	ALBEDO = albedo;
-	ROUGHNESS = roughness;
-	SPECULAR = 0.3;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
 	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
-	EMISSION = vec3(1.0, 0.32, 0.04) * ember * 5.0 + glow_color * glow_energy * (0.6 + 0.4 * d.r);
+	EMISSION = vec3(1.0, 0.32, 0.04) * ember * 5.0 + glow_color * glow_energy * (0.7 + 0.3 * d.r) * paint;
 }
+
+#include "res://shaders/toon.gdshaderinc"

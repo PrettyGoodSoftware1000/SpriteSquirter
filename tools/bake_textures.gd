@@ -23,7 +23,6 @@ const PATTERNS := {
 	"dirt": [8, "surface", 3.0],
 	"hide": [9, "surface", 3.5],
 	"noise": [10, "data", 0.0],
-	"leaves": [11, "sprite", 0.0],
 	"flame": [12, "sprite", 0.0],
 	"smoke": [13, "sprite", 0.0],
 }

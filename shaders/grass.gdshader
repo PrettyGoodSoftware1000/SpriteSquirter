@@ -54,9 +54,11 @@ void vertex() {
 }
 
 void fragment() {
-	vec3 albedo = mix(color_root, color_tip * v_tint, v_t * v_t * 0.6 + v_t * 0.4);
+	// Two flat tones per blade: dark base, bright tip.
+	vec3 albedo = mix(color_root, color_tip * v_tint, 0.25 + 0.75 * smoothstep(0.4, 0.5, v_t));
 	ALBEDO = albedo;
-	ROUGHNESS = 0.8;
-	SPECULAR = 0.15;
-	BACKLIGHT = color_tip * 0.35 * v_t;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
 }
+
+#include "res://shaders/toon.gdshaderinc"

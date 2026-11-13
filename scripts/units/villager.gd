@@ -12,6 +12,11 @@ enum State { IDLE, WALK, FLEE, BURNING, DEAD }
 const LOOKS := 14
 
 static var _looks: Array[Dictionary] = []
+static var _goblin_looks: Array[Dictionary] = []
+
+## Set before adding to the scene: goblins are green, big-eared and stay
+## close to their cave.
+var goblin := false
 
 var home := Vector3.ZERO
 var home_radius := 14.0
@@ -35,6 +40,8 @@ var _fire: FireEmitter
 
 func _ready() -> void:
 	add_to_group("villagers")
+	if goblin:
+		add_to_group("goblins")
 	_build_body()
 	_timer = randf_range(0.0, 3.0)
 
@@ -42,14 +49,15 @@ func _ready() -> void:
 func _build_body() -> void:
 	if _looks.is_empty():
 		_build_looks()
-	var look: Dictionary = _looks[randi() % _looks.size()]
+	var library := _goblin_looks if goblin else _looks
+	var look: Dictionary = library[randi() % library.size()]
 	_body = Node3D.new()
 	add_child(_body)
 	_add_mesh(look.body, Vector3.ZERO)
 	for sx in [-1.0, 1.0]:
 		_legs.append(_add_mesh(look.leg, Vector3(sx * 0.1, 0.8, 0.0)))
 		_arms.append(_add_mesh(look.arm, Vector3(sx * 0.27, 1.33, 0.0)))
-	scale = Vector3.ONE * randf_range(0.92, 1.08)
+	scale = Vector3.ONE * (randf_range(0.72, 0.86) if goblin else randf_range(0.92, 1.08))
 
 
 func _add_mesh(mesh: Mesh, pos: Vector3) -> MeshInstance3D:
@@ -88,7 +96,7 @@ static func _build_looks() -> void:
 				body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.27, 1.66), Vector2(0.27, 1.69), Vector2(0.15, 1.72),
 					Vector2(0.08, 1.92), Vector2(0.0, 2.08)]), 10)
 			1: # Straw hat
-				body.color = Art.THATCH_COLORS[0]
+				body.color = Color(0.86, 0.72, 0.36)
 				body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.36, 1.64), Vector2(0.36, 1.67), Vector2(0.16, 1.71),
 					Vector2(0.13, 1.8), Vector2(0.0, 1.83)]), 10)
 			2: # Hood
@@ -111,6 +119,31 @@ static func _build_looks() -> void:
 		arm.add_blob(Vector3(0.06, 0.07, 0.06), Transform3D(Basis(), Vector3(0, -0.55, 0)), null, 0.0, 4, 8)
 		_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
 
+	for k in 6:
+		var skin: Color = Art.GOBLIN_SKIN[k % Art.GOBLIN_SKIN.size()]
+		var hide := Color(0.42, 0.28, 0.16).lerp(Color(0.5, 0.2, 0.2), rng.randf() * 0.6)
+		var body := MeshBuilder.new()
+		body.color = hide
+		body.add_lathe(PackedVector2Array([Vector2(0.0, 0.62), Vector2(0.3, 0.62), Vector2(0.24, 1.0), Vector2(0.27, 1.25), Vector2(0.14, 1.4), Vector2(0.0, 1.42)]), 10)
+		body.color = skin
+		body.add_blob(Vector3(0.23, 0.21, 0.22), Transform3D(Basis(), Vector3(0, 1.56, 0.06)), null, 0.0, 6, 10)
+		body.add_tube(PackedVector3Array([Vector3(0, 1.54, 0.24), Vector3(0, 1.48, 0.5)]), PackedFloat32Array([0.07, 0.02]), 6)
+		for sx in [-1.0, 1.0]:
+			var s: float = sx
+			body.add_blob(Vector3(0.24, 0.1, 0.04), Transform3D(Basis(Vector3.BACK, s * 0.5), Vector3(s * 0.36, 1.66, 0.0)), null, 0.0, 4, 8)
+			body.color = Color(0.98, 0.9, 0.3)
+			body.add_blob(Vector3(0.05, 0.05, 0.03), Transform3D(Basis(), Vector3(s * 0.1, 1.62, 0.26)), null, 0.0, 4, 6)
+			body.color = skin
+		var leg := MeshBuilder.new()
+		leg.color = skin.darkened(0.15)
+		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.09, 0.07]), 6)
+		leg.add_blob(Vector3(0.09, 0.06, 0.16), Transform3D(Basis(), Vector3(0, -0.74, 0.06)), null, 0.0, 4, 8)
+		var arm := MeshBuilder.new()
+		arm.color = skin
+		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.62, 0)]), PackedFloat32Array([0.07, 0.05]), 6)
+		arm.add_blob(Vector3(0.07, 0.08, 0.07), Transform3D(Basis(), Vector3(0, -0.66, 0)), null, 0.0, 4, 8)
+		_goblin_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
+
 
 func _process(delta: float) -> void:
 	_moving = false
@@ -122,7 +155,7 @@ func _process(delta: float) -> void:
 		State.WALK:
 			if _move_towards(_target, 1.3 * _speed_scale, delta):
 				state = State.IDLE
-				_timer = randf_range(1.5, 5.0)
+				_timer = randf_range(4.0, 12.0) if goblin else randf_range(1.5, 5.0)
 		State.FLEE:
 			_timer -= delta
 			var away := global_position - _danger

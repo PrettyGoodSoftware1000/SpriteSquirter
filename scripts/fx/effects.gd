@@ -113,6 +113,32 @@ func make_flames(size: float) -> CPUParticles3D:
 	return p
 
 
+## Soft white spray for the top of a waterfall.
+func make_mist(size: float) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(3.0, 3.0)
+	quad.material = Art.particle("mist")
+	p.mesh = quad
+	p.amount = 14
+	p.lifetime = 3.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = size
+	p.direction = Vector3.DOWN
+	p.spread = 30.0
+	p.gravity = Vector3(0, -3.0, 0)
+	p.initial_velocity_min = 1.0
+	p.initial_velocity_max = 3.0
+	p.scale_amount_min = 1.0
+	p.scale_amount_max = 2.2
+	p.scale_amount_curve = _grow
+	p.color_ramp = _gradient([0.0, 0.2, 1.0], [Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0.0)])
+	p.angle_min = -180.0
+	p.angle_max = 180.0
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
+
+
 ## Glowing sparks that drift up from a fire.
 func make_embers(size: float) -> CPUParticles3D:
 	var p := CPUParticles3D.new()

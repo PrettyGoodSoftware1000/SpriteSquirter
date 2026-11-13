@@ -13,14 +13,17 @@ stage.
 - RTS camera and tool HUD
 
 ## Milestone 0.5: Art style pass ✅
-- Stylised-realism look: baked textures, triplanar surfaces, lush grass
-- Lighting moods with volumetric fog (day, golden hour, misty dawn, night)
-- Rebuilt buildings, trees, villagers and a high-poly skinned creature
+- Surreal cel-shaded look: banded light, ink outlines, nature palettes
+- Floating island with rivers and waterfalls; weather moods
+- The eight concept-art buildings, a goblin cave and camp
+- High-poly skinned tortoise creature
+- Dev menu (~) for terrain tools, weather, palettes and world generation
 
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)
-- [ ] Slow automatic day-night cycle built on the lighting moods
+- [ ] Slow automatic day-night cycle built on the weather moods
+- [ ] Rain, snow and wind as real weather effects
 - [ ] Chimney smoke, flowers, fences, market stalls and other village props
 - [ ] Creature: idle fidgets, roar, facial expressions
 - [ ] Settings menu (resolution, shadows, grass, mouse sensitivity)
@@ -34,7 +37,7 @@ stage.
 - [ ] Save / load the world (seed + edits + placed buildings)
 
 ## Milestone 3: Tower defense / conflict
-- [ ] Enemy waves that path toward villages
+- [ ] Goblin raids: waves that leave the cave and path toward villages
 - [ ] Defensive buildings that shoot
 - [ ] Spell bar (fireball + more), mana, cooldowns
 - [ ] Win / lose conditions

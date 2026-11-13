@@ -243,7 +243,7 @@ func add_grid(nu: int, nv: int, fn: Callable, xf := Transform3D.IDENTITY, flip :
 			var nrm := dv.cross(du).normalized()
 			if flip:
 				nrm = -nrm
-			_v(xf * pts[j * row + i], (xf.basis * nrm).normalized())
+			_v(xf * pts[j * row + i], (xf.basis * nrm).normalized(), Vector2(float(i) / nu, float(j) / nv))
 	for j in nv:
 		for i in nu:
 			var a := start + j * row + i

@@ -29,6 +29,14 @@ stage.
 - Day-night cycle; dev menu gameplay settings (day length, rates, birth timer)
 - Headless smoke test (tools/smoke_test.tscn)
 
+## Milestone 0.9: Night raids ✅
+- Nights half as long as days; goblins raid the village at midnight
+- Health, damage and attack speed for villagers and goblins; children don't fight
+- Named buildings with jobs: Home, Storehouse (villagers carry resources), Town guard (soldiers)
+- Wheat fields drawn on the ground from the build menu
+- Stone in boulder fields; Roots spell
+- The tortoise stomps, throws and eats goblins
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)
@@ -43,14 +51,17 @@ stage.
 - [ ] Multiple units with a shared `Unit` base class (creature becomes one)
 - [ ] Navigation: `NavigationRegion3D` baked from the terrain, rebaked when it is sculpted
 - [x] Villager jobs and resources (wood from trees, stone from rocks)
-- [ ] Building types with a purpose (houses, towers, storage); today they all give housing
+- [x] Building types with a purpose (Home, Storehouse, Town guard)
+- [ ] Jobs for the windmill, crystal tower and singing rocks
 - [x] Save / load maps from the editor
 - [ ] Save / load a game in progress (resources, buildings, villagers)
 
 ## Milestone 3: Tower defense / conflict
-- [ ] Goblin raids: waves that leave the cave and path toward villages
+- [x] Goblin raids: every goblin leaves the cave at midnight and attacks the village
+- [ ] Raids that grow night by night; goblin types
+- [ ] Health bars and player orders for soldiers
 - [ ] Defensive buildings that shoot
-- [x] Spell bar (fireball, rain), magicko, cooldowns
+- [x] Spell bar (fireball, rain, roots), magicko, cooldowns
 - [ ] More spells
 - [ ] Win / lose conditions
 

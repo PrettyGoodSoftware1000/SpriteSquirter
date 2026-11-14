@@ -1,7 +1,7 @@
 class_name WorldPopulator
 extends RefCounted
 ## Fills a terrain with things: villages, villagers, goblin caves, trees,
-## rocks and a few small islands drifting nearby.
+## boulder fields and a few small islands drifting nearby.
 ##
 ## Random worlds use populate(). Maps from the editor use populate_nature()
 ## when they are first made and populate_from_map() when loaded. Every tree
@@ -29,8 +29,8 @@ static func populate(parent: Node3D, terrain: Terrain, world_seed: int) -> Dicti
 		place_cave(parent, terrain, spot, facing, rng, true, true)
 		caves.append({"pos": spot, "facing": facing})
 		avoid.append(Vector3(spot.x, spot.y, CAVE_CLEARING))
+	avoid.append_array(_place_rocks(parent, terrain, rng, avoid))
 	_place_trees(parent, terrain, rng, avoid)
-	_place_rocks(parent, terrain, rng, avoid)
 	_place_sky_islands(parent, rng)
 	var starts := PackedVector2Array()
 	for site in terrain.village_sites:
@@ -42,8 +42,7 @@ static func populate(parent: Node3D, terrain: Terrain, world_seed: int) -> Dicti
 static func populate_nature(parent: Node3D, terrain: Terrain, world_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed + 1234
-	_place_trees(parent, terrain, rng, [])
-	_place_rocks(parent, terrain, rng, [])
+	_place_trees(parent, terrain, rng, _place_rocks(parent, terrain, rng, []))
 	_place_sky_islands(parent, rng)
 
 
@@ -227,27 +226,60 @@ static func _place_trees(parent: Node3D, terrain: Terrain, rng: RandomNumberGene
 		count += 1
 
 
-static func _place_rocks(parent: Node3D, terrain: Terrain, rng: RandomNumberGenerator, avoid: Array) -> void:
-	var reach := 120.0 * Terrain.SCALE
-	var wanted := roundi(110 * Terrain.SCALE * Terrain.SCALE)
-	var count := 0
-	for attempt in wanted * 18:
-		if count >= wanted:
+## Stone comes as boulder fields: a few small areas crowded with boulders,
+## scattered at random over the island, with one in walking distance of
+## every village site. Villagers break the boulders up for stone. Returns
+## a Vector3(x, z, radius) circle for each field, so trees keep out.
+static func _place_rocks(parent: Node3D, terrain: Terrain, rng: RandomNumberGenerator, avoid: Array) -> Array[Vector3]:
+	var reach := 108.0 * Terrain.SCALE
+	var centres: Array[Vector2] = []
+	for site in terrain.village_sites:
+		for attempt in 40:
+			var a := rng.randf() * TAU
+			var c: Vector2 = site.pos + Vector2(cos(a), sin(a)) * (site.radius + rng.randf_range(14.0, 34.0))
+			if _boulder_spot(terrain, c, centres, avoid):
+				centres.append(c)
+				break
+	var wanted := centres.size() + roundi(7 * Terrain.SCALE * Terrain.SCALE)
+	for attempt in wanted * 30:
+		if centres.size() >= wanted:
 			break
-		var x := rng.randf_range(-reach, reach)
-		var z := rng.randf_range(-reach, reach)
-		var rock_seed := rng.randi()
-		var h := terrain.get_height(x, z)
-		if h < -0.5 or not terrain.is_inside(x, z):
-			continue
-		# Boulders gather on slopes and shores, with a few strays in the fields.
-		var steep := terrain.get_normal(x, z).y < 0.9
-		if not steep and h > 1.2 and rng.randf() > 0.08:
-			continue
-		if _blocked(avoid, x, z):
-			continue
-		spawn_rock(parent, terrain, x, z, rock_seed)
-		count += 1
+		var c := Vector2(rng.randf_range(-reach, reach), rng.randf_range(-reach, reach))
+		if _boulder_spot(terrain, c, centres, avoid):
+			centres.append(c)
+	var circles: Array[Vector3] = []
+	for c in centres:
+		var spread := rng.randf_range(5.0, 9.0)
+		circles.append(Vector3(c.x, c.y, spread + 1.5))
+		for k in rng.randi_range(7, 12):
+			var a := rng.randf() * TAU
+			var d := sqrt(rng.randf()) * spread
+			var x := c.x + cos(a) * d
+			var z := c.y + sin(a) * d
+			var rock_seed := rng.randi()
+			var big := rng.randf_range(1.2, 1.9)
+			if not terrain.is_inside(x, z) or terrain.get_height(x, z) < 0.3 or _blocked(avoid, x, z):
+				continue
+			var rock := spawn_rock(parent, terrain, x, z, rock_seed)
+			rock.scale *= big
+	return circles
+
+
+## True if a boulder field can be centred on `c`: dry, fairly level ground
+## away from villages, caves and other boulder fields.
+static func _boulder_spot(terrain: Terrain, c: Vector2, others: Array[Vector2], avoid: Array) -> bool:
+	if not terrain.is_inside(c.x, c.y) or terrain.get_height(c.x, c.y) < 0.8 or terrain.get_normal(c.x, c.y).y < 0.8:
+		return false
+	if c.length() > Terrain.ISLAND_RADIUS - 14.0:
+		return false
+	for a in avoid:
+		var circle: Vector3 = a
+		if Vector2(c.x - circle.x, c.y - circle.y).length() < circle.z + 9.0:
+			return false
+	for other in others:
+		if other.distance_to(c) < 30.0:
+			return false
+	return true
 
 
 ## Little chunks of land hanging in the sky around the main island.

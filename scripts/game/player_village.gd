@@ -3,13 +3,17 @@ extends Node
 ## The player's village: its resources, its people and their work.
 ##
 ## Grown-up villagers gather lumber (felling trees), stone (breaking up
-## rocks) and food (foraging the fields round the village) at the rates set
-## in Game.settings, in units per worker per minute. Every grown-up also
-## adds a trickle of magicko. While a building is under construction every
-## grown-up drops their work to help build it, oldest site first.
+## boulders) and food (foraging round the village, or sowing and reaping
+## wheat fields) at the rates set in Game.settings, in units per worker per
+## minute. What they gather only counts once they have carried it to the
+## nearest Storehouse (or to the village centre while there is none).
+## Every grown-up also adds a trickle of magicko. While a building is under
+## construction every worker drops their work to help build it, oldest site
+## first.
 ##
-## A new child is born every `birth_seconds` while there is housing for it,
-## and grows up in Villager.GROW_SECONDS.
+## A new child is born every `birth_seconds` while there is housing for it
+## (Homes add housing), and grows up in Villager.GROW_SECONDS. Each Town
+## guard turns workers into soldiers, one at a time.
 
 const RESOURCES := ["lumber", "stone", "food", "magicko"]
 const START_RESOURCES := {"lumber": 80.0, "stone": 50.0, "food": 40.0, "magicko": 30.0}
@@ -26,6 +30,12 @@ const MAX_PER_TARGET := 2
 const TREE_WOOD := 30.0
 const BUSH_WOOD := 10.0
 const ROCK_STONE := 35.0
+## Soldiers each Town guard trains, and the seconds between recruits.
+const SOLDIERS_PER_GUARD := 4
+const TRAIN_SECONDS := 12.0
+## The village keeps at least this many workers out of the army, and never
+## has more than one grown-up in three as a soldier.
+const MIN_WORKERS := 4
 
 var founded := false
 var center := Vector3.ZERO
@@ -34,6 +44,7 @@ var resources := {}
 var birth_progress := 0.0
 
 var _assign_timer := 0.0
+var _train_timer := 0.0
 
 
 func _ready() -> void:
@@ -97,6 +108,29 @@ func amount(res: String) -> int:
 	return floori(resources.get(res, 0.0))
 
 
+func soldiers() -> int:
+	return get_tree().get_nodes_in_group("soldiers").size()
+
+
+## Where a worker standing at `from` takes what it gathered: the door of
+## the nearest Storehouse, or the middle of the village if there is none.
+func drop_point(from: Vector3) -> Vector3:
+	var best := center
+	var best_d := INF
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if BuildingCatalog.role(b.get_meta("kind", "")) != "store":
+			continue
+		var d := b.global_position.distance_to(from)
+		if d < best_d:
+			best_d = d
+			var out := from - b.global_position
+			out.y = 0.0
+			out = out.normalized() if out.length_squared() > 0.01 else Vector3.RIGHT
+			best = b.global_position + out * (b.footprint + 0.6)
+	return best
+
+
 func can_afford(cost: Dictionary) -> bool:
 	for res in cost:
 		if amount(res) < cost[res]:
@@ -158,6 +192,9 @@ func _process(delta: float) -> void:
 	if _assign_timer <= 0.0:
 		_assign_timer = 0.5
 		_assign_jobs()
+	_train_timer += delta
+	if _train_timer >= TRAIN_SECONDS:
+		_train_soldier()
 
 
 func _spawn_child() -> void:
@@ -182,11 +219,22 @@ func work(v: Villager, delta: float) -> void:
 			var site := v.job_target as ConstructionSite
 			if site:
 				site.add_work(delta)
+		"enlist":
+			var post := v.job_target as Node3D
+			v.become_soldier(post.global_position if post else center)
 		"food":
-			give("food", Game.settings.food_rate / 60.0 * delta)
+			v.gather("food", Game.settings.food_rate / 60.0 * delta)
+		"farm":
+			var field := v.job_target as CropField
+			if field == null or not field.needs_work():
+				v.clear_job()
+			else:
+				var reaped := field.add_work(delta)
+				if reaped > 0.0:
+					v.gather("food", reaped)
 		"lumber":
 			var gained: float = Game.settings.lumber_rate / 60.0 * delta
-			give("lumber", gained)
+			v.gather("lumber", gained)
 			var tree := v.job_target as Destructible
 			if tree and not tree.destroyed:
 				var left: float = tree.get_meta("wood", TREE_WOOD if tree.footprint > 1.6 else BUSH_WOOD) - gained
@@ -195,7 +243,7 @@ func work(v: Villager, delta: float) -> void:
 					tree.fell()
 		"stone":
 			var gained: float = Game.settings.stone_rate / 60.0 * delta
-			give("stone", gained)
+			v.gather("stone", gained)
 			var rock := v.job_target as Node3D
 			if rock and rock.is_in_group("rocks"):
 				var left: float = rock.get_meta("stone", ROCK_STONE * rock.scale.x) - gained
@@ -216,7 +264,7 @@ func _break_rock(rock: Node3D) -> void:
 func _assign_jobs() -> void:
 	var workers: Array[Villager] = []
 	for v in people():
-		if v.can_work():
+		if v.can_work() and v.job != "enlist":
 			workers.append(v)
 	if workers.is_empty():
 		return
@@ -239,6 +287,24 @@ func _assign_jobs() -> void:
 			counts[v.job] += 1
 			if is_instance_valid(v.job_target):
 				per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
+	# Fields that want sowing or reaping come first: foragers move to them.
+	var farmers := {}
+	for v in workers:
+		if v.job == "farm" and is_instance_valid(v.job_target):
+			farmers[v.job_target] = farmers.get(v.job_target, 0) + 1
+	for node in get_tree().get_nodes_in_group("fields"):
+		var field := node as CropField
+		if not field.needs_work():
+			continue
+		var have: int = farmers.get(field, 0)
+		while have < field.wanted_workers():
+			var v := _spare_worker(workers)
+			if v == null:
+				break
+			if counts.has(v.job):
+				counts[v.job] -= 1
+			v.assign_job("farm", field.work_spot(), field)
+			have += 1
 	for v in workers:
 		if v.job != "":
 			continue
@@ -250,6 +316,48 @@ func _assign_jobs() -> void:
 			if _give_job(v, kind, per_target):
 				counts[kind] += 1
 				break
+
+
+## A worker that can be moved to a field: idle first, then foragers, then
+## whoever else is not farming already.
+func _spare_worker(workers: Array[Villager]) -> Villager:
+	for wanted: String in ["", "food", "lumber", "stone"]:
+		for v in workers:
+			if v.job == wanted:
+				return v
+	return null
+
+
+## Sends one worker to a Town guard that still has room for soldiers.
+func _train_soldier() -> void:
+	# Look again in a second if nobody can be sent now.
+	_train_timer = TRAIN_SECONDS - 1.0
+	var workers: Array[Villager] = []
+	var enlisted := {}
+	for v in people():
+		if v.soldier or v.job == "enlist":
+			enlisted[v.guard] = enlisted.get(v.guard, 0) + 1
+		elif v.can_work() and v.job != "build":
+			workers.append(v)
+	# Keep the village working: a few workers at least, and no more than
+	# one grown-up in three under arms.
+	if workers.size() <= MIN_WORKERS or soldiers() * 3 >= adults():
+		return
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if BuildingCatalog.role(b.get_meta("kind", "")) != "guard" or enlisted.get(b, 0) >= SOLDIERS_PER_GUARD:
+			continue
+		var recruit := workers[0]
+		for v in workers:
+			if v.global_position.distance_to(b.global_position) < recruit.global_position.distance_to(b.global_position):
+				recruit = v
+		var out := recruit.global_position - b.global_position
+		out.y = 0.0
+		out = out.normalized() if out.length_squared() > 0.01 else Vector3.RIGHT
+		recruit.guard = b
+		recruit.assign_job("enlist", b.global_position + out * (b.footprint + 0.8), b)
+		_train_timer = 0.0
+		return
 
 
 func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:

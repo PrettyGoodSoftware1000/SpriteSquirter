@@ -3,14 +3,23 @@ extends Node
 ## Turns the weather moods into a day: dawn, day, evening and night, one
 ## after another. A full day lasts Game.settings.day_minutes. Choosing a
 ## mood by hand in the dev menu holds only until the next part of the day.
+##
+## The night is half as long as the daylight (dawn + daytime + evening):
+## one third of the cycle. `midnight` fires halfway through it, which is
+## when the goblins raid, and `morning` fires when the night ends.
 
 signal phase_changed(mood_index: int)
+signal nightfall
+signal midnight
+signal morning
 
+const NIGHT_START := 2.0 / 3.0
+const MIDNIGHT := (NIGHT_START + 1.0) * 0.5
 const PHASES := [
 	{"start": 0.0, "mood": 2, "name": "dawn"},
-	{"start": 0.1, "mood": 0, "name": "daytime"},
-	{"start": 0.55, "mood": 1, "name": "evening"},
-	{"start": 0.7, "mood": 3, "name": "night"},
+	{"start": 0.09, "mood": 0, "name": "daytime"},
+	{"start": 0.53, "mood": 1, "name": "evening"},
+	{"start": NIGHT_START, "mood": 3, "name": "night"},
 ]
 ## The game starts in the morning.
 const START_TIME := 0.12
@@ -25,10 +34,16 @@ var _phase := -1
 
 func _process(delta: float) -> void:
 	var length: float = maxf(Game.settings.day_minutes, 0.1) * 60.0
+	var before := time
 	time += delta / length
+	if before < NIGHT_START and time >= NIGHT_START:
+		nightfall.emit()
+	if before < MIDNIGHT and time >= MIDNIGHT:
+		midnight.emit()
 	if time >= 1.0:
 		time -= 1.0
 		day += 1
+		morning.emit()
 	var phase := phase_at(time)
 	if phase != _phase:
 		var first := _phase < 0
@@ -47,4 +62,7 @@ static func phase_at(t: float) -> int:
 
 
 func clock_text() -> String:
-	return "Day %d: %s" % [day, PHASES[phase_at(time)].name]
+	var part: String = PHASES[phase_at(time)].name
+	if time >= MIDNIGHT:
+		part = "after midnight"
+	return "Day %d: %s" % [day, part]

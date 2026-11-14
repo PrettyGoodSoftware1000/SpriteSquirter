@@ -35,7 +35,7 @@ const SETTING_SLIDERS := [
 	["birth_seconds", "Birth timer", 5.0, 300.0, 5.0, "s"],
 	["magicko_rate", "Magicko rate", 0.0, 30.0, 0.5, "/villager/min"],
 ]
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find tortoise\nRight-click move tortoise   1-2 spells   F fireball   B build   Esc cancel   ~ dev menu"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find tortoise\nRight-click move tortoise   1-3 spells   F fireball   B build   Esc cancel   ~ dev menu"
 
 var _hint: Label
 var _resource_labels := {}
@@ -188,7 +188,7 @@ func _build_build_menu(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	_build_panel.add_child(box)
-	box.add_child(_heading("Build  (pick a building, then place its outline;  B / Esc to close)"))
+	box.add_child(_heading("Build  (pick one, then place its outline or draw the field;  B / Esc to close)"))
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 8)
@@ -196,14 +196,15 @@ func _build_build_menu(root: Control) -> void:
 	box.add_child(grid)
 	for k in BuildingCatalog.BUILDINGS.size():
 		var info: Dictionary = BuildingCatalog.BUILDINGS[k]
-		var b := _button("%d  %s\n%s\nhouses %d" % [k + 1, info.name, BuildingCatalog.cost_text(info.cost), info.housing])
-		b.custom_minimum_size = Vector2(190, 78)
+		var cost := BuildingCatalog.cost_text(info.cost)
+		var b := _button("%d  %s\n%s\n%s" % [k + 1, info.name, info.desc, cost] if cost != "" else "%d  %s\n%s" % [k + 1, info.name, info.desc])
+		b.custom_minimum_size = Vector2(250, 78)
 		var kind: String = info.kind
 		b.pressed.connect(func() -> void: build_selected.emit(kind))
 		grid.add_child(b)
 		_build_buttons[kind] = b
 	var note := Label.new()
-	note.text = "Villagers build it: all your grown-ups help, and 10 villagers take one minute."
+	note.text = "Villagers build it: all your workers help, and 10 villagers take one minute.\nWith no Storehouse, villagers carry what they gather to the middle of the village."
 	note.add_theme_font_size_override("font_size", 13)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
@@ -362,7 +363,10 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 	var kids := pop - village.adults()
 	var parts: PackedStringArray = []
 	var next := village.next_birth_in()
-	parts.append("Next villager in %d s" % ceili(next) if next >= 0.0 else "No room for more villagers: build houses")
+	parts.append("Next villager in %d s" % ceili(next) if next >= 0.0 else "No room for more villagers: build a Home")
+	var soldiers := village.soldiers()
+	if soldiers > 0:
+		parts.append("%d soldier%s" % [soldiers, "" if soldiers == 1 else "s"])
 	if kids > 0:
 		parts.append("%d growing up" % kids)
 	var sites := get_tree().get_nodes_in_group("construction_sites").size()

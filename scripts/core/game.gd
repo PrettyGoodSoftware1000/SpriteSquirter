@@ -37,10 +37,17 @@ var camera_rig: RtsCamera
 var creature: Creature
 ## The player's village while playing; null in the menu and the editor.
 var village: PlayerVillage
+## Seconds of game time since the program started. Timed effects (such as
+## the roots spell) compare against this.
+var now := 0.0
 
 
 func _ready() -> void:
 	world_seed = randi()
+
+
+func _process(delta: float) -> void:
+	now += delta
 
 
 ## Leaves the current world and builds a new one. With no map_path the

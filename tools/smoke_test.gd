@@ -42,7 +42,15 @@ func _run() -> void:
 	_check(first_people > 5, "village site villagers join the player (%d)" % first_people)
 	_check(not get_tree().get_nodes_in_group("player_buildings").is_empty(), "village site buildings join the player")
 	var before: Dictionary = village.resources.duplicate()
-	await _wait(25.0)
+	_check(not get_tree().get_nodes_in_group("rocks").is_empty(), "boulder fields placed (%d boulders)" % get_tree().get_nodes_in_group("rocks").size())
+	_check(is_equal_approx(1.0 - DayCycle.NIGHT_START, DayCycle.NIGHT_START * 0.5), "night is half as long as day")
+	# A wheat field: sown by the villagers, then it grows by itself.
+	var field := CropField.new()
+	field.setup(Vector2(8, 8))
+	field.position = village.center + Vector3(0, 0, 14)
+	game.world_root.add_child(field)
+	await _wait(120.0)
+	_check(field.stage != CropField.Stage.SOWING or field.progress > 0.3, "villagers sow the field (stage %d, %.2f)" % [field.stage, field.progress])
 	var jobs := {}
 	for v in village.people():
 		jobs[v.job] = jobs.get(v.job, 0) + 1
@@ -64,6 +72,62 @@ func _run() -> void:
 		var expected := ConstructionSite.VILLAGER_SECONDS / maxf(adults, 1.0)
 		await _wait(minf(expected * 2.5 + 20.0, 240.0))
 		_check(built[0], "the villagers finish a building (%d adults, ~%d s expected)" % [adults, int(expected)])
+
+	# A Town guard trains soldiers.
+	var tower := BuildingFactory.create("moon_tower", RandomNumberGenerator.new())
+	game.world_root.add_child(tower)
+	tower.global_position = village.center + Vector3(10, 0, -10)
+	tower.add_to_group("player_buildings")
+	await _wait(PlayerVillage.TRAIN_SECONDS * 3.0 + 30.0)
+	var soldiers := get_tree().get_nodes_in_group("soldiers")
+	_check(not soldiers.is_empty(), "the Town guard trains soldiers (%d)" % soldiers.size())
+	if not soldiers.is_empty():
+		var s := soldiers[0] as Villager
+		_check(is_equal_approx(s.max_hp, Villager.HEALTH * 4.0) and is_equal_approx(s.damage, Villager.ATTACK_DAMAGE * 2.0), "soldiers have 4x health and 2x damage")
+
+	# Roots hold goblins in place.
+	var goblins := get_tree().get_nodes_in_group("goblins")
+	_check(not goblins.is_empty(), "goblins live at the cave (%d)" % goblins.size())
+	var first := goblins[0] as Villager
+	_check(is_equal_approx(first.max_hp, Villager.HEALTH) and is_equal_approx(first.damage, Villager.ATTACK_DAMAGE), "goblins match grown-up villagers")
+	var roots := RootPatch.new()
+	game.world_root.add_child(roots)
+	roots.cast(first.global_position)
+	var held_at := first.global_position
+	await _wait(3.0)
+	_check(first.snared_until > game.now + 50.0 and first.global_position.distance_to(held_at) < 0.5, "roots snare what is in the circle")
+	roots.queue_free()
+	for g in goblins:
+		(g as Villager).snared_until = 0.0
+
+	# The midnight raid: goblins march on the village and fight.
+	var gap_before := first.global_position.distance_to(village.center)
+	play.raids.start_raid()
+	_check(get_tree().get_nodes_in_group("raiders").size() == goblins.size(), "every goblin joins the raid")
+	await _wait(20.0)
+	_check(not is_instance_valid(first) or not first.is_alive() or first.global_position.distance_to(village.center) < gap_before - 10.0,
+		"raiders close in on the village")
+	# The tortoise deals with goblins that come within reach.
+	var bait: Array = []
+	for g in get_tree().get_nodes_in_group("raiders"):
+		if bait.size() < 4:
+			bait.append(g)
+	var c := play.creature
+	var ahead := Vector3(sin(c.heading), 0, cos(c.heading))
+	for k in bait.size():
+		(bait[k] as Villager).global_position = c.global_position + ahead * 4.0 + Vector3(k - 1.5, 0, 0)
+		(bait[k] as Villager).snared_until = game.now + 60.0
+	await _wait(12.0)
+	var left := 0
+	for g in bait:
+		if is_instance_valid(g) and (g as Villager).is_alive():
+			left += 1
+	_check(left == 0, "the tortoise kills goblins in reach (%d of %d left)" % [left, bait.size()])
+	await _wait(60.0)
+	play.raids.end_raid()
+	_check(get_tree().get_nodes_in_group("raiders").is_empty(), "the raid ends in the morning")
+	play.raids.refill_caves()
+	_check(get_tree().get_nodes_in_group("goblins").size() >= GoblinRaids.CAMP_SIZE, "caves refill at nightfall")
 
 	# Rain puts out fires.
 	var fire_at := village.center + Vector3(6, 0, 6)

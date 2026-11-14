@@ -8,6 +8,8 @@ const SPELLS := [
 		"hint": "Click to throw a fireball from the cursor. (F works any time.)"},
 	{"id": "rain", "name": "Rain", "cost": 15, "cooldown": 3.0,
 		"hint": "Click to make it rain there. Rain puts out fires and soaks the ground."},
+	{"id": "roots", "name": "Roots", "cost": 20, "cooldown": 6.0,
+		"hint": "Click to grow roots there. Everything in the circle is held fast for a minute."},
 ]
 
 

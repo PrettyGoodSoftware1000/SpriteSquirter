@@ -5,13 +5,14 @@ extends Node3D
 ## building orders and tortoise moves, while the PlayerVillage gathers,
 ## builds and grows and the DayCycle turns day into night.
 
-enum Mode { COMMAND, SPELL, PLACE, SCULPT }
+enum Mode { COMMAND, SPELL, PLACE, SCULPT, FIELD }
 
 const BRUSH_MIN := 3.0
 const BRUSH_MAX := 30.0
 const ROTATE_STEP := PI / 8.0
 ## How close the cursor must be to a start banner to pick it.
 const PICK_RADIUS := 9.0
+const FIELD_HINT := "Hold the left mouse button and drag to draw the field, then let go. Villagers sow and reap it.  Shift keeps drawing,  right-click or Esc to stop."
 
 var mode: Mode = Mode.COMMAND
 var spell_index := -1
@@ -20,6 +21,7 @@ var brush_radius := 8.0
 
 var village: PlayerVillage
 var day_cycle: DayCycle
+var raids: GoblinRaids
 var hud: Hud
 var creature: Creature
 
@@ -44,6 +46,15 @@ var _ghost_problem := ""
 var _ghost_material := StandardMaterial3D.new()
 var _rng := RandomNumberGenerator.new()
 
+# The wheat field being drawn: dragged out from one corner to the other.
+var _field_dragging := false
+var _field_from := Vector3.ZERO
+var _field_yaw := 0.0
+var _field_center := Vector3.ZERO
+var _field_size := Vector2.ZERO
+var _field_problem_text := ""
+var _prompt_timer := 0.0
+
 
 ## `info` comes from Main: name, starts, caves and whether it is a saved map.
 func setup(info: Dictionary, atmosphere: Atmosphere) -> void:
@@ -64,6 +75,13 @@ func _ready() -> void:
 	day_cycle.atmosphere = _atmosphere
 	day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
 	add_child(day_cycle)
+
+	raids = GoblinRaids.new()
+	add_child(raids)
+	raids.setup(day_cycle)
+	raids.raid_started.connect(func(count: int) -> void:
+		_announce("Midnight: %d goblins are marching on your village!" % count))
+	raids.raid_ended.connect(func() -> void: _announce("Morning: the goblins go home."))
 
 	_ring = GroundRing.new()
 	add_child(_ring)
@@ -118,6 +136,14 @@ func _process(delta: float) -> void:
 	_cursor_hit = Game.pick_ground(get_viewport().get_mouse_position())
 	if _choosing:
 		_update_hover()
+	if _prompt_timer > 0.0:
+		_prompt_timer -= delta
+		if _prompt_timer <= 0.0:
+			hud.set_prompt("")
+	if _field_dragging:
+		_update_field()
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_finish_field()
 	_painting = _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	if _painting and _cursor_hit != null:
 		Game.terrain.sculpt(sculpt_brush, _cursor_hit, brush_radius, delta, _flatten_height)
@@ -139,7 +165,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if button.button_index == MOUSE_BUTTON_LEFT:
 			_on_left_click()
 		elif button.button_index == MOUSE_BUTTON_RIGHT:
-			if mode == Mode.PLACE or mode == Mode.SPELL:
+			if mode == Mode.PLACE or mode == Mode.SPELL or mode == Mode.FIELD:
 				_set_mode(Mode.COMMAND)
 			elif _cursor_hit != null and not _choosing:
 				_command_move(_cursor_hit)
@@ -261,6 +287,7 @@ func _found(pos: Vector3, start_index: int) -> void:
 func _set_mode(m: Mode) -> void:
 	mode = m
 	_painting = false
+	_field_dragging = false
 	if m != Mode.SPELL:
 		spell_index = -1
 	if m != Mode.PLACE and _ghost != null:
@@ -277,6 +304,8 @@ func _set_mode(m: Mode) -> void:
 			hud.set_hint(_place_hint())
 		Mode.SCULPT:
 			hud.set_hint("Hold left mouse to %s the ground.  [ ] change brush size." % Hud.SCULPT_NAMES[sculpt_brush].to_lower())
+		Mode.FIELD:
+			hud.set_hint(FIELD_HINT)
 
 
 func _place_hint() -> String:
@@ -336,6 +365,12 @@ func _on_left_click() -> void:
 			_flatten_height = (_cursor_hit as Vector3).y
 		Mode.PLACE:
 			_place_building(Input.is_key_pressed(KEY_SHIFT))
+		Mode.FIELD:
+			_field_dragging = true
+			_field_from = _cursor_hit
+			# Line the field up with the screen.
+			_field_yaw = Game.camera_rig.yaw
+			_update_field()
 
 
 func _command_move(pos: Vector3) -> void:
@@ -369,6 +404,10 @@ func _cast(index: int) -> void:
 			var cloud := RainCloud.new()
 			Game.world_root.add_child(cloud)
 			cloud.cast(target)
+		"roots":
+			var patch := RootPatch.new()
+			Game.world_root.add_child(patch)
+			patch.cast(target)
 	if creature:
 		creature.watch(target)
 
@@ -377,6 +416,9 @@ func _cast(index: int) -> void:
 
 func _start_placing(kind: String) -> void:
 	hud.show_build_menu(false)
+	if kind == "field":
+		_set_mode(Mode.FIELD)
+		return
 	_place_kind = kind
 	_place_seed = _rng.randi()
 	_set_mode(Mode.PLACE)
@@ -426,6 +468,9 @@ func _placement_problem(p: Vector3, footprint: float) -> String:
 		var c := node as Node3D
 		if Vector2(c.global_position.x - p.x, c.global_position.z - p.z).length() < 14.0 + footprint:
 			return "Too close to the goblin cave."
+	for node in get_tree().get_nodes_in_group("fields"):
+		if (node as CropField).contains(p, footprint):
+			return "There is a field in the way."
 	var short := village.shortfall(BuildingCatalog.find(_place_kind).cost)
 	if short != "":
 		return "Need %s more." % short
@@ -462,6 +507,85 @@ func _place_building(keep_placing: bool) -> void:
 		_make_ghost()
 	else:
 		_set_mode(Mode.COMMAND)
+
+
+# --- Wheat fields ---------------------------------------------------------------
+
+## Works out the rectangle between where the drag began and the cursor.
+func _update_field() -> void:
+	if _cursor_hit == null:
+		return
+	var right := Vector3(cos(_field_yaw), 0.0, -sin(_field_yaw))
+	var forward := Vector3(sin(_field_yaw), 0.0, cos(_field_yaw))
+	var drag: Vector3 = (_cursor_hit as Vector3) - _field_from
+	var w := clampf(drag.dot(right), -CropField.MAX_SIDE, CropField.MAX_SIDE)
+	var d := clampf(drag.dot(forward), -CropField.MAX_SIDE, CropField.MAX_SIDE)
+	_field_center = _field_from + right * w * 0.5 + forward * d * 0.5
+	_field_center.y = Game.terrain.get_height(_field_center.x, _field_center.z)
+	_field_size = Vector2(absf(w), absf(d))
+	_field_problem_text = _field_problem()
+
+
+## Why the field being drawn can't be planted, or "" if it can.
+func _field_problem() -> String:
+	if _field_size.x < CropField.MIN_SIDE or _field_size.y < CropField.MIN_SIDE:
+		return "Keep dragging: a field is at least %d m on each side." % int(CropField.MIN_SIDE)
+	var terrain := Game.terrain
+	var points := CropField.rect_corners(_field_center, _field_size, _field_yaw)
+	points.append(_field_center)
+	for k in 4:
+		points.append(points[k].lerp(points[(k + 1) % 4], 0.5))
+	for p in points:
+		if not terrain.is_inside(p.x, p.z) or terrain.get_height(p.x, p.z) < Terrain.WATER_LEVEL + 0.4:
+			return "Fields need dry land."
+	if not village.in_territory(_field_center):
+		return "Too far from your village."
+	for group in ["buildings", "construction_sites", "caves"]:
+		for node in get_tree().get_nodes_in_group(group):
+			var b := node as Node3D
+			var reach: float = 12.0 if group == "caves" else b.get("footprint")
+			if CropField.in_rect(b.global_position, _field_center, _field_size, _field_yaw, reach + 0.5):
+				return "There is a building in the way."
+	for node in get_tree().get_nodes_in_group("fields"):
+		var other := node as CropField
+		for p in points:
+			if other.contains(p, 0.5):
+				return "There is another field in the way."
+		if CropField.in_rect(other.global_position, _field_center, _field_size, _field_yaw):
+			return "There is another field in the way."
+	var short := village.shortfall(CropField.cost_for(_field_size))
+	if short != "":
+		return "Need %s more." % short
+	return ""
+
+
+func _finish_field() -> void:
+	_field_dragging = false
+	if _field_problem_text != "":
+		hud.set_hint(_field_problem_text + "  Drag again, or right-click to stop.")
+		return
+	if not village.spend(CropField.cost_for(_field_size)):
+		return
+	for node in get_tree().get_nodes_in_group("trees"):
+		var t := node as Destructible
+		if CropField.in_rect(t.global_position, _field_center, _field_size, _field_yaw, 1.0):
+			t.fell()
+	var field := CropField.new()
+	field.setup(_field_size)
+	field.position = _field_center
+	field.rotation.y = _field_yaw
+	Game.world_root.add_child(field)
+	Game.effects.spawn_dust(_field_center, 1.5)
+	if Input.is_key_pressed(KEY_SHIFT):
+		hud.set_hint(FIELD_HINT)
+	else:
+		_set_mode(Mode.COMMAND)
+
+
+## Shows a message in the middle of the screen for a few seconds.
+func _announce(text: String) -> void:
+	hud.set_prompt(text)
+	_prompt_timer = 7.0
 
 
 # --- Dev menu actions -----------------------------------------------------------
@@ -501,6 +625,13 @@ func _update_ring() -> void:
 		_ring.draw(c, [_ghost.footprint + 0.5], Color(0.4, 1.0, 0.5) if _ghost_valid else Color(1.0, 0.35, 0.3))
 	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "rain":
 		_ring.draw(c, [RainCloud.RADIUS], Color(0.55, 0.75, 1.0))
+	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "roots":
+		_ring.draw(c, [RootPatch.RADIUS], Color(0.45, 1.0, 0.5))
+	elif mode == Mode.FIELD and _field_dragging:
+		_ring.draw_loop(CropField.rect_corners(_field_center, _field_size, _field_yaw),
+			Color(0.4, 1.0, 0.5) if _field_problem_text == "" else Color(1.0, 0.35, 0.3))
+	elif mode == Mode.FIELD:
+		_ring.draw(c, [0.6], Color(0.4, 1.0, 0.5))
 	else:
 		_ring.clear()
 
@@ -510,12 +641,16 @@ func _update_ui() -> void:
 	hud.update_spells(village.amount("magicko"), _cooldowns, not _choosing)
 	if hud.is_build_menu_open():
 		hud.update_build_menu(village)
+	if mode == Mode.FIELD and _field_dragging:
+		var cost: int = CropField.cost_for(_field_size).lumber
+		hud.set_hint("Field %d x %d m: %d lumber.  %s" % [roundi(_field_size.x), roundi(_field_size.y), cost,
+			_field_problem_text if _field_problem_text != "" else "Let go to plant it."])
 	if mode == Mode.PLACE and _ghost != null and _cursor_hit != null:
 		hud.set_hint(_place_hint() if _ghost_valid else _ghost_problem + "  R rotate,  T another look,  Esc cancel.")
 	if Game.dev_menu:
 		var tree := get_tree()
 		var goblins := tree.get_nodes_in_group("goblins").size()
-		hud.set_stats("Villagers %d (yours %d)   Goblins %d   Buildings %d\nTrees %d   Rocks %d   Fires %d   FPS %d" % [
-			tree.get_nodes_in_group("villagers").size() - goblins, village.population(), goblins,
+		hud.set_stats("Villagers %d (yours %d, soldiers %d)   Goblins %d   Buildings %d\nTrees %d   Rocks %d   Fires %d   FPS %d" % [
+			tree.get_nodes_in_group("villagers").size() - goblins, village.population(), village.soldiers(), goblins,
 			tree.get_nodes_in_group("buildings").size(), tree.get_nodes_in_group("trees").size(),
 			tree.get_nodes_in_group("rocks").size(), Game.fire.count(), Engine.get_frames_per_second()])

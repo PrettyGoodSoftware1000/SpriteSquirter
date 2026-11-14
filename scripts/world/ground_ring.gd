@@ -1,7 +1,7 @@
 class_name GroundRing
 extends MeshInstance3D
-## Circles drawn on the terrain: the sculpt brush, building footprints and
-## the editor's tool outlines.
+## Lines drawn on the terrain: the sculpt brush, building footprints, spell
+## areas, field outlines and the editor's tool outlines.
 
 var _mesh := ImmediateMesh.new()
 var _material := StandardMaterial3D.new()
@@ -29,6 +29,23 @@ func draw(center: Vector3, radii: Array, color: Color) -> void:
 			var z := center.z + sin(a) * r
 			_mesh.surface_add_vertex(Vector3(x, terrain.get_height(x, z) + 0.25, z))
 		_mesh.surface_end()
+	visible = true
+
+
+## A closed outline through `corners` (world positions), hugging the ground.
+func draw_loop(corners: PackedVector3Array, color: Color) -> void:
+	_mesh.clear_surfaces()
+	var terrain := Game.terrain
+	_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, _material)
+	_mesh.surface_set_color(color)
+	for k in corners.size():
+		var a := corners[k]
+		var b := corners[(k + 1) % corners.size()]
+		var steps := maxi(1, int(a.distance_to(b)))
+		for i in steps + (1 if k == corners.size() - 1 else 0):
+			var p := a.lerp(b, float(i) / steps)
+			_mesh.surface_add_vertex(Vector3(p.x, terrain.get_height(p.x, p.z) + 0.25, p.z))
+	_mesh.surface_end()
 	visible = true
 
 

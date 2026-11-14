@@ -103,6 +103,7 @@ static func create_building(rng: RandomNumberGenerator) -> Destructible:
 static func create(kind: String, rng: RandomNumberGenerator) -> Destructible:
 	var b := Destructible.new()
 	b.name = kind.capitalize()
+	b.set_meta("kind", kind)
 	b.is_building = true
 	var top := 0.0
 	match kind:

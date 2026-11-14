@@ -10,6 +10,10 @@ extends Node3D
 ## centred on the origin, so the world spans x/z in [-HALF, HALF]. The visible
 ## mesh is split into chunks, and editing only rebuilds the chunks it touches.
 ##
+## The map size is chosen per world: call Terrain.configure() before the
+## terrain (and anything that reads its size) is added to the tree. A world
+## comes either from a seed (generate) or from a saved map (load_map).
+##
 ## Heights, scorch marks and the bare-ground mask are also kept in textures
 ## that the terrain, grass and water shaders read (see Art.bind_terrain).
 
@@ -17,17 +21,27 @@ signal changed(center: Vector3, radius: float)
 
 enum Brush { RAISE, LOWER, FLATTEN, SMOOTH }
 
-const SIZE := 256
-const HALF := 128.0
-const N := SIZE + 1
+## Map sizes the player can choose, in metres (multiples of CHUNK).
+const SIZES := [192, 256, 384]
+const SIZE_NAMES := ["Small", "Medium", "Large"]
+const DEFAULT_SIZE := 256
 const CHUNK := 32
-const CHUNKS := 8 # SIZE / CHUNK
 const WATER_LEVEL := 0.0
 const MIN_HEIGHT := -10.0
 const MAX_HEIGHT := 60.0
 const VOID_HEIGHT := -60.0
-const ISLAND_RADIUS := 116.0
 
+# Per-world size values, set by configure(). Upper case because the rest of
+# the game treats them as constants once the world exists.
+static var SIZE := 256
+static var HALF := 128.0
+static var N := 257
+static var CHUNKS := 8
+static var ISLAND_RADIUS := 116.0
+## SIZE relative to the original 256 m map, for scaling placement rules.
+static var SCALE := 1.0
+
+var world_seed := 0
 var heights := PackedFloat32Array()
 ## 0..1 burn darkness per sample, painted by fire and explosions.
 var scorch := PackedFloat32Array()
@@ -97,7 +111,22 @@ func _process(delta: float) -> void:
 
 # --- Generation -------------------------------------------------------------
 
-func generate(world_seed: int) -> void:
+## Sets the size of the next world. Must run before the terrain is added.
+static func configure(size: int) -> void:
+	if not size in SIZES:
+		size = DEFAULT_SIZE
+	SIZE = size
+	HALF = size * 0.5
+	N = size + 1
+	CHUNKS = floori(size / float(CHUNK))
+	SCALE = size / 256.0
+	ISLAND_RADIUS = 116.0 * SCALE
+
+
+## Builds a world from a seed. Without villages (the map editor) no village
+## sites are picked, so the land is left as nature made it.
+func generate(seed_value: int, with_villages := true) -> void:
+	world_seed = seed_value
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed
 
@@ -127,15 +156,43 @@ func generate(world_seed: int) -> void:
 			heights[j * N + i] = _natural_height(i - HALF, j - HALF, base, mask)
 
 	_carve_rivers(rng)
-	_pick_village_sites(rng)
-	_flatten_village_sites()
-	_paint_village_ground(world_seed)
+	village_sites.clear()
+	if with_villages:
+		_pick_village_sites(rng)
+		_flatten_village_sites()
+		_paint_village_ground(world_seed)
 	_cut_out_island()
+	_finish()
 
+
+## Restores a world saved by export_map() (see MapData).
+func load_map(data: Dictionary) -> void:
+	world_seed = data.get("seed", 0)
+	_edge_noise.seed = world_seed + 3
+	_edge_noise.frequency = 0.55
+	heights = data.heights
+	bare = data.bare
+	scorch.resize(N * N)
+	scorch.fill(0.0)
+	rivers.clear()
+	for path in data.rivers:
+		rivers.append(path)
+	village_sites.clear()
+	_cut_out_island()
+	_finish()
+
+
+## The parts of the terrain a map file needs to rebuild it.
+func export_map() -> Dictionary:
+	return {"seed": world_seed, "size": SIZE, "heights": heights.duplicate(),
+		"bare": bare.duplicate(), "rivers": rivers.duplicate()}
+
+
+func _finish() -> void:
 	_height_tex = ImageTexture.create_from_image(_to_image(heights))
 	_scorch_tex = ImageTexture.create_from_image(_to_image(scorch))
 	_bare_tex = ImageTexture.create_from_image(_to_image(bare))
-	Art.bind_terrain(_height_tex, _scorch_tex, _bare_tex)
+	Art.bind_terrain(_height_tex, _scorch_tex, _bare_tex, N)
 
 	_shape.map_width = N
 	_shape.map_depth = N
@@ -279,19 +336,20 @@ func _natural_height(x: float, z: float, base: FastNoiseLite, mask: FastNoiseLit
 
 func _pick_village_sites(rng: RandomNumberGenerator) -> void:
 	village_sites.clear()
-	var wanted := rng.randi_range(4, 5)
+	var wanted := clampi(roundi(rng.randi_range(4, 5) * SCALE), 2, 8)
+	var reach := 74.0 * SCALE
 	# Try strict rules first, then relax them if the map is very hilly.
 	for max_relief in [5.0, 9.0, 16.0, 1000.0]:
 		var attempts := 0
 		while village_sites.size() < wanted and attempts < 400:
 			attempts += 1
-			var p := Vector2(rng.randf_range(-74.0, 74.0), rng.randf_range(-74.0, 74.0))
-			var too_close := p.length() > 72.0
+			var p := Vector2(rng.randf_range(-reach, reach), rng.randf_range(-reach, reach))
+			var too_close := p.length() > reach - 2.0
 			var r := rng.randf_range(15.0, 21.0)
 			if _river_distance(p) < r + 5.0:
 				continue
 			for s in village_sites:
-				if p.distance_to(s.pos) < 58.0:
+				if p.distance_to(s.pos) < 58.0 * minf(SCALE, 1.0):
 					too_close = true
 					break
 			if too_close:
@@ -483,6 +541,17 @@ func apply_brush(center: Vector3, radius: float, mode: Brush, amount: float, tar
 	_collision_dirty = true
 	_height_tex_dirty = true
 	changed.emit(center, radius)
+
+
+## One frame of a sculpt tool held down at `pos` (dev menu and map editor).
+func sculpt(mode: Brush, pos: Vector3, radius: float, delta: float, flatten_height: float) -> void:
+	match mode:
+		Brush.RAISE, Brush.LOWER:
+			apply_brush(pos, radius, mode, 8.0 * delta)
+		Brush.FLATTEN:
+			apply_brush(pos, radius, mode, 6.0 * delta, flatten_height)
+		Brush.SMOOTH:
+			apply_brush(pos, radius, mode, 6.0 * delta)
 
 
 ## Darkens the ground (burn marks) and burns the grass away.

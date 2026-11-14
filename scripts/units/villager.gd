@@ -6,10 +6,16 @@ extends Node3D
 ## Bodies come from a small library of pre-built looks (tunic, skin, hair
 ## and hat colours are baked into the mesh), with separate legs and arms
 ## that swing as the villager walks.
+##
+## The player's villagers ("owned", group "people") also take jobs from
+## their PlayerVillage: walk to a tree, rock, field or building site and
+## work there. Children are born small and grow up in GROW_SECONDS.
 
-enum State { IDLE, WALK, FLEE, BURNING, DEAD }
+enum State { IDLE, WALK, FLEE, BURNING, DEAD, JOB }
 
 const LOOKS := 14
+const GROW_SECONDS := 60.0
+const CHILD_SCALE := 0.45
 
 static var _looks: Array[Dictionary] = []
 static var _goblin_looks: Array[Dictionary] = []
@@ -17,6 +23,17 @@ static var _goblin_looks: Array[Dictionary] = []
 ## Set before adding to the scene: goblins are green, big-eared and stay
 ## close to their cave.
 var goblin := false
+
+## Set before adding to the scene: belongs to the player's village.
+var owned := false
+## Set before adding to the scene: a newborn that grows up over time.
+var child := false
+
+## Current job: "", "lumber", "stone", "food" or "build".
+var job := ""
+## What the job works on: a tree, rock, construction site or the village.
+var job_target: Node
+var job_pos := Vector3.ZERO
 
 var home := Vector3.ZERO
 var home_radius := 14.0
@@ -36,12 +53,18 @@ var _legs: Array[MeshInstance3D] = []
 var _arms: Array[MeshInstance3D] = []
 var _meshes: Array[MeshInstance3D] = []
 var _fire: FireEmitter
+var _working := false
+var _work_phase := 0.0
+var _age := 0.0
+var _adult_scale := 1.0
 
 
 func _ready() -> void:
 	add_to_group("villagers")
 	if goblin:
 		add_to_group("goblins")
+	if owned:
+		add_to_group("people")
 	_build_body()
 	_timer = randf_range(0.0, 3.0)
 
@@ -57,7 +80,8 @@ func _build_body() -> void:
 	for sx in [-1.0, 1.0]:
 		_legs.append(_add_mesh(look.leg, Vector3(sx * 0.1, 0.8, 0.0)))
 		_arms.append(_add_mesh(look.arm, Vector3(sx * 0.27, 1.33, 0.0)))
-	scale = Vector3.ONE * (randf_range(0.72, 0.86) if goblin else randf_range(0.92, 1.08))
+	_adult_scale = randf_range(0.72, 0.86) if goblin else randf_range(0.92, 1.08)
+	scale = Vector3.ONE * _adult_scale * (CHILD_SCALE if child else 1.0)
 
 
 func _add_mesh(mesh: Mesh, pos: Vector3) -> MeshInstance3D:
@@ -147,11 +171,17 @@ static func _build_looks() -> void:
 
 func _process(delta: float) -> void:
 	_moving = false
+	if child and state != State.DEAD:
+		_grow(delta)
 	match state:
 		State.IDLE:
 			_timer -= delta
-			if _timer <= 0.0:
+			if job != "":
+				state = State.JOB
+			elif _timer <= 0.0:
 				_choose_wander_target()
+		State.JOB:
+			_update_job(delta)
 		State.WALK:
 			if _move_towards(_target, 1.3 * _speed_scale, delta):
 				state = State.IDLE
@@ -181,6 +211,71 @@ func _process(delta: float) -> void:
 			return
 	global_position.y = Game.terrain.get_height(global_position.x, global_position.z)
 	_animate(delta)
+
+
+func _grow(delta: float) -> void:
+	_age += delta
+	var t := clampf(_age / GROW_SECONDS, 0.0, 1.0)
+	scale = Vector3.ONE * _adult_scale * lerpf(CHILD_SCALE, 1.0, t)
+	if t >= 1.0:
+		child = false
+
+
+func is_adult() -> bool:
+	return not child
+
+
+## True if the villager could start a job right now.
+func can_work() -> bool:
+	return owned and not child and state != State.DEAD and state != State.BURNING
+
+
+func assign_job(kind: String, pos: Vector3, target: Node) -> void:
+	job = kind
+	job_target = target
+	job_pos = pos
+	_working = false
+	if state == State.IDLE or state == State.WALK or state == State.JOB:
+		state = State.JOB
+
+
+func clear_job() -> void:
+	job = ""
+	job_target = null
+	_working = false
+	if state == State.JOB:
+		state = State.IDLE
+		_timer = randf_range(0.3, 1.0)
+
+
+## True while the villager is at its job and working.
+func is_working() -> bool:
+	return state == State.JOB and _working
+
+
+func _update_job(delta: float) -> void:
+	var gone := not is_instance_valid(job_target)
+	if not gone and job_target is Destructible:
+		gone = (job_target as Destructible).destroyed
+	if gone:
+		clear_job()
+		return
+	if not _working:
+		if _move_towards(job_pos, 1.7 * _speed_scale, delta):
+			var gap := Vector2(job_pos.x - global_position.x, job_pos.z - global_position.z).length()
+			if gap > 2.5:
+				# Blocked by water or the island's edge: let the village pick another job.
+				clear_job()
+				return
+			_working = true
+		return
+	var target_3d := job_target as Node3D
+	if target_3d and job != "food":
+		var to := target_3d.global_position - global_position
+		rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 8.0))
+	_work_phase += delta * 7.0
+	if is_instance_valid(Game.village):
+		Game.village.work(self, delta)
 
 
 func _choose_wander_target() -> void:
@@ -216,6 +311,9 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 func _animate(delta: float) -> void:
 	var panicking := state == State.FLEE or state == State.BURNING
 	var blend := minf(1.0, delta * 12.0)
+	if is_working():
+		_animate_work(blend)
+		return
 	var stride := 0.0
 	if _moving:
 		_phase += delta * (17.0 if panicking else 8.5)
@@ -233,6 +331,30 @@ func _animate(delta: float) -> void:
 		_arms[k].rotation.z = lerpf(_arms[k].rotation.z, s * (-0.35 if panicking else -0.08), blend)
 
 
+## Chopping, digging, foraging and hammering poses.
+func _animate_work(blend: float) -> void:
+	var swing := 0.5 + 0.5 * sin(_work_phase)
+	var lean := 0.0
+	var arms := [0.0, 0.0]
+	match job:
+		"food":
+			lean = 0.6
+			arms = [-0.9 + 0.35 * sin(_work_phase), -0.9 + 0.35 * sin(_work_phase + 1.7)]
+		"build":
+			var hammer := 0.5 + 0.5 * sin(_work_phase * 1.6)
+			lean = 0.12
+			arms = [-2.3 + 1.3 * hammer, -0.5]
+		_:
+			lean = 0.3 * swing
+			arms = [-2.5 + 1.6 * swing, -2.5 + 1.6 * swing]
+	_body.position.y = lerpf(_body.position.y, 0.0, blend)
+	_body.rotation.x = lerpf(_body.rotation.x, lean, blend)
+	for k in 2:
+		_legs[k].rotation.x = lerpf(_legs[k].rotation.x, 0.0, blend)
+		_arms[k].rotation.x = lerpf(_arms[k].rotation.x, arms[k], blend)
+		_arms[k].rotation.z = lerpf(_arms[k].rotation.z, (1.0 if k == 0 else -1.0) * -0.12, blend)
+
+
 func is_alive() -> bool:
 	return state != State.DEAD
 
@@ -241,13 +363,15 @@ func flee(from: Vector3) -> void:
 	if state == State.DEAD or state == State.BURNING:
 		return
 	_danger = from
+	_working = false
 	state = State.FLEE
 	_timer = randf_range(3.0, 6.0)
 
 
 func catch_fire() -> void:
-	if state == State.DEAD or state == State.BURNING:
+	if state == State.DEAD or state == State.BURNING or Game.fire.is_wet(global_position):
 		return
+	_working = false
 	state = State.BURNING
 	_timer = randf_range(3.0, 5.0)
 	_set_burn(0.3)
@@ -256,6 +380,18 @@ func catch_fire() -> void:
 	_fire.with_light = false
 	add_child(_fire)
 	_fire.position.y = 1.0
+
+
+## Rain puts a burning villager out before it burns up.
+func douse() -> void:
+	if state != State.BURNING:
+		return
+	state = State.IDLE
+	_timer = randf_range(0.5, 1.5)
+	_set_burn(0.15)
+	if _fire:
+		_fire.extinguish()
+		_fire = null
 
 
 ## Thrown through the air by an explosion.
@@ -288,6 +424,9 @@ func _die(charred: bool) -> void:
 		return
 	state = State.DEAD
 	remove_from_group("villagers")
+	remove_from_group("people")
+	job = ""
+	job_target = null
 	_timer = 0.0
 	if charred:
 		_set_burn(1.0)

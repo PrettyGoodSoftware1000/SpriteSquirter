@@ -3,6 +3,8 @@ shader_type spatial;
 // height texture: flat colour bands by depth, a hard foam line along the
 // shore, and drifting highlight streaks.
 
+// Samples along one side of the terrain data textures (map size + 1).
+uniform float world_n = 257.0;
 uniform sampler2D height_tex : filter_linear, repeat_disable;
 uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
 uniform vec3 shallow_color : source_color = vec3(0.16, 0.6, 0.58);
@@ -17,7 +19,7 @@ void vertex() {
 }
 
 void fragment() {
-	vec2 muv = (w_pos.xz + 128.5) / 257.0;
+	vec2 muv = (w_pos.xz + world_n * 0.5) / world_n;
 	float ground = texture(height_tex, muv).r;
 	// No water on dry land or out in the void.
 	if (ground > water_level + 0.02 || ground < -8.0) {

@@ -2,6 +2,8 @@ shader_type spatial;
 // Terrain surface: grass, dirt, sand, rock and snow blended by height,
 // slope and the masks painted by gameplay (bare ground and scorch marks).
 
+// Samples along one side of the terrain data textures (map size + 1).
+uniform float world_n = 257.0;
 uniform sampler2D scorch_tex : filter_linear, repeat_disable;
 uniform sampler2D mask_tex : filter_linear, repeat_disable;
 uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
@@ -35,7 +37,7 @@ void fragment() {
 		discard;
 	}
 	vec3 n = normalize(w_nrm);
-	vec2 muv = (w_pos.xz + 128.5) / 257.0;
+	vec2 muv = (w_pos.xz + world_n * 0.5) / world_n;
 	float scorch = texture(scorch_tex, muv).r;
 	float bare = texture(mask_tex, muv).r;
 	vec3 nz = texture(noise_tex, w_pos.xz * 0.02).rgb;

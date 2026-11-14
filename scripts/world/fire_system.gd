@@ -8,6 +8,9 @@ const MAX_GROUND_FIRES := 80
 const MAX_GENERATION := 3
 
 var _fires: Array[Dictionary] = []
+## Places soaked by rain, where nothing can catch fire for a while:
+## {"pos": Vector3, "radius": float, "time": float}.
+var _wet: Array[Dictionary] = []
 
 
 func count() -> int:
@@ -21,7 +24,7 @@ func start_fire(pos: Vector3, generation := 0, size := 1.0) -> void:
 	if not terrain.is_inside(pos.x, pos.z):
 		return
 	var h := terrain.get_height(pos.x, pos.z)
-	if h < Terrain.WATER_LEVEL + 0.25:
+	if h < Terrain.WATER_LEVEL + 0.25 or is_wet(pos):
 		return
 	var ground := Vector3(pos.x, h, pos.z)
 	for f in _fires:
@@ -38,7 +41,56 @@ func start_fire(pos: Vector3, generation := 0, size := 1.0) -> void:
 	terrain.add_scorch(ground, 2.5, 0.4)
 
 
+## Soaks an area: puts out every fire in it and keeps it from burning
+## for `duration` seconds.
+func soak(pos: Vector3, radius: float, duration: float) -> void:
+	var found := false
+	for w in _wet:
+		if (w.pos as Vector3).distance_to(pos) < 1.0:
+			w.time = maxf(w.time, duration)
+			w.radius = maxf(w.radius, radius)
+			found = true
+	if not found:
+		_wet.append({"pos": pos, "radius": radius, "time": duration})
+	extinguish_in(pos, radius)
+
+
+## Puts out ground fires, burning buildings and trees, and burning villagers.
+func extinguish_in(pos: Vector3, radius: float) -> void:
+	for k in range(_fires.size() - 1, -1, -1):
+		var f := _fires[k]
+		if _flat_distance(f.pos, pos) < radius:
+			var node: FireEmitter = f.node
+			if is_instance_valid(node):
+				node.extinguish()
+				Game.effects.spawn_steam(f.pos, 0.8)
+			_fires.remove_at(k)
+	for node in get_tree().get_nodes_in_group("destructibles"):
+		var d := node as Destructible
+		if d and d.burning and _flat_distance(d.global_position, pos) < radius + d.footprint:
+			d.extinguish()
+	for node in get_tree().get_nodes_in_group("villagers"):
+		var v := node as Villager
+		if v and _flat_distance(v.global_position, pos) < radius:
+			v.douse()
+
+
+func is_wet(pos: Vector3) -> bool:
+	for w in _wet:
+		if _flat_distance(w.pos, pos) < w.radius:
+			return true
+	return false
+
+
+func _flat_distance(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
 func _process(delta: float) -> void:
+	for k in range(_wet.size() - 1, -1, -1):
+		_wet[k].time -= delta
+		if _wet[k].time <= 0.0:
+			_wet.remove_at(k)
 	for k in range(_fires.size() - 1, -1, -1):
 		var f := _fires[k]
 		f.life -= delta

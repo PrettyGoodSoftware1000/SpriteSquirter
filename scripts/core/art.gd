@@ -115,6 +115,7 @@ static var _materials := {}
 static var _glass: Array[ShaderMaterial] = []
 static var _ambient_tinted: Array[ShaderMaterial] = []
 static var _terrain_textures: Array = [null, null, null]
+static var _terrain_samples := 257.0
 
 
 static func tex(tex_name: String) -> Texture2D:
@@ -318,8 +319,9 @@ static func _apply_palette_to(role: String, m: ShaderMaterial) -> void:
 
 ## Called by Terrain whenever it (re)creates its data textures, so the
 ## terrain, grass and water shaders all read the same world.
-static func bind_terrain(height: Texture2D, scorch: Texture2D, mask: Texture2D) -> void:
+static func bind_terrain(height: Texture2D, scorch: Texture2D, mask: Texture2D, samples: int) -> void:
 	_terrain_textures = [height, scorch, mask]
+	_terrain_samples = samples
 	for key in ["terrain", "grass", "water"]:
 		if _materials.has(key):
 			_apply_terrain_textures(_materials[key])
@@ -329,6 +331,7 @@ static func _apply_terrain_textures(m: ShaderMaterial) -> void:
 	m.set_shader_parameter("height_tex", _terrain_textures[0])
 	m.set_shader_parameter("scorch_tex", _terrain_textures[1])
 	m.set_shader_parameter("mask_tex", _terrain_textures[2])
+	m.set_shader_parameter("world_n", _terrain_samples)
 
 
 # --- Particles --------------------------------------------------------------

@@ -5,6 +5,8 @@ render_mode cull_disabled, world_vertex_coords;
 // texture and hides it on rock, sand, snow, bare dirt and burnt ground.
 // Vertex colour R = 0 at the root, 1 at the tip of a blade.
 
+// Samples along one side of the terrain data textures (map size + 1).
+uniform float world_n = 257.0;
 uniform sampler2D height_tex : filter_linear, repeat_disable;
 uniform sampler2D scorch_tex : filter_linear, repeat_disable;
 uniform sampler2D mask_tex : filter_linear, repeat_disable;
@@ -21,8 +23,8 @@ varying vec3 v_tint;
 
 void vertex() {
 	vec3 origin = MODEL_MATRIX[3].xyz;
-	vec2 muv = (origin.xz + 128.5) / 257.0;
-	float texel = 1.0 / 257.0;
+	vec2 muv = (origin.xz + world_n * 0.5) / world_n;
+	float texel = 1.0 / world_n;
 	float h = textureLod(height_tex, muv, 0.0).r;
 	float hx = textureLod(height_tex, muv + vec2(texel, 0.0), 0.0).r;
 	float hz = textureLod(height_tex, muv + vec2(0.0, texel), 0.0).r;

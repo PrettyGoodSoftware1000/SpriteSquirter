@@ -17,6 +17,7 @@ var _fire_gradient: Gradient
 var _ember_gradient: Gradient
 var _smoke_gradient: Gradient
 var _dust_gradient: Gradient
+var _steam_gradient: Gradient
 var _grow_shrink: Curve
 var _grow: Curve
 var _debris: Array[Dictionary] = []
@@ -47,6 +48,10 @@ func _ready() -> void:
 		Color(0.58, 0.5, 0.38, 0.0),
 		Color(0.58, 0.5, 0.38, 0.65),
 		Color(0.68, 0.62, 0.52, 0.0)])
+	_steam_gradient = _gradient([0.0, 0.15, 1.0], [
+		Color(0.92, 0.94, 0.97, 0.0),
+		Color(0.92, 0.94, 0.97, 0.6),
+		Color(0.85, 0.88, 0.92, 0.0)])
 	_grow_shrink = Curve.new()
 	_grow_shrink.add_point(Vector2(0.0, 0.35))
 	_grow_shrink.add_point(Vector2(0.25, 1.0))
@@ -299,6 +304,43 @@ func spawn_dust(pos: Vector3, size: float) -> void:
 	dust.angle_min = -180.0
 	dust.angle_max = 180.0
 	_spawn_oneshot(dust, pos + Vector3.UP * 0.3, 2.5)
+
+
+## A white puff where rain puts a fire out.
+func spawn_steam(pos: Vector3, size: float) -> void:
+	var steam := _burst(_smoke_mesh, _steam_gradient, 10, 1.8, 1.0 * size, 2.5 * size, 0.6 * size, 1.4 * size, Vector3(0, 2.5, 0))
+	steam.direction = Vector3.UP
+	steam.spread = 35.0
+	steam.scale_amount_curve = _grow
+	_spawn_oneshot(steam, pos + Vector3.UP * 0.4, 2.5)
+
+
+## Rain falling from a cloud `height` metres up over a disc of `radius`.
+func make_rain(radius: float, height: float) -> CPUParticles3D:
+	var drop := QuadMesh.new()
+	drop.size = Vector2(0.06, 1.3)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	mat.billboard_keep_scale = true
+	mat.albedo_color = Color(0.78, 0.86, 1.0, 0.55)
+	drop.material = mat
+	var p := CPUParticles3D.new()
+	p.mesh = drop
+	p.amount = int(clampf(radius * radius * 2.2, 120.0, 700.0))
+	# Time for a drop thrown down at 24 m/s to fall `height` metres.
+	p.lifetime = (-24.0 + sqrt(24.0 * 24.0 + 2.0 * 9.8 * height)) / 9.8
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(radius * 0.75, 0.5, radius * 0.75)
+	p.direction = Vector3.DOWN
+	p.spread = 3.0
+	p.gravity = Vector3(0, -9.8, 0)
+	p.initial_velocity_min = 22.0
+	p.initial_velocity_max = 26.0
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
 
 
 ## A ring that shrinks into the ground where a move order was given.

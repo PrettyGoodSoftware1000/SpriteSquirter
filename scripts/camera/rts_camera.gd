@@ -15,6 +15,8 @@ extends Node3D
 @export var pitch_min_deg := 15.0
 @export var pitch_max_deg := 78.0
 @export var bounds := 128.0
+## Radians per second the view turns by itself (the main menu backdrop).
+var auto_orbit := 0.0
 
 var camera: Camera3D
 var focus := Vector3.ZERO
@@ -34,6 +36,12 @@ func _ready() -> void:
 	camera.far = 1500.0
 	add_child(camera)
 	camera.make_current()
+
+
+func set_zoom(value: float, instant := false) -> void:
+	_target_distance = clampf(value, zoom_min, zoom_max)
+	if instant:
+		distance = _target_distance
 
 
 func focus_on(pos: Vector3, instant := false) -> void:
@@ -68,7 +76,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	yaw += auto_orbit * delta
 	var input := Vector2.ZERO
+	# Typing a map name must not move the camera.
+	if get_viewport().gui_get_focus_owner() is LineEdit:
+		distance = lerpf(distance, _target_distance, 1.0 - exp(-10.0 * delta))
+		_update_camera(delta)
+		return
 	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
 		input.y += 1.0
 	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):

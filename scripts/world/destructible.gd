@@ -54,10 +54,10 @@ func stomp(at: Vector3) -> void:
 
 
 func ignite() -> void:
-	if burning or destroyed or is_ghost:
+	if burning or destroyed or is_ghost or Game.fire.is_wet(global_position):
 		return
 	burning = true
-	_burn_time = 0.0
+	# A building that was put out and catches fire again keeps its old damage.
 	_spread_timer = randf_range(1.0, 2.0)
 	_geometry.clear()
 	_collect_geometry(self)
@@ -87,26 +87,44 @@ func _process(delta: float) -> void:
 		collapse()
 
 
+## Rain puts the fire out. The charring stays, and so does the burn time
+## already used up.
+func extinguish() -> void:
+	if not burning or destroyed:
+		return
+	burning = false
+	set_process(false)
+	for f in _fires:
+		if is_instance_valid(f):
+			f.extinguish()
+	_fires.clear()
+	Game.effects.spawn_steam(global_position + Vector3.UP * height * 0.5, clampf(footprint * 0.5, 0.6, 2.0))
+
+
+## Chopped down for lumber: falls apart quietly, without scaring anyone.
+func fell() -> void:
+	shatter(global_position + Vector3(randf_range(-1, 1), height * 0.3, randf_range(-1, 1)), 2.5, true)
+
+
 ## Burnt out: crumble in place.
 func collapse() -> void:
 	shatter(global_position + Vector3.UP * height, 3.0)
 
 
-## Breaks into physics debris and removes itself.
-func shatter(from: Vector3, force: float) -> void:
+## Breaks into physics debris and removes itself. A quiet shatter leaves no
+## scorch mark and raises no alarm.
+func shatter(from: Vector3, force: float, quiet := false) -> void:
 	if destroyed:
 		return
 	destroyed = true
-	remove_from_group("destructibles")
-	remove_from_group("grounded")
-	remove_from_group("buildings")
-	remove_from_group("trees")
+	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings"]:
+		remove_from_group(group)
 	for f in _fires:
 		if is_instance_valid(f):
 			f.reparent(Game.fire, true)
 			f.extinguish()
 	_fires.clear()
-	if not burning:
+	if not burning and not quiet:
 		# Blown apart without burning first: leave the pieces sooty.
 		_geometry.clear()
 		_collect_geometry(self)
@@ -115,6 +133,9 @@ func shatter(from: Vector3, force: float) -> void:
 	_collect_parts(self, parts)
 	for p in parts:
 		Game.effects.spawn_debris(p, from, force, burning)
+	if quiet:
+		queue_free()
+		return
 	Game.terrain.add_scorch(global_position, footprint + 1.5, 0.5 if burning else 0.2)
 	Game.effects.spawn_dust(global_position, clampf(footprint * 0.5, 0.6, 2.5))
 	if burning:

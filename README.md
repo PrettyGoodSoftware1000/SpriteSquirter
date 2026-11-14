@@ -1,10 +1,11 @@
 # SpriteSquirter
 
-A 3D sandbox experiment built with [Godot 4](https://godotengine.org). A giant,
-gloomy tortoise plods around an island floating in the sky, among surreal
-villages and tiny villagers, while you throw **fireballs** that blow things
-up and start fires. The long-term plan is to grow it into an RTS /
-tower-defense game (see [docs/ROADMAP.md](docs/ROADMAP.md)).
+A 3D village game built with [Godot 4](https://godotengine.org). Pick a start
+location on an island floating in the sky, and your tiny villagers gather
+lumber, stone and food, raise surreal buildings and have children. A giant,
+gloomy tortoise plods around, and you cast **fireballs** and **rain** with
+magicko. Make your own islands in the **map editor**. The long-term plan is
+to grow it into an RTS / tower-defense game (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 The art direction is **surreal and cel shaded**: flat bands of light, black
 ink outlines, bold colours and strange buildings. See
@@ -23,6 +24,33 @@ tortoise model. No 3D modelling tools are needed to run or change it.
 
 The first import takes a few seconds while Godot builds its cache in `.godot/`.
 
+## Playing
+
+The main menu offers a **random island** (Small 192 m, Medium 256 m or
+Large 384 m), your **saved maps**, and the **map editor**.
+
+1. **Choose a start location.** Numbered banners mark them; click one. On a
+   random island each banner is an existing village, which becomes yours. On
+   a map from the editor you start with 8 villagers and no buildings.
+2. **Your villagers work by themselves.** Grown-ups fell trees (lumber),
+   break up rocks (stone) and forage near the village (food), and every
+   grown-up adds a trickle of magicko. Trees and rocks run out, so the
+   workers move on.
+3. **Build.** Press **B** or **Backspace** for the build menu, pick a
+   building, and place its outline (**R** rotates it). The cost is paid up
+   front and the villagers come and build it: every grown-up helps, and 10
+   villagers take one minute. The building rises out of the ground as they work.
+4. **Grow.** A tiny villager is born every *birth timer* seconds while there
+   is housing (10, plus what your buildings house). Children grow up in a
+   minute and then start working.
+5. **Cast spells** from the spell bar at the bottom: **Fireball** blows
+   things up and starts fires, **Rain** puts fires out and soaks the ground
+   so it can't burn for a while. Both cost magicko.
+
+The counter at the top shows lumber, stone, food, people (and housing),
+magicko, the day and the time to the next birth. Days turn from dawn to
+daytime, evening and night.
+
 ## Controls
 
 | Input | Action |
@@ -32,34 +60,65 @@ The first import takes a few seconds while Godot builds its cache in `.godot/`.
 | Mouse wheel | Zoom |
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
-| Right click | Walk the tortoise to that spot |
-| F | Throw a fireball from the cursor (any tool) |
-| 1–3 | Tools: Command, Fireball, Build |
-| R | Another random design while in Build mode |
-| Esc | Back to the Command tool |
+| Click / right click | Walk the tortoise to that spot |
+| 1–2 | Pick a spell (Fireball, Rain), then click to cast |
+| F | Throw a fireball from the cursor (any time) |
+| B / Backspace | Open or close the build menu (1–7 pick a building) |
+| R / Shift+R | Rotate the building outline |
+| T | Another look for the building |
+| Shift+click | Place the building and keep placing |
+| Esc / right click | Cancel the spell or the building |
 | ~ | Show or hide the **dev menu** |
 
 ### Dev menu (~)
 
 | Control | Action |
 |---|---|
+| Day length | Minutes for a whole day and night |
+| Lumber / Stone / Food rate | Units each worker gathers per minute |
+| Birth timer | Seconds between new villagers |
+| Magicko rate | Magicko each grown-up adds per minute |
+| Give 100 of everything | For testing |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; `[` and `]` change the brush size |
-| New world (N) | Generate a brand-new island |
-| Weather (L) | Meadow day, golden hour, misty dawn, night |
+| New random world (N) | Generate a brand-new island of the same size |
+| Weather (L) | Meadow day, golden hour, misty dawn, night (until the next part of the day) |
 | Nature palette (P) | Recolour grass, trees, rocks and water instantly |
 | Grass detail (G) | High / Medium / Low / Off, for slower machines |
 
-The dev menu also shows the FPS and object counts.
+The dev menu also shows the FPS and object counts. The gameplay settings are
+kept until you quit, even when you start a new world.
 
-## What's in the demo
+## Map editor
+
+Start it from the main menu with **New map in the editor** (it uses the map
+size chosen above it) or **Edit map** on a saved map. A new map begins as a
+random island with trees and rocks, but no villages or buildings: in the
+game, villagers build everything.
+
+| Tool (key) | Action |
+|---|---|
+| Raise, Lower, Flatten, Smooth (1–4) | Sculpt the terrain; `[` and `]` change the brush size |
+| Start location (5) | Click to place a numbered start banner (1 to 8 per map) |
+| Goblin cave (6) | Click to place a cave; R / Shift+R turn it first. Goblins move in when the game starts |
+| Trees (7) | Hold to plant trees inside the brush |
+| Rocks (8) | Click or hold to place rocks |
+| Erase (9) | Hold to remove trees, rocks, start locations and caves inside the brush |
+
+Name the map and press **Save** (or Ctrl+S); a map needs at least one start
+location. **Save and play** starts a game on it straight away. Maps are
+saved as compressed files in Godot's user folder under `maps/` (on Windows
+`%APPDATA%\Godot\app_userdata\SpriteSquirter\maps`); **Open maps folder** in
+the main menu opens it, so maps can be copied and shared.
+
+## What's in the world
 
 - **Floating island:** a noise-based island with hills, lakes and a rocky
   underside, hanging in the sky with smaller islands drifting around it.
   Two rivers rise at a spring and pour over the edge as waterfalls.
 - **Surreal buildings:** the tall house with its striped chimney hat, the
   crystal tower, the moon tower, the mushroom house, the singing rocks,
-  the store-in-a-tree and the winged windmill. Place more with the Build
-  tool; each new one brings two villagers.
+  the store-in-a-tree and the winged windmill. Your villagers build more
+  from the build menu.
 - **Villagers and goblins:** villagers wander their villages; goblins
   loiter around a cave and their huts, far from the villages. Both panic,
   catch fire, get flung by explosions and get squashed by footsteps.
@@ -69,6 +128,8 @@ The dev menu also shows the FPS and object counts.
 - **Fireball:** thrown from your cursor. It explodes, digs a crater, breaks
   buildings and trees into physics debris (Jolt), and sets fires that
   spread, char buildings and eventually collapse them.
+- **Rain:** a storm cloud that puts out fires, burning buildings and burning
+  villagers, and leaves the ground too wet to burn for a while.
 - **Cel shading:** banded light, ink outlines, a sun that never sits
   overhead, weather moods and swappable nature palettes.
 
@@ -80,28 +141,42 @@ scenes/main.tscn           The only scene; everything else is built in code
 shaders/                   Cel shading (toon.gdshaderinc), outlines, terrain, grass, water, sky...
 assets/textures/           Baked textures (made by tools/bake_textures.gd)
 assets/creature/           The creature model (made by tools/bake_creature.py)
-tools/                     Scripts that generate the assets above
+tools/                     Scripts that generate the assets above, and the smoke test
 scripts/
-  main.gd                  World setup, input, tools, building placement
-  core/game.gd             Autoload: global access to terrain, effects, camera...
+  main.gd                  Builds the world for the session, then starts its controller
+  core/game.gd             Autoload: session, gameplay settings, global access to systems
   core/art.gd              Nature palettes and every material, in one place
   core/mesh_builder.gd     Builds rounded meshes in code (lathes, tubes, blobs...)
-  world/terrain.gd         Island heightmap, rivers, waterfalls, collision, sculpt brushes
+  core/map_data.gd         Saving, loading and listing map files
+  game/play_mode.gd        The game: start choice, spells, building placement, dev tools
+  game/player_village.gd   Resources, villager jobs, births and housing
+  game/construction_site.gd  A building the villagers are putting up
+  game/building_catalog.gd   Buildable buildings: costs and housing
+  game/spell_book.gd       Spells: costs and cooldowns
+  editor/editor_mode.gd    The map editor's tools and saving
+  world/terrain.gd         Island heightmap (any map size), rivers, waterfalls, collision, sculpting
   world/grass.gd           Instanced grass with distance-based detail
   world/atmosphere.gd      Sun, sky, haze and the weather moods
   world/building_factory.gd  The surreal buildings, goblin hut and cave
   world/flora_factory.gd   Trees, bushes and boulders
   world/destructible.gd    Shared burn / damage / shatter behaviour
-  world/world_populator.gd Places villages, the goblin cave, trees, rocks, sky islands
-  world/fire_system.gd     Spreading ground fires
+  world/world_populator.gd Places villages, goblin caves, trees, rocks, sky islands
+  world/fire_system.gd     Spreading ground fires, and rain-soaked ground
+  world/day_cycle.gd       Dawn, daytime, evening and night from the weather moods
+  world/start_marker.gd    Numbered start-location banners
+  world/ground_ring.gd     Circles drawn on the ground (brushes, outlines)
   units/creature.gd        The tortoise: locomotion, skeleton posing, IK
-  units/villager.gd        Villager and goblin looks and state machine
+  units/villager.gd        Villager and goblin looks, jobs, growing up, state machine
   spells/fireball.gd       Projectile
+  spells/rain.gd           The rain cloud
   spells/explosion.gd      Blast gameplay: damage, craters, flinging, fires
   fx/effects.gd            Particles, flashes, dust, debris bodies
   fx/fire_emitter.gd       A single flickering fire
   camera/rts_camera.gd     RTS-style orbit camera
-  ui/hud.gd                Player toolbar and the dev menu
+  ui/hud.gd                Resource counter, spell bar, build menu and the dev menu
+  ui/editor_hud.gd         The map editor's panel
+  ui/main_menu.gd          The title menu
+  ui/ui_theme.gd           Shared panel style
 ```
 
 ### Regenerating assets
@@ -120,6 +195,17 @@ pip install numpy scikit-image
 ```bash
 python3 tools/bake_creature.py
 ```
+
+### Smoke test
+
+A headless run through the menu, a random game (gathering, births,
+building, rain), the editor (save, list, load) and a saved-map game:
+
+```bash
+godot --headless --path . res://tools/smoke_test.tscn
+```
+
+It prints `SMOKE TEST PASSED` or the checks that failed, and exits with 0 or 1.
 
 ### Conventions
 

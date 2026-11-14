@@ -19,11 +19,21 @@ stage.
 - High-poly skinned tortoise creature
 - Dev menu (~) for terrain tools, weather, palettes and world generation
 
+## Milestone 0.75: Village game ✅
+- Main menu; map sizes (Small, Medium, Large)
+- Map editor: sculpting, start locations, goblin caves, trees, rocks; save / load
+- Pick a start location; villagers gather lumber, stone and food, earn magicko
+- Build menu with rotatable outlines; villagers raise the buildings
+- Births every few seconds while there is housing; children grow up in a minute
+- Rain spell that puts out fires; spell bar; resource counter
+- Day-night cycle; dev menu gameplay settings (day length, rates, birth timer)
+- Headless smoke test (tools/smoke_test.tscn)
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)
-- [ ] Slow automatic day-night cycle built on the weather moods
-- [ ] Rain, snow and wind as real weather effects
+- [x] Slow automatic day-night cycle built on the weather moods
+- [ ] Rain (beyond the spell), snow and wind as real weather effects
 - [ ] Chimney smoke, flowers, fences, market stalls and other village props
 - [ ] Creature: idle fidgets, roar, facial expressions
 - [ ] Settings menu (resolution, shadows, grass, mouse sensitivity)
@@ -32,14 +42,16 @@ stage.
 - [ ] Selection system: click and box-select, selection circles
 - [ ] Multiple units with a shared `Unit` base class (creature becomes one)
 - [ ] Navigation: `NavigationRegion3D` baked from the terrain, rebaked when it is sculpted
-- [ ] Villager jobs and resources (wood from trees, stone from rocks)
-- [ ] Building types with a purpose (houses, towers, storage)
-- [ ] Save / load the world (seed + edits + placed buildings)
+- [x] Villager jobs and resources (wood from trees, stone from rocks)
+- [ ] Building types with a purpose (houses, towers, storage); today they all give housing
+- [x] Save / load maps from the editor
+- [ ] Save / load a game in progress (resources, buildings, villagers)
 
 ## Milestone 3: Tower defense / conflict
 - [ ] Goblin raids: waves that leave the cave and path toward villages
 - [ ] Defensive buildings that shoot
-- [ ] Spell bar (fireball + more), mana, cooldowns
+- [x] Spell bar (fireball, rain), magicko, cooldowns
+- [ ] More spells
 - [ ] Win / lose conditions
 
 ## Milestone 4: Scale and art

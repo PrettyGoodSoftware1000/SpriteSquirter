@@ -75,16 +75,21 @@ func _run() -> void:
 		_check(built[0], "the villagers finish a building (%d adults, ~%d s expected)" % [adults, int(expected)])
 
 	# Warriors: the player asks for them; a Town guard trains one a minute.
-	_check(village.max_count("warrior") == 0, "no warriors without a Town guard")
+	# The day stops while armies and hunger are tested, so no raid gets in
+	# the way (recruits stop training to fight).
+	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
+	@warning_ignore("integer_division")
+	var guards_before := village.max_count("warrior") / PlayerVillage.WARRIORS_PER_GUARD
 	var tower := BuildingFactory.create("moon_tower", RandomNumberGenerator.new())
 	game.world_root.add_child(tower)
 	tower.global_position = village.center + Vector3(10, 0, -10)
 	tower.add_to_group("player_buildings")
-	village.set_wanted("warrior", 9)
-	_check(village.wanted.warrior == PlayerVillage.WARRIORS_PER_GUARD, "a Town guard allows 4 warriors (%d)" % village.wanted.warrior)
-	village.set_wanted("warrior", 2)
+	village.set_wanted("warrior", 99)
+	_check(village.wanted.warrior == (guards_before + 1) * PlayerVillage.WARRIORS_PER_GUARD,
+		"each Town guard allows 4 warriors (%d guards, %d allowed)" % [guards_before + 1, village.wanted.warrior])
+	village.set_wanted("warrior", 1)
 	await _wait(PlayerVillage.WARRIOR_SECONDS * 0.5)
-	_check(village.soldiers() == 0 and village.training_progress("warrior").size() == 1, "one warrior trains at a time, and takes a minute")
+	_check(village.soldiers() == 0 and village.training_progress("warrior").size() == 1, "a warrior takes a minute to train")
 	await _wait(PlayerVillage.WARRIOR_SECONDS * 0.5 + 35.0)
 	var soldiers := get_tree().get_nodes_in_group("soldiers")
 	_check(soldiers.size() == 1, "the first warrior is trained (%d)" % soldiers.size())
@@ -137,7 +142,8 @@ func _run() -> void:
 	# The midnight raid: goblins march on the village and fight.
 	var gap_before := first.global_position.distance_to(village.center)
 	play.raids.start_raid()
-	_check(get_tree().get_nodes_in_group("raiders").size() == goblins.size(), "every goblin joins the raid")
+	# Caves spawn all the time, so count the goblins (and any ogres) now.
+	_check(get_tree().get_nodes_in_group("raiders").size() == get_tree().get_nodes_in_group("goblins").size(), "every goblin joins the raid")
 	await _wait(20.0)
 	_check(not is_instance_valid(first) or not first.is_alive() or first.global_position.distance_to(village.center) < gap_before - 10.0,
 		"raiders close in on the village")
@@ -169,16 +175,33 @@ func _run() -> void:
 	game.settings.goblin_rate = Game.DEFAULT_SETTINGS.goblin_rate
 	_check(get_tree().get_nodes_in_group("goblins").size() > before_goblins, "caves keep spawning goblins")
 
-	# Hunger: no births without food, then people starve.
+	# Hunger: no births without food, then people starve. The wheat is held
+	# growing so no harvest comes in.
+	for node in get_tree().get_nodes_in_group("fields"):
+		var f := node as CropField
+		f.stage = CropField.Stage.GROWING
+		f.progress = 0.0
+		f.process_mode = Node.PROCESS_MODE_DISABLED
 	game.settings.food_rate = 0.0
 	village.resources.food = 0.0
+	# Food already on its way to the store would reset the hunger clock.
+	for v in village.people():
+		if v.carry_kind == "food":
+			v.carry = 0.0
 	var fed := village.population()
 	await _wait(1.0)
 	_check(village.next_birth_in() < 0.0, "no births without food")
-	await _wait(PlayerVillage.STARVE_AFTER + PlayerVillage.STARVE_EVERY * 0.5)
+	for k in 12:
+		await _wait(15.0)
+		village.resources.food = minf(village.resources.food, 0.0)
+		if village.population() < fed:
+			break
 	_check(village.population() < fed, "people starve with no food (%d -> %d)" % [fed, village.population()])
 	game.settings.food_rate = Game.DEFAULT_SETTINGS.food_rate
 	village.resources.food = 200.0
+	for node in get_tree().get_nodes_in_group("fields"):
+		node.process_mode = Node.PROCESS_MODE_INHERIT
+	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT
 
 	# Water flows into lowered ground next to it; craters away from water are stone.
 	var terrain: Terrain = game.terrain
@@ -194,6 +217,37 @@ func _run() -> void:
 		await _wait(1.0)
 		var k := roundi(dry.z + Terrain.HALF) * Terrain.N + roundi(dry.x + Terrain.HALF)
 		_check(terrain.water_depth(dry.x, dry.z) == 0.0 and terrain.rock[k] > 0.5, "a crater away from water is dry stone")
+
+	# One ogre joins the raid for every 15 goblins.
+	var cave := get_tree().get_nodes_in_group("caves")[0] as Node3D
+	while get_tree().get_nodes_in_group("goblins").size() < GoblinRaids.GOBLINS_PER_OGRE:
+		play.raids.spawn_at(cave)
+	play.raids.start_raid()
+	var ogres := get_tree().get_nodes_in_group("ogres")
+	@warning_ignore("integer_division")
+	var expected_ogres := (get_tree().get_nodes_in_group("goblins").size() - ogres.size()) / GoblinRaids.GOBLINS_PER_OGRE
+	_check(ogres.size() == expected_ogres and ogres.size() >= 1, "an ogre joins the raid for every 15 goblins (%d)" % ogres.size())
+	if not ogres.is_empty():
+		var ogre := ogres[0] as Villager
+		_check(is_equal_approx(ogre.max_hp, Villager.HEALTH * 10.0) and is_equal_approx(ogre.damage, Villager.ATTACK_DAMAGE * 3.0),
+			"the ogre has 10x health and 3x damage")
+	await _wait(15.0)
+	play.raids.end_raid()
+
+	# Blood Sacrifice: a villager dies, magicko comes in twice as fast.
+	var people_before := village.population()
+	_check(village.sacrifice(village.people()[0].global_position), "blood sacrifice finds a villager")
+	_check(village.population() == people_before - 1 and village.blood_active(), "the sacrifice kills one villager and starts the boost")
+	await _wait(2.0)
+
+	# Rain makes wheat grow faster.
+	field.stage = CropField.Stage.GROWING
+	field.progress = 0.0
+	var wet := RainCloud.new()
+	game.world_root.add_child(wet)
+	wet.cast(field.global_position)
+	await _wait(10.0)
+	_check(field.stage != CropField.Stage.GROWING or field.progress > 10.0 / CropField.GROW_SECONDS * 1.8, "rain speeds up the wheat (%.2f)" % field.progress)
 
 	# Rain puts out fires.
 	var fire_at := village.center + Vector3(6, 0, 6)

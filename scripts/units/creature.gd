@@ -15,7 +15,13 @@ extends Node3D
 ## are scooped up, up to five at a time, and thrown or eaten. During a
 ## raid it walks over to raiders by itself unless the player sent it
 ## somewhere. Its ordinary footsteps squash goblins and strangers, but
-## never the player's own villagers.
+## never the player's own villagers. With goblins about it is "alert": it
+## walks ALERT_SPEED times as fast, scowls, bares its mouth and its eyes
+## dart around.
+##
+## The face is drawn on top of the model: eyeballs, pupils that look about,
+## lids that blink and slant with its mood, and an inked mouth line that
+## opens into a dark mouth with the jaw.
 
 signal footfall(pos: Vector3)
 
@@ -31,6 +37,7 @@ const STOMP_STRIDE := 2.6
 const GRAB_RADIUS := 5.5
 ## During a raid, raiders this close are walked to.
 const HUNT_RANGE := 55.0
+const ALERT_SPEED := 1.2
 
 enum Action { NONE, STOMP, GRAB }
 
@@ -59,7 +66,6 @@ var _stepping: Array[bool] = [false, false]
 var _ground_y := 0.0
 var _time := 0.0
 var _cast_timer := 0.0
-var _alarm_timer := 0.0
 var _bob := 0.0
 var _sway := 0.0
 var _lean := 0.0
@@ -90,6 +96,23 @@ var _jaw_want := 0.0
 ## Where the arms point: x outwards, y up, z forwards.
 var _arm_pose := Vector3(0.3, -1.0, 0.12)
 var _arm_want := Vector3(0.3, -1.0, 0.12)
+
+## Goblins in reach or raiders in sight.
+var _alert := false
+## 0 gloomy .. 1 angry.
+var _anger := 0.0
+var _pupils: Array[MeshInstance3D] = []
+var _lids: Array[MeshInstance3D] = []
+var _eye_centres: Array[Vector3] = []
+var _gaze := Vector2.ZERO
+var _dart := Vector2.ZERO
+var _dart_timer := 0.0
+var _blink := 0.0
+var _blink_timer := 3.0
+var _mouth := ImmediateMesh.new()
+var _mouth_material := StandardMaterial3D.new()
+## The jaw opening and anger the mouth was last drawn with.
+var _mouth_drawn := Vector2(-1.0, -1.0)
 
 
 func _ready() -> void:
@@ -134,10 +157,7 @@ func _process(delta: float) -> void:
 	_update_feet(delta)
 	_update_body(delta)
 	_update_legs()
-	_alarm_timer -= delta
-	if _alarm_timer <= 0.0:
-		_alarm_timer = 0.5
-		Game.alarm(global_position, 18.0 if speed > 0.5 else 10.0)
+	_update_face(delta)
 
 
 # --- Locomotion -------------------------------------------------------------
@@ -155,7 +175,8 @@ func _update_locomotion(delta: float) -> void:
 			var want := atan2(to.x, to.z)
 			heading = rotate_toward(heading, want, turn_speed * delta)
 			var facing := cos(angle_difference(heading, want))
-			desired_speed = max_speed * clampf(facing, 0.0, 1.0) * clampf(dist / 5.0, 0.25, 1.0)
+			var top := max_speed * (ALERT_SPEED if _alert else 1.0)
+			desired_speed = top * clampf(facing, 0.0, 1.0) * clampf(dist / 5.0, 0.25, 1.0)
 	if _action != Action.NONE or _turning:
 		# Stand still and face the goblins.
 		desired_speed = 0.0
@@ -269,9 +290,12 @@ func _on_footfall(pos: Vector3) -> void:
 func _update_attacks(delta: float) -> void:
 	_action_cooldown = maxf(0.0, _action_cooldown - delta)
 	if _action == Action.GRAB:
+		_alert = true
 		_update_grab(delta)
 		return
 	if _action == Action.STOMP:
+		_alert = true
+		_jaw_want = 0.5
 		return
 	_scan_timer -= delta
 	if _scan_timer > 0.0:
@@ -295,6 +319,8 @@ func _update_attacks(delta: float) -> void:
 		elif g.raiding and d < hunt_d:
 			hunt_d = d
 			hunt = g
+	_alert = nearest != null or hunt != null
+	_jaw_want = 0.16 if _alert else 0.0
 	if nearest == null:
 		_turning = false
 		# Nothing in reach: go after raiders, unless the player sent us somewhere.
@@ -380,8 +406,13 @@ func _start_grab(near: Array[Villager]) -> void:
 	_held_from.clear()
 	var most := randi_range(3, 5)
 	for g in near:
-		if _held.size() < most and _flat(g.global_position, _action_point) < GRAB_RADIUS:
+		# Ogres are far too big to pick up.
+		if not g.ogre and _held.size() < most and _flat(g.global_position, _action_point) < GRAB_RADIUS:
 			_held.append(g)
+	if _held.is_empty():
+		_action_cooldown = 0.8
+		return
+	_jaw_want = 0.3
 	_action = Action.GRAB
 	_action_t = 0.0
 	_released = 0
@@ -601,24 +632,121 @@ func _build() -> void:
 		mi.material_override = hide
 		mi.extra_cull_margin = 6.0
 
-	# Sad eyes with heavy lids, attached to the head bone.
+	# The face, attached to the head bone: eyeballs, pupils and lids that
+	# move on their own, and the mouth.
 	var attach := BoneAttachment3D.new()
 	_skel.add_child(attach)
 	attach.bone_name = "head"
-	var eyes := MeshBuilder.new()
-	var lids := MeshBuilder.new()
-	for sx in [-1.0, 1.0]:
-		var s: float = sx
+	var paint := Art.paint("plaster", 0.25)
+	var whites := MeshBuilder.new()
+	whites.color = Color(0.96, 0.94, 0.84)
+	for k in 2:
+		var s := _side(k)
 		var centre := Vector3(s * 0.74, 0.5, 1.22)
-		eyes.color = Color(0.96, 0.94, 0.84)
-		eyes.add_blob(Vector3(0.34, 0.34, 0.3), Transform3D(Basis(), centre), null, 0.0, 6, 10)
-		eyes.color = Color(0.05, 0.04, 0.04)
-		eyes.add_blob(Vector3(0.15, 0.17, 0.1), Transform3D(Basis(), centre + Vector3(-s * 0.04, -0.1, 0.24)), null, 0.0, 5, 8)
+		_eye_centres.append(centre)
+		whites.add_blob(Vector3(0.34, 0.34, 0.3), Transform3D(Basis(), centre), null, 0.0, 8, 12)
+		var pupil := MeshBuilder.new()
+		pupil.color = Color(0.05, 0.04, 0.04)
+		pupil.add_blob(Vector3(0.15, 0.17, 0.1), Transform3D.IDENTITY, null, 0.0, 6, 10)
+		pupil.color = Color(1.0, 1.0, 1.0)
+		pupil.add_blob(Vector3(0.04, 0.045, 0.03), Transform3D(Basis(), Vector3(0.05, 0.07, 0.085)), null, 0.0, 4, 6)
+		_pupils.append(_face_part(attach, pupil.commit(), Art.paint("plaster", 0.0)))
 		# The lid droops towards the outside of the face: instant gloom.
-		lids.color = Color(0.36, 0.38, 0.2)
-		lids.add_blob(Vector3(0.42, 0.3, 0.38), Transform3D(Basis(Vector3.BACK, -s * 0.38), centre + Vector3(s * 0.03, 0.2, 0.02)), null, 0.0, 6, 10)
-	for builder in [eyes, lids]:
-		var mesh := MeshInstance3D.new()
-		mesh.mesh = (builder as MeshBuilder).commit()
-		mesh.material_override = Art.paint("plaster", 0.25)
-		attach.add_child(mesh)
+		var lid := MeshBuilder.new()
+		lid.color = Color(0.36, 0.38, 0.2)
+		lid.add_blob(Vector3(0.42, 0.3, 0.38), Transform3D.IDENTITY, null, 0.0, 6, 10)
+		_lids.append(_face_part(attach, lid.commit(), paint))
+	_face_part(attach, whites.commit(), paint)
+	_mouth_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_mouth_material.vertex_color_use_as_albedo = true
+	_mouth_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mouth := _face_part(attach, _mouth, null)
+	mouth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_update_face(0.0)
+
+
+func _face_part(parent: Node3D, mesh: Mesh, material: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = material
+	parent.add_child(mi)
+	return mi
+
+
+# --- Face -----------------------------------------------------------------------
+
+func _update_face(delta: float) -> void:
+	_anger = move_toward(_anger, 1.0 if _alert else 0.0, delta * 3.0)
+	# The eyes dart from place to place, faster when there is danger, and
+	# lean towards whatever the tortoise is looking at.
+	_dart_timer -= delta
+	if _dart_timer <= 0.0:
+		_dart_timer = randf_range(0.25, 0.9) if _alert else randf_range(0.7, 2.6)
+		_dart = Vector2(randf_range(-1.0, 1.0), randf_range(-0.6, 0.5)) * (0.11 if _alert else 0.08)
+		if randf() < 0.3:
+			_dart = Vector2.ZERO
+	var to := _look_at - global_position
+	var aside := 0.0
+	if to.length() > 3.0:
+		aside = clampf(angle_difference(heading + _look_yaw, atan2(to.x, to.z)), -1.0, 1.0)
+	var want := _dart + Vector2(aside * 0.1, -0.06 * (1.0 - _anger))
+	_gaze = _gaze.lerp(want, 1.0 - exp(-18.0 * delta))
+	_gaze = Vector2(clampf(_gaze.x, -0.13, 0.13), clampf(_gaze.y, -0.12, 0.1))
+	_blink_timer -= delta
+	if _blink_timer <= 0.0:
+		_blink_timer = randf_range(2.5, 6.0)
+		_blink = 0.14
+	_blink = maxf(0.0, _blink - delta)
+	var shut := 1.0 if _blink > 0.0 else 0.0
+	for k in 2:
+		var s := _side(k)
+		var c := _eye_centres[k]
+		_pupils[k].position = c + Vector3(_gaze.x - s * 0.04, _gaze.y - 0.04, 0.25 - 1.2 * _gaze.length_squared())
+		_pupils[k].scale = Vector3.ONE * lerpf(1.0, 0.72, _anger)
+		# Sad lids droop outwards; angry ones slant down to the nose and sit lower.
+		_lids[k].rotation.z = lerpf(-s * 0.38, s * 0.5, _anger)
+		_lids[k].position = c + Vector3(s * 0.03, lerpf(0.2, 0.14, _anger) - shut * 0.22, 0.02 + shut * 0.05)
+	if absf(_jaw - _mouth_drawn.x) > 0.01 or absf(_anger - _mouth_drawn.y) > 0.05:
+		_mouth_drawn = Vector2(_jaw, _anger)
+		_draw_mouth(maxf(0.0, _jaw - 0.05), _anger)
+
+
+## Draws the mouth in head space: a black line along the lip that follows
+## the frown carved into the model, and, when the jaw is open, the dark
+## inside of the mouth with a second line for the lower lip.
+func _draw_mouth(open: float, anger: float) -> void:
+	_mouth.clear_surfaces()
+	var upper := PackedVector3Array()
+	var lower := PackedVector3Array()
+	var droop := lerpf(0.3, 0.2, anger)
+	for i in 13:
+		var t := i / 6.0 - 1.0
+		var lip := Vector3(0.85 * t, -0.08 - droop * t * t, 2.1 - 0.5 * t * t)
+		var gape := 1.45 * open * pow(1.0 - t * t, 0.6)
+		upper.append(lip)
+		# The open mouth hangs just in front of the stretched skin of the jaw.
+		lower.append(lip + Vector3(0.0, -gape, 0.1 * minf(gape, 1.0) - 0.12 * gape * gape))
+	if open > 0.03:
+		_mouth.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _mouth_material)
+		_mouth.surface_set_color(Color(0.11, 0.015, 0.03))
+		for i in 13:
+			_mouth.surface_add_vertex(upper[i] + Vector3(0, 0, 0.04))
+			_mouth.surface_add_vertex(lower[i] + Vector3(0, 0, 0.04))
+		_mouth.surface_end()
+		for i in 13:
+			upper[i].z += 0.06
+			lower[i].z += 0.06
+		_ink_line(lower, 0.04)
+	_ink_line(upper, 0.05 + 0.02 * anger)
+
+
+## A black ribbon along `points`, thinner towards its ends.
+func _ink_line(points: PackedVector3Array, half_width: float) -> void:
+	_mouth.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _mouth_material)
+	_mouth.surface_set_color(Color(0.03, 0.02, 0.03))
+	for i in points.size():
+		var t := i * 2.0 / (points.size() - 1) - 1.0
+		var half := Vector3(0.0, half_width * (0.4 + 0.6 * (1.0 - t * t)), 0.0)
+		_mouth.surface_add_vertex(points[i] + half)
+		_mouth.surface_add_vertex(points[i] - half)
+	_mouth.surface_end()

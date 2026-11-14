@@ -43,12 +43,26 @@ const SLOWED_SPEED := 0.25
 const WIZARD_RANGE := 16.0
 const FIREBOLT_SECONDS := 0.7
 const FIREBOLT_DAMAGE := 11.0
+## An ogre against a goblin.
+const OGRE_HEALTH := 10.0
+const OGRE_DAMAGE := 3.0
+## Camera distances at which the detailed meshes switch on and off.
+const LOD_NEAR := 58.0
+const LOD_FAR := 66.0
+## Small black shapes stand in for pen lines on faces and clothes.
+const INK := Color(0.05, 0.04, 0.06)
+const LEATHER := Color(0.5, 0.31, 0.16)
+const STEEL := Color(0.72, 0.75, 0.8)
+const STRAW := Color(0.86, 0.72, 0.36)
+const SHOE := Color(0.2, 0.14, 0.1)
+const GOBLIN_EYE := Color(0.98, 0.9, 0.3)
 
 static var _looks: Array[Dictionary] = []
 static var _goblin_looks: Array[Dictionary] = []
 static var _soldier_looks: Array[Dictionary] = []
 static var _wizard_looks: Array[Dictionary] = []
-## Shared meshes: sword, shield and the loads workers carry.
+static var _ogre_look := {}
+## Shared meshes: sword, shield, club, staff and the workers' wheelbarrows.
 static var _gear := {}
 
 ## Set before adding to the scene: goblins are green, big-eared and stay
@@ -67,6 +81,9 @@ var guard: Node
 var wizard := false
 ## A goblin on a night raid.
 var raiding := false
+## Set before adding to the scene, together with `goblin`: a huge goblin
+## with a club, OGRE_HEALTH times the health and OGRE_DAMAGE times the damage.
+var ogre := false
 
 var max_hp := HEALTH
 var hp := HEALTH
@@ -123,12 +140,16 @@ var _farm_timer := 0.0
 var _load: MeshInstance3D
 var _base_look := {}
 var _gear_nodes: Array[Node3D] = []
+var _look := {}
+var _near := false
 
 
 func _ready() -> void:
 	add_to_group("villagers")
 	if goblin:
 		add_to_group("goblins")
+	if ogre:
+		add_to_group("ogres")
 	if owned:
 		add_to_group("people")
 	_build_body()
@@ -138,16 +159,27 @@ func _ready() -> void:
 func _build_body() -> void:
 	if _looks.is_empty():
 		_build_looks()
-	var library := _goblin_looks if goblin else _looks
-	var look: Dictionary = library[randi() % library.size()]
-	_base_look = look
+	if ogre:
+		_look = _ogre_look
+	else:
+		var library := _goblin_looks if goblin else _looks
+		_look = library[randi() % library.size()]
+	_base_look = _look
 	_body = Node3D.new()
 	add_child(_body)
-	_torso = _add_mesh(look.body, Vector3.ZERO)
+	var leg_x: float = _look.get("leg_x", 0.1)
+	var arm_x: float = _look.get("arm_x", 0.27)
+	_torso = _add_mesh(_look.body, Vector3.ZERO)
 	for sx in [-1.0, 1.0]:
-		_legs.append(_add_mesh(look.leg, Vector3(sx * 0.1, 0.8, 0.0)))
-		_arms.append(_add_mesh(look.arm, Vector3(sx * 0.27, 1.33, 0.0)))
+		_legs.append(_add_mesh(_look.leg, Vector3(sx * leg_x, 0.8, 0.0)))
+		_arms.append(_add_mesh(_look.arm, Vector3(sx * arm_x, 1.33, 0.0)))
 	_adult_scale = randf_range(0.72, 0.86) if goblin else randf_range(0.92, 1.08)
+	if ogre:
+		_adult_scale = randf_range(2.2, 2.5)
+		max_hp = HEALTH * OGRE_HEALTH
+		hp = max_hp
+		damage = ATTACK_DAMAGE * OGRE_DAMAGE
+		_add_gear("club", _arms[0], Vector3(0.0, -0.85, 0.03))
 	scale = Vector3.ONE * _adult_scale * (CHILD_SCALE if child else 1.0)
 
 
@@ -161,123 +193,435 @@ func _add_mesh(mesh: Mesh, pos: Vector3) -> MeshInstance3D:
 	return mi
 
 
-## Builds the shared library of villager looks.
+## Swaps between the detailed meshes (camera close) and the simple ones.
+func _apply_lod(near: bool) -> void:
+	_near = near
+	var suffix := "_hi" if near and _look.has("body_hi") else ""
+	_torso.mesh = _look["body" + suffix]
+	for k in 2:
+		_legs[k].mesh = _look["leg" + suffix]
+		_arms[k].mesh = _look["arm" + suffix]
+
+
+# --- Looks ----------------------------------------------------------------------
+# Every look is a dictionary of meshes: body, leg and arm for far away, and
+# body_hi, leg_hi and arm_hi for close up. The detailed ones have faces,
+# hands, trims and seams, with small black shapes standing in for ink lines.
+
+static func _at(x: float, y: float, z: float) -> Transform3D:
+	return Transform3D(Basis(), Vector3(x, y, z))
+
+
+## A dark band round the body: `r` is the body's radius at height `y`.
+static func _band(mb: MeshBuilder, r: float, y: float, half: float, out := 0.012, segments := 16) -> void:
+	mb.add_lathe(PackedVector2Array([Vector2(r, y - half), Vector2(r + out, y), Vector2(r, y + half)]), segments)
+
+
+## Ears, nose and inked eyes, brows and mouth on a head centred at height
+## `y` whose face is `z` in front of the neck.
+static func _face(mb: MeshBuilder, skin: Color, y: float, z: float, grim := false) -> void:
+	mb.color = skin
+	for sx in [-1.0, 1.0]:
+		var s: float = sx
+		mb.add_blob(Vector3(0.03, 0.05, 0.035), _at(s * 0.155, y, 0.0), null, 0.0, 4, 6)
+	mb.color = skin.darkened(0.14)
+	mb.add_blob(Vector3(0.028, 0.034, 0.04), _at(0.0, y - 0.015, z + 0.01), null, 0.0, 4, 6)
+	mb.color = INK
+	for sx in [-1.0, 1.0]:
+		var s: float = sx
+		mb.add_blob(Vector3(0.021, 0.03, 0.012), _at(s * 0.058, y + 0.025, z - 0.014), null, 0.0, 4, 6)
+		mb.add_box(Vector3(0.06, 0.013, 0.012), 0.003,
+			Transform3D(Basis(Vector3.BACK, s * (0.3 if grim else -0.12)), Vector3(s * 0.058, y + 0.073, z - 0.017)))
+	mb.add_box(Vector3(0.075 if grim else 0.06, 0.013, 0.012), 0.003, _at(0.0, y - 0.072, z - 0.016))
+
+
+static func _villager_far(c: Dictionary) -> Dictionary:
+	var body := MeshBuilder.new()
+	body.color = c.tunic
+	var hem: float = 0.35 if c.skirt else 0.72
+	body.add_lathe(PackedVector2Array([Vector2(0.0, hem), Vector2(0.33 if c.skirt else 0.25, hem), Vector2(0.21, 1.0),
+		Vector2(0.24, 1.3), Vector2(0.13, 1.44), Vector2(0.0, 1.46)]), 10)
+	body.color = c.tunic.darkened(0.45)
+	_band(body, 0.225, 1.02, 0.04, 0.015, 10)
+	body.color = c.skin
+	body.add_blob(Vector3(0.15, 0.17, 0.16), _at(0, 1.58, 0), null, 0.0, 6, 10)
+	match c.hat:
+		0: # Pointed hat
+			body.color = c.hat_color
+			body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.27, 1.66), Vector2(0.27, 1.69), Vector2(0.15, 1.72),
+				Vector2(0.08, 1.92), Vector2(0.0, 2.08)]), 10)
+		1: # Straw hat
+			body.color = STRAW
+			body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.36, 1.64), Vector2(0.36, 1.67), Vector2(0.16, 1.71),
+				Vector2(0.13, 1.8), Vector2(0.0, 1.83)]), 10)
+		2: # Hood
+			body.color = c.tunic.darkened(0.25)
+			body.add_blob(Vector3(0.19, 0.2, 0.2), _at(0, 1.6, -0.04), null, 0.0, 6, 10)
+		_: # Bare head with hair
+			body.color = c.hair
+			body.add_blob(Vector3(0.165, 0.14, 0.175), _at(0, 1.64, -0.03), null, 0.0, 6, 10)
+	var leg := MeshBuilder.new()
+	leg.color = c.trousers
+	leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.095, 0.07]), 6)
+	leg.color = SHOE
+	leg.add_blob(Vector3(0.08, 0.06, 0.14), _at(0, -0.74, 0.05), null, 0.0, 4, 8)
+	var arm := MeshBuilder.new()
+	arm.color = c.tunic.darkened(0.1)
+	arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.5, 0)]), PackedFloat32Array([0.075, 0.055]), 6)
+	arm.color = c.skin
+	arm.add_blob(Vector3(0.06, 0.07, 0.06), _at(0, -0.55, 0), null, 0.0, 4, 8)
+	return {"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()}
+
+
+static func _villager_near(c: Dictionary) -> Dictionary:
+	var body := MeshBuilder.new()
+	var hem: float = 0.35 if c.skirt else 0.7
+	var flare: float = 0.35 if c.skirt else 0.26
+	body.color = c.tunic
+	body.add_lathe(PackedVector2Array([Vector2(0.0, hem), Vector2(flare, hem), Vector2(flare - 0.02, hem + 0.1), Vector2(0.205, 0.98),
+		Vector2(0.215, 1.08), Vector2(0.25, 1.27), Vector2(0.21, 1.39), Vector2(0.1, 1.45), Vector2(0.0, 1.46)]), 16)
+	# Dark trim at the hem and collar, a belt with a buckle, an inked seam.
+	body.color = c.tunic.darkened(0.55)
+	_band(body, flare - 0.004, hem + 0.035, 0.035, 0.018)
+	_band(body, 0.1, 1.465, 0.035, 0.03, 12)
+	body.color = Color(0.2, 0.13, 0.09)
+	_band(body, 0.212, 1.02, 0.045, 0.024)
+	body.color = Color(0.92, 0.74, 0.25)
+	body.add_box(Vector3(0.07, 0.07, 0.03), 0.01, _at(0, 1.02, 0.232))
+	body.color = INK
+	body.add_box(Vector3(0.012, 0.2, 0.012), 0.003, Transform3D(Basis(Vector3.RIGHT, 0.18), Vector3(0, 1.185, 0.238)))
+	body.color = c.skin
+	body.add_tube(PackedVector3Array([Vector3(0, 1.4, 0), Vector3(0, 1.5, 0)]), PackedFloat32Array([0.075, 0.07]), 8)
+	body.add_blob(Vector3(0.155, 0.175, 0.165), _at(0, 1.6, 0), null, 0.0, 8, 12)
+	_face(body, c.skin, 1.6, 0.165)
+	match c.hat:
+		0: # Pointed hat with a brim, a band and a flopping tip
+			body.color = c.hat_color
+			body.add_lathe(PackedVector2Array([Vector2(0.0, 1.67), Vector2(0.3, 1.655), Vector2(0.3, 1.685), Vector2(0.16, 1.72)]), 16)
+			var cone := body.add_lathe(PackedVector2Array([Vector2(0.16, 1.72), Vector2(0.13, 1.84), Vector2(0.07, 1.99), Vector2(0.0, 2.13)]), 12)
+			body.bend(cone, 1.72, 2.13, Vector3(0.0, -0.04, -0.16))
+			body.color = c.hat_color.darkened(0.55)
+			_band(body, 0.158, 1.75, 0.028, 0.014)
+		1: # Straw hat with a ribbon
+			body.color = STRAW
+			body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.38, 1.63), Vector2(0.385, 1.66), Vector2(0.17, 1.71),
+				Vector2(0.14, 1.8), Vector2(0.0, 1.83)]), 16)
+			body.color = STRAW.darkened(0.35)
+			_band(body, 0.383, 1.645, 0.016, 0.008)
+			body.color = c.hat_color
+			_band(body, 0.162, 1.735, 0.028, 0.014)
+		2: # Hood with a dark rim round the face
+			body.color = c.tunic.darkened(0.25)
+			body.add_blob(Vector3(0.195, 0.205, 0.2), _at(0, 1.605, -0.045), null, 0.0, 8, 12)
+			body.add_tube(PackedVector3Array([Vector3(0, 1.72, -0.2), Vector3(0, 1.62, -0.3)]), PackedFloat32Array([0.07, 0.015]), 6)
+			body.color = c.tunic.darkened(0.6)
+			body.add_ring(0.158, 0.016, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 1.61, 0.105)), 14, 5)
+		_: # Hair: a cap, a fringe and sometimes a bun
+			body.color = c.hair
+			body.add_blob(Vector3(0.168, 0.14, 0.178), _at(0, 1.655, -0.03), null, 0.0, 8, 12)
+			for x: float in [-0.085, 0.0, 0.085]:
+				body.add_blob(Vector3(0.06, 0.04, 0.05), _at(x, 1.71, 0.105), null, 0.0, 4, 6)
+			if c.skirt:
+				body.add_blob(Vector3(0.075, 0.075, 0.075), _at(0, 1.72, -0.17), null, 0.0, 5, 8)
+	var leg := MeshBuilder.new()
+	leg.color = c.trousers
+	leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.36, 0.02), Vector3(0, -0.7, 0)]), PackedFloat32Array([0.1, 0.085, 0.07]), 8)
+	leg.color = c.trousers.darkened(0.5)
+	_band(leg, 0.07, -0.665, 0.025, 0.014, 8)
+	leg.color = SHOE
+	leg.add_blob(Vector3(0.085, 0.065, 0.15), _at(0, -0.735, 0.055), null, 0.0, 5, 8)
+	leg.color = INK
+	leg.add_box(Vector3(0.15, 0.02, 0.27), 0.006, _at(0, -0.79, 0.055))
+	var arm := MeshBuilder.new()
+	arm.color = c.tunic.darkened(0.1)
+	arm.add_blob(Vector3(0.095, 0.09, 0.095), _at(0, -0.02, 0), null, 0.0, 5, 8)
+	arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.26, -0.015), Vector3(0, -0.47, 0)]), PackedFloat32Array([0.08, 0.068, 0.06]), 8)
+	arm.color = c.tunic.darkened(0.55)
+	_band(arm, 0.06, -0.455, 0.025, 0.014, 8)
+	arm.color = c.skin
+	arm.add_blob(Vector3(0.058, 0.07, 0.058), _at(0, -0.54, 0), null, 0.0, 5, 8)
+	arm.add_blob(Vector3(0.022, 0.035, 0.022), _at(0, -0.53, 0.055), null, 0.0, 4, 6)
+	return {"body_hi": body.commit(), "leg_hi": leg.commit(), "arm_hi": arm.commit()}
+
+
+static func _goblin_far(skin: Color, hide: Color) -> Dictionary:
+	var body := MeshBuilder.new()
+	body.color = hide
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 0.62), Vector2(0.3, 0.62), Vector2(0.24, 1.0), Vector2(0.27, 1.25), Vector2(0.14, 1.4), Vector2(0.0, 1.42)]), 10)
+	body.color = skin
+	body.add_blob(Vector3(0.23, 0.21, 0.22), _at(0, 1.56, 0.06), null, 0.0, 6, 10)
+	body.add_tube(PackedVector3Array([Vector3(0, 1.54, 0.24), Vector3(0, 1.48, 0.5)]), PackedFloat32Array([0.07, 0.02]), 6)
+	for sx in [-1.0, 1.0]:
+		var s: float = sx
+		body.add_blob(Vector3(0.24, 0.1, 0.04), Transform3D(Basis(Vector3.BACK, s * 0.5), Vector3(s * 0.36, 1.66, 0.0)), null, 0.0, 4, 8)
+		body.color = GOBLIN_EYE
+		body.add_blob(Vector3(0.05, 0.05, 0.03), _at(s * 0.1, 1.62, 0.26), null, 0.0, 4, 6)
+		body.color = skin
+	var leg := MeshBuilder.new()
+	leg.color = skin.darkened(0.15)
+	leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.09, 0.07]), 6)
+	leg.add_blob(Vector3(0.09, 0.06, 0.16), _at(0, -0.74, 0.06), null, 0.0, 4, 8)
+	var arm := MeshBuilder.new()
+	arm.color = skin
+	arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.62, 0)]), PackedFloat32Array([0.07, 0.05]), 6)
+	arm.add_blob(Vector3(0.07, 0.08, 0.07), _at(0, -0.66, 0), null, 0.0, 4, 8)
+	return {"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()}
+
+
+static func _goblin_near(skin: Color, hide: Color) -> Dictionary:
+	var bone := Color(0.93, 0.9, 0.8)
+	var body := MeshBuilder.new()
+	# A ragged hide tunic, a rope belt and a necklace of teeth.
+	body.color = hide
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 0.6), Vector2(0.31, 0.6), Vector2(0.29, 0.72), Vector2(0.235, 1.0), Vector2(0.25, 1.12),
+		Vector2(0.275, 1.26), Vector2(0.2, 1.38), Vector2(0.1, 1.42), Vector2(0.0, 1.43)]), 14, Transform3D.IDENTITY, 7, 0.035)
+	body.color = hide.darkened(0.55)
+	_band(body, 0.24, 1.03, 0.04, 0.03, 14)
+	body.color = bone
+	for k in 5:
+		var a := (k - 2) * 0.38
+		body.add_blob(Vector3(0.026, 0.042, 0.026), _at(sin(a) * 0.25, 1.3 + 0.02 * absf(k - 2), cos(a) * 0.25), null, 0.0, 4, 6)
+	# A big head: long nose, heavy brow, slit eyes, a wide mouth with fangs.
+	body.color = skin
+	body.add_blob(Vector3(0.235, 0.215, 0.225), _at(0, 1.56, 0.06), null, 0.0, 8, 12)
+	body.add_blob(Vector3(0.15, 0.09, 0.12), _at(0, 1.43, 0.14), null, 0.0, 5, 8)
+	body.color = skin.darkened(0.12)
+	body.add_tube(PackedVector3Array([Vector3(0, 1.55, 0.26), Vector3(0, 1.5, 0.42), Vector3(0, 1.46, 0.52)]), PackedFloat32Array([0.075, 0.05, 0.02]), 8)
+	for sx in [-1.0, 1.0]:
+		var s: float = sx
+		body.color = skin
+		body.add_tube(PackedVector3Array([Vector3(s * 0.2, 1.6, 0.02), Vector3(s * 0.38, 1.68, -0.02), Vector3(s * 0.56, 1.8, -0.08)]),
+			PackedFloat32Array([0.085, 0.06, 0.012]), 6)
+		body.color = skin.darkened(0.45)
+		body.add_blob(Vector3(0.05, 0.03, 0.02), _at(s * 0.34, 1.665, 0.035), null, 0.0, 4, 6)
+		body.color = GOBLIN_EYE
+		body.add_blob(Vector3(0.062, 0.066, 0.03), _at(s * 0.105, 1.62, 0.262), null, 0.0, 5, 8)
+		body.color = bone
+		body.add_tube(PackedVector3Array([Vector3(s * 0.07, 1.455, 0.27), Vector3(s * 0.075, 1.51, 0.275)]), PackedFloat32Array([0.02, 0.004]), 5)
+		body.color = INK
+		body.add_blob(Vector3(0.016, 0.045, 0.014), _at(s * 0.1, 1.62, 0.29), null, 0.0, 4, 6)
+		body.add_box(Vector3(0.13, 0.024, 0.03), 0.006, Transform3D(Basis(Vector3.BACK, s * 0.45), Vector3(s * 0.105, 1.69, 0.258)))
+	body.color = INK
+	body.add_box(Vector3(0.22, 0.016, 0.014), 0.004, _at(0, 1.455, 0.262))
+	var leg := MeshBuilder.new()
+	leg.color = skin.darkened(0.15)
+	leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.36, 0.04), Vector3(0, -0.7, 0)]), PackedFloat32Array([0.095, 0.08, 0.07]), 8)
+	leg.add_blob(Vector3(0.1, 0.06, 0.17), _at(0, -0.74, 0.07), null, 0.0, 5, 8)
+	leg.color = INK
+	for x: float in [-0.06, 0.0, 0.06]:
+		leg.add_blob(Vector3(0.022, 0.022, 0.04), _at(x, -0.75, 0.23), null, 0.0, 4, 6)
+	var arm := MeshBuilder.new()
+	arm.color = skin
+	arm.add_blob(Vector3(0.09, 0.085, 0.09), _at(0, -0.02, 0), null, 0.0, 5, 8)
+	arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.32, -0.02), Vector3(0, -0.6, 0.02)]), PackedFloat32Array([0.075, 0.06, 0.05]), 8)
+	arm.add_blob(Vector3(0.075, 0.085, 0.075), _at(0, -0.66, 0.02), null, 0.0, 5, 8)
+	arm.color = hide.darkened(0.3)
+	_band(arm, 0.05, -0.53, 0.03, 0.016, 8)
+	arm.color = INK
+	for x: float in [-0.045, 0.0, 0.045]:
+		arm.add_blob(Vector3(0.018, 0.04, 0.018), _at(x, -0.75, 0.03), null, 0.0, 4, 6)
+	return {"body_hi": body.commit(), "leg_hi": leg.commit(), "arm_hi": arm.commit()}
+
+
+static func _soldier_far(skin: Color) -> Dictionary:
+	var body := MeshBuilder.new()
+	body.color = LEATHER
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 0.58), Vector2(0.31, 0.58), Vector2(0.23, 1.0),
+		Vector2(0.28, 1.3), Vector2(0.14, 1.44), Vector2(0.0, 1.46)]), 10)
+	body.color = LEATHER.darkened(0.45)
+	_band(body, 0.235, 1.02, 0.05, 0.02, 10)
+	body.color = skin
+	body.add_blob(Vector3(0.15, 0.17, 0.16), _at(0, 1.58, 0), null, 0.0, 6, 10)
+	body.color = STEEL
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 1.63), Vector2(0.25, 1.61), Vector2(0.25, 1.65), Vector2(0.185, 1.69),
+		Vector2(0.14, 1.82), Vector2(0.0, 1.88)]), 10)
+	var leg := MeshBuilder.new()
+	leg.color = Color(0.24, 0.2, 0.17)
+	leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.095, 0.08]), 6)
+	leg.color = LEATHER.darkened(0.3)
+	leg.add_blob(Vector3(0.09, 0.07, 0.15), _at(0, -0.74, 0.05), null, 0.0, 4, 8)
+	var arm := MeshBuilder.new()
+	arm.color = LEATHER.lightened(0.1)
+	arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.5, 0)]), PackedFloat32Array([0.085, 0.065]), 6)
+	arm.color = skin
+	arm.add_blob(Vector3(0.06, 0.07, 0.06), _at(0, -0.55, 0), null, 0.0, 4, 8)
+	return {"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()}
+
+
+static func _soldier_near(skin: Color) -> Dictionary:
+	var body := MeshBuilder.new()
+	# A leather jerkin with a skirt of straps, stitched in rows.
+	body.color = LEATHER
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 0.58), Vector2(0.32, 0.58), Vector2(0.3, 0.7), Vector2(0.235, 1.0), Vector2(0.24, 1.1),
+		Vector2(0.285, 1.3), Vector2(0.22, 1.4), Vector2(0.11, 1.45), Vector2(0.0, 1.46)]), 16, Transform3D.IDENTITY, 8, 0.02)
+	body.color = LEATHER.darkened(0.65)
+	_band(body, 0.252, 1.15, 0.012, 0.008)
+	_band(body, 0.27, 1.23, 0.012, 0.008)
+	_band(body, 0.31, 0.64, 0.014, 0.008)
+	body.color = Color(0.2, 0.13, 0.09)
+	_band(body, 0.24, 1.03, 0.045, 0.024)
+	body.color = STEEL
+	body.add_box(Vector3(0.08, 0.08, 0.03), 0.01, _at(0, 1.03, 0.262))
+	body.color = LEATHER.lightened(0.1)
+	for sx in [-1.0, 1.0]:
+		var s: float = sx
+		body.add_blob(Vector3(0.13, 0.075, 0.125), _at(s * 0.27, 1.37, 0.0), null, 0.0, 5, 8)
+	body.color = skin
+	body.add_tube(PackedVector3Array([Vector3(0, 1.4, 0), Vector3(0, 1.5, 0)]), PackedFloat32Array([0.075, 0.07]), 8)
+	body.add_blob(Vector3(0.155, 0.175, 0.165), _at(0, 1.6, 0), null, 0.0, 8, 12)
+	_face(body, skin, 1.6, 0.165, true)
+	# A steel helmet with a rim, a nose guard and a red crest.
+	body.color = STEEL
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 1.64), Vector2(0.2, 1.63), Vector2(0.255, 1.6), Vector2(0.26, 1.635), Vector2(0.19, 1.69),
+		Vector2(0.15, 1.81), Vector2(0.06, 1.88), Vector2(0.0, 1.89)]), 16)
+	body.add_box(Vector3(0.045, 0.17, 0.035), 0.008, _at(0, 1.6, 0.19))
+	body.color = INK
+	_band(body, 0.188, 1.7, 0.012, 0.01)
+	body.color = Color(0.74, 0.15, 0.12)
+	body.add_box(Vector3(0.035, 0.07, 0.3), 0.01, _at(0, 1.9, -0.01))
+	var leg := MeshBuilder.new()
+	leg.color = Color(0.24, 0.2, 0.17)
+	leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.36, 0.02), Vector3(0, -0.5, 0.0)]), PackedFloat32Array([0.1, 0.088, 0.085]), 8)
+	leg.color = LEATHER.darkened(0.3)
+	leg.add_tube(PackedVector3Array([Vector3(0, -0.42, 0), Vector3(0, -0.72, 0)]), PackedFloat32Array([0.1, 0.088]), 8)
+	leg.add_blob(Vector3(0.09, 0.07, 0.155), _at(0, -0.735, 0.055), null, 0.0, 5, 8)
+	leg.color = INK
+	_band(leg, 0.1, -0.425, 0.014, 0.008, 8)
+	leg.add_box(Vector3(0.16, 0.02, 0.28), 0.006, _at(0, -0.795, 0.055))
+	var arm := MeshBuilder.new()
+	arm.color = LEATHER.lightened(0.1)
+	arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.26, -0.015), Vector3(0, -0.32, -0.01)]), PackedFloat32Array([0.085, 0.072, 0.07]), 8)
+	arm.color = STEEL
+	arm.add_tube(PackedVector3Array([Vector3(0, -0.3, -0.01), Vector3(0, -0.47, 0)]), PackedFloat32Array([0.072, 0.064]), 8)
+	arm.color = INK
+	_band(arm, 0.072, -0.3, 0.012, 0.008, 8)
+	arm.color = skin
+	arm.add_blob(Vector3(0.058, 0.07, 0.058), _at(0, -0.54, 0), null, 0.0, 5, 8)
+	arm.add_blob(Vector3(0.022, 0.035, 0.022), _at(0, -0.53, 0.055), null, 0.0, 4, 6)
+	return {"body_hi": body.commit(), "leg_hi": leg.commit(), "arm_hi": arm.commit()}
+
+
+## The ogre: a pot-bellied brute, more than twice a goblin's height, with
+## tusks and a spiked wooden club. Always drawn in full detail.
+static func _build_ogre() -> void:
+	var skin := Color(0.5, 0.56, 0.34)
+	var hide := Color(0.4, 0.25, 0.15)
+	var bone := Color(0.93, 0.9, 0.8)
+	var body := MeshBuilder.new()
+	body.color = skin
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 0.62), Vector2(0.36, 0.62), Vector2(0.5, 0.9), Vector2(0.52, 1.1), Vector2(0.46, 1.32),
+		Vector2(0.3, 1.5), Vector2(0.12, 1.56), Vector2(0.0, 1.57)]), 16)
+	body.color = hide
+	body.add_lathe(PackedVector2Array([Vector2(0.0, 0.5), Vector2(0.42, 0.5), Vector2(0.45, 0.7), Vector2(0.53, 0.92), Vector2(0.5, 0.96)]),
+		16, Transform3D.IDENTITY, 8, 0.04)
+	body.color = hide.darkened(0.55)
+	_band(body, 0.525, 0.95, 0.05, 0.03)
+	# A skull for a belt buckle, an inked line under the chest, a navel.
+	body.color = bone
+	body.add_blob(Vector3(0.09, 0.1, 0.06), _at(0, 0.95, 0.55), null, 0.0, 5, 8)
+	body.color = INK
+	for sx in [-1.0, 1.0]:
+		var s: float = sx
+		body.add_blob(Vector3(0.022, 0.028, 0.012), _at(s * 0.035, 0.968, 0.603), null, 0.0, 4, 6)
+		body.add_box(Vector3(0.2, 0.016, 0.016), 0.004, Transform3D(Basis(Vector3.BACK, -s * 0.2) * Basis(Vector3.UP, s * 0.3), Vector3(s * 0.12, 1.33, 0.44)))
+	body.add_blob(Vector3(0.022, 0.03, 0.012), _at(0, 1.12, 0.522), null, 0.0, 4, 6)
+	# A small head sunk between the shoulders, with an underbite and tusks.
+	body.color = skin
+	body.add_blob(Vector3(0.22, 0.2, 0.21), _at(0, 1.66, 0.12), null, 0.0, 8, 12)
+	body.color = skin.darkened(0.1)
+	body.add_blob(Vector3(0.2, 0.11, 0.17), _at(0, 1.56, 0.2), null, 0.0, 6, 10)
+	body.add_blob(Vector3(0.06, 0.05, 0.06), _at(0, 1.68, 0.33), null, 0.0, 4, 6)
+	body.color = skin.darkened(0.35)
+	body.add_blob(Vector3(0.2, 0.045, 0.08), _at(0, 1.755, 0.27), null, 0.0, 5, 8)
+	body.color = Color(0.1, 0.08, 0.08)
+	body.add_blob(Vector3(0.08, 0.07, 0.08), _at(0, 1.86, 0.06), null, 0.0, 5, 8)
+	for sx in [-1.0, 1.0]:
+		var s: float = sx
+		body.color = skin
+		body.add_blob(Vector3(0.05, 0.07, 0.03), _at(s * 0.23, 1.68, 0.08), null, 0.0, 4, 6)
+		body.color = bone
+		body.add_tube(PackedVector3Array([Vector3(s * 0.1, 1.6, 0.34), Vector3(s * 0.125, 1.73, 0.36)]), PackedFloat32Array([0.036, 0.008]), 6)
+		body.color = INK
+		body.add_blob(Vector3(0.024, 0.024, 0.014), _at(s * 0.085, 1.712, 0.318), null, 0.0, 4, 6)
+	body.color = INK
+	body.add_box(Vector3(0.26, 0.018, 0.014), 0.004, _at(0, 1.6, 0.366))
+	var leg := MeshBuilder.new()
+	leg.color = skin.darkened(0.1)
+	leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.4, 0.03), Vector3(0, -0.68, 0)]), PackedFloat32Array([0.19, 0.16, 0.14]), 10)
+	leg.add_blob(Vector3(0.17, 0.09, 0.26), _at(0, -0.72, 0.08), null, 0.0, 5, 8)
+	leg.color = INK
+	for x: float in [-0.1, 0.0, 0.1]:
+		leg.add_blob(Vector3(0.035, 0.03, 0.05), _at(x, -0.74, 0.32), null, 0.0, 4, 6)
+	var arm := MeshBuilder.new()
+	arm.color = skin
+	arm.add_blob(Vector3(0.17, 0.16, 0.17), _at(0, -0.02, 0), null, 0.0, 6, 10)
+	arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.4, -0.02), Vector3(0, -0.75, 0.03)]), PackedFloat32Array([0.15, 0.13, 0.12]), 10)
+	arm.add_blob(Vector3(0.14, 0.15, 0.14), _at(0, -0.85, 0.03), null, 0.0, 6, 10)
+	arm.color = hide.darkened(0.3)
+	_band(arm, 0.118, -0.66, 0.04, 0.02, 10)
+	_ogre_look = {"body": body.commit(), "leg": leg.commit(), "arm": arm.commit(), "leg_x": 0.2, "arm_x": 0.58}
+
+	# The club points forwards out of the fist, like a soldier's sword.
+	var club := MeshBuilder.new()
+	club.color = Art.WOOD
+	club.add_tube(PackedVector3Array([Vector3(0, 0, -0.18), Vector3(0, 0, 0.5), Vector3(0, 0.02, 1.25)]), PackedFloat32Array([0.06, 0.09, 0.2]), 8)
+	club.color = Art.WOOD_DARK
+	for k in 3:
+		club.add_blob(Vector3(0.07, 0.07, 0.07), _at(0.12 * cos(k * 2.1), 0.02 + 0.12 * sin(k * 2.1), 0.75 + 0.16 * k), null, 0.0, 4, 6)
+	club.color = STEEL
+	for k in 5:
+		var a := k * TAU / 5.0
+		var out := Vector3(cos(a), sin(a), 0.0)
+		var base := Vector3(0, 0.02, 0.95 + 0.06 * (k % 2)) + out * 0.15
+		club.add_tube(PackedVector3Array([base, base + out * 0.16]), PackedFloat32Array([0.04, 0.004]), 5)
+	_gear["club"] = club.commit()
+
+
+## Builds the shared library of looks, gear and loads.
 static func _build_looks() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2024
 	for k in LOOKS:
-		var tunic: Color = Art.CLOTH_COLORS[rng.randi() % Art.CLOTH_COLORS.size()]
-		var trousers := Color(0.28, 0.2, 0.14).lerp(Art.CLOTH_COLORS[rng.randi() % Art.CLOTH_COLORS.size()], 0.3)
-		var skin: Color = Art.SKIN_COLORS[rng.randi() % Art.SKIN_COLORS.size()]
-		var hair := Color(0.16, 0.1, 0.06).lerp(Color(0.75, 0.5, 0.2), rng.randf())
-		var skirt := rng.randf() < 0.45
-
-		var body := MeshBuilder.new()
-		body.color = tunic
-		var hem := 0.35 if skirt else 0.72
-		body.add_lathe(PackedVector2Array([Vector2(0.0, hem), Vector2(0.33 if skirt else 0.25, hem), Vector2(0.21, 1.0),
-			Vector2(0.24, 1.3), Vector2(0.13, 1.44), Vector2(0.0, 1.46)]), 10)
-		body.color = tunic.darkened(0.45)
-		body.add_lathe(PackedVector2Array([Vector2(0.225, 0.98), Vector2(0.24, 1.02), Vector2(0.225, 1.06)]), 10)
-		body.color = skin
-		body.add_blob(Vector3(0.15, 0.17, 0.16), Transform3D(Basis(), Vector3(0, 1.58, 0)), null, 0.0, 6, 10)
-		match rng.randi_range(0, 3):
-			0: # Pointed hat
-				body.color = Art.CLOTH_COLORS[rng.randi() % Art.CLOTH_COLORS.size()].darkened(0.2)
-				body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.27, 1.66), Vector2(0.27, 1.69), Vector2(0.15, 1.72),
-					Vector2(0.08, 1.92), Vector2(0.0, 2.08)]), 10)
-			1: # Straw hat
-				body.color = Color(0.86, 0.72, 0.36)
-				body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.36, 1.64), Vector2(0.36, 1.67), Vector2(0.16, 1.71),
-					Vector2(0.13, 1.8), Vector2(0.0, 1.83)]), 10)
-			2: # Hood
-				body.color = tunic.darkened(0.25)
-				body.add_blob(Vector3(0.19, 0.2, 0.2), Transform3D(Basis(), Vector3(0, 1.6, -0.04)), null, 0.0, 6, 10)
-			_: # Bare head with hair
-				body.color = hair
-				body.add_blob(Vector3(0.165, 0.14, 0.175), Transform3D(Basis(), Vector3(0, 1.64, -0.03)), null, 0.0, 6, 10)
-
-		var leg := MeshBuilder.new()
-		leg.color = trousers
-		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.095, 0.07]), 6)
-		leg.color = Color(0.2, 0.14, 0.1)
-		leg.add_blob(Vector3(0.08, 0.06, 0.14), Transform3D(Basis(), Vector3(0, -0.74, 0.05)), null, 0.0, 4, 8)
-
-		var arm := MeshBuilder.new()
-		arm.color = tunic.darkened(0.1)
-		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.5, 0)]), PackedFloat32Array([0.075, 0.055]), 6)
-		arm.color = skin
-		arm.add_blob(Vector3(0.06, 0.07, 0.06), Transform3D(Basis(), Vector3(0, -0.55, 0)), null, 0.0, 4, 8)
-		_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
-
+		var c := {
+			"tunic": Art.CLOTH_COLORS[rng.randi() % Art.CLOTH_COLORS.size()],
+			"trousers": Color(0.28, 0.2, 0.14).lerp(Art.CLOTH_COLORS[rng.randi() % Art.CLOTH_COLORS.size()], 0.3),
+			"skin": Art.SKIN_COLORS[rng.randi() % Art.SKIN_COLORS.size()],
+			"hair": Color(0.16, 0.1, 0.06).lerp(Color(0.75, 0.5, 0.2), rng.randf()),
+			"skirt": rng.randf() < 0.45,
+			"hat": rng.randi_range(0, 3),
+			"hat_color": (Art.CLOTH_COLORS[rng.randi() % Art.CLOTH_COLORS.size()] as Color).darkened(0.2),
+		}
+		var look := _villager_far(c)
+		look.merge(_villager_near(c))
+		_looks.append(look)
 	for k in 6:
 		var skin: Color = Art.GOBLIN_SKIN[k % Art.GOBLIN_SKIN.size()]
 		var hide := Color(0.42, 0.28, 0.16).lerp(Color(0.5, 0.2, 0.2), rng.randf() * 0.6)
-		var body := MeshBuilder.new()
-		body.color = hide
-		body.add_lathe(PackedVector2Array([Vector2(0.0, 0.62), Vector2(0.3, 0.62), Vector2(0.24, 1.0), Vector2(0.27, 1.25), Vector2(0.14, 1.4), Vector2(0.0, 1.42)]), 10)
-		body.color = skin
-		body.add_blob(Vector3(0.23, 0.21, 0.22), Transform3D(Basis(), Vector3(0, 1.56, 0.06)), null, 0.0, 6, 10)
-		body.add_tube(PackedVector3Array([Vector3(0, 1.54, 0.24), Vector3(0, 1.48, 0.5)]), PackedFloat32Array([0.07, 0.02]), 6)
-		for sx in [-1.0, 1.0]:
-			var s: float = sx
-			body.add_blob(Vector3(0.24, 0.1, 0.04), Transform3D(Basis(Vector3.BACK, s * 0.5), Vector3(s * 0.36, 1.66, 0.0)), null, 0.0, 4, 8)
-			body.color = Color(0.98, 0.9, 0.3)
-			body.add_blob(Vector3(0.05, 0.05, 0.03), Transform3D(Basis(), Vector3(s * 0.1, 1.62, 0.26)), null, 0.0, 4, 6)
-			body.color = skin
-		var leg := MeshBuilder.new()
-		leg.color = skin.darkened(0.15)
-		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.09, 0.07]), 6)
-		leg.add_blob(Vector3(0.09, 0.06, 0.16), Transform3D(Basis(), Vector3(0, -0.74, 0.06)), null, 0.0, 4, 8)
-		var arm := MeshBuilder.new()
-		arm.color = skin
-		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.62, 0)]), PackedFloat32Array([0.07, 0.05]), 6)
-		arm.add_blob(Vector3(0.07, 0.08, 0.07), Transform3D(Basis(), Vector3(0, -0.66, 0)), null, 0.0, 4, 8)
-		_goblin_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
-
-	# Soldiers: leather armour, a steel helmet, a sword and a shield.
-	var leather := Color(0.5, 0.31, 0.16)
-	var steel := Color(0.72, 0.75, 0.8)
+		var look := _goblin_far(skin, hide)
+		look.merge(_goblin_near(skin, hide))
+		_goblin_looks.append(look)
 	for skin: Color in Art.SKIN_COLORS:
-		var body := MeshBuilder.new()
-		body.color = leather
-		body.add_lathe(PackedVector2Array([Vector2(0.0, 0.58), Vector2(0.31, 0.58), Vector2(0.23, 1.0),
-			Vector2(0.28, 1.3), Vector2(0.14, 1.44), Vector2(0.0, 1.46)]), 10)
-		body.color = leather.darkened(0.45)
-		body.add_lathe(PackedVector2Array([Vector2(0.235, 0.97), Vector2(0.255, 1.02), Vector2(0.235, 1.07)]), 10)
-		body.add_lathe(PackedVector2Array([Vector2(0.27, 1.25), Vector2(0.32, 1.31), Vector2(0.23, 1.39)]), 10)
-		body.color = skin
-		body.add_blob(Vector3(0.15, 0.17, 0.16), Transform3D(Basis(), Vector3(0, 1.58, 0)), null, 0.0, 6, 10)
-		body.color = steel
-		body.add_lathe(PackedVector2Array([Vector2(0.0, 1.63), Vector2(0.25, 1.61), Vector2(0.25, 1.65), Vector2(0.185, 1.69),
-			Vector2(0.14, 1.82), Vector2(0.0, 1.88)]), 10)
-		body.add_box(Vector3(0.05, 0.16, 0.04), 0.01, Transform3D(Basis(), Vector3(0, 1.58, 0.165)))
-		var leg := MeshBuilder.new()
-		leg.color = Color(0.24, 0.2, 0.17)
-		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.095, 0.08]), 6)
-		leg.color = leather.darkened(0.3)
-		leg.add_tube(PackedVector3Array([Vector3(0, -0.45, 0), Vector3(0, -0.72, 0)]), PackedFloat32Array([0.1, 0.09]), 6)
-		leg.add_blob(Vector3(0.09, 0.07, 0.15), Transform3D(Basis(), Vector3(0, -0.74, 0.05)), null, 0.0, 4, 8)
-		var arm := MeshBuilder.new()
-		arm.color = leather.lightened(0.1)
-		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.5, 0)]), PackedFloat32Array([0.085, 0.065]), 6)
-		arm.color = skin
-		arm.add_blob(Vector3(0.06, 0.07, 0.06), Transform3D(Basis(), Vector3(0, -0.55, 0)), null, 0.0, 4, 8)
-		_soldier_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
+		var look := _soldier_far(skin)
+		look.merge(_soldier_near(skin))
+		_soldier_looks.append(look)
+	_build_ogre()
 
 	# The sword points forwards out of the hand; the shield faces sideways.
 	var sword := MeshBuilder.new()
-	sword.color = steel.lightened(0.2)
-	sword.add_box(Vector3(0.04, 0.1, 0.7), 0.01, Transform3D(Basis(), Vector3(0, 0, 0.46)))
+	sword.color = STEEL.lightened(0.2)
+	sword.add_box(Vector3(0.04, 0.1, 0.7), 0.01, _at(0, 0, 0.46))
+	sword.color = INK
+	sword.add_box(Vector3(0.046, 0.016, 0.6), 0.004, _at(0, 0, 0.44))
 	sword.color = Color(0.78, 0.6, 0.2)
-	sword.add_box(Vector3(0.26, 0.05, 0.05), 0.01, Transform3D(Basis(), Vector3(0, 0, 0.1)))
+	sword.add_box(Vector3(0.26, 0.05, 0.05), 0.01, _at(0, 0, 0.1))
 	_gear["sword"] = sword.commit()
 	var shield := MeshBuilder.new()
 	var sideways := Transform3D(Basis(Vector3.BACK, -PI * 0.5), Vector3.ZERO)
 	shield.color = Color(0.62, 0.2, 0.16)
-	shield.add_lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.31, 0.0), Vector2(0.31, 0.04), Vector2(0.0, 0.08)]), 10, sideways)
-	shield.color = steel
+	shield.add_lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.31, 0.0), Vector2(0.31, 0.04), Vector2(0.0, 0.08)]), 12, sideways)
+	shield.color = STEEL
 	shield.add_lathe(PackedVector2Array([Vector2(0.1, 0.05), Vector2(0.07, 0.11), Vector2(0.0, 0.13)]), 8, sideways)
+	shield.add_lathe(PackedVector2Array([Vector2(0.29, -0.005), Vector2(0.325, 0.02), Vector2(0.29, 0.05)]), 12, sideways)
 	_gear["shield"] = shield.commit()
 
 	# Wizards: long robes and tall pointed hats in night colours.
@@ -315,21 +659,39 @@ static func _build_looks() -> void:
 	orb.add_blob(Vector3(0.09, 0.09, 0.09), Transform3D(Basis(), Vector3(0, 0.83, 0)), null, 0.0, 6, 8)
 	_gear["orb"] = orb.commit()
 
-	# What workers carry on their backs.
-	var logs := MeshBuilder.new()
-	logs.color = Art.WOOD
-	for z in [-0.07, 0.07]:
-		logs.add_tube(PackedVector3Array([Vector3(-0.3, 0, z), Vector3(0.3, 0, z)]), PackedFloat32Array([0.065, 0.065]), 6)
-	logs.add_tube(PackedVector3Array([Vector3(-0.3, 0.11, 0), Vector3(0.3, 0.11, 0)]), PackedFloat32Array([0.065, 0.065]), 6)
-	_gear["lumber"] = logs.commit()
-	var lump := MeshBuilder.new()
-	lump.color = Color(0.62, 0.64, 0.68)
-	lump.add_blob(Vector3(0.18, 0.15, 0.16), Transform3D.IDENTITY, null, 0.0, 5, 8)
-	_gear["stone"] = lump.commit()
-	var sack := MeshBuilder.new()
-	sack.color = Color(0.88, 0.74, 0.36)
-	sack.add_blob(Vector3(0.16, 0.2, 0.14), Transform3D.IDENTITY, null, 0.0, 5, 8)
-	_gear["food"] = sack.commit()
+	# Wheelbarrows, one for each kind of load. They are built in the
+	# villager's own space: the wheel out in front, the handles at the hands.
+	for kind: String in ["lumber", "stone", "food"]:
+		var mb := MeshBuilder.new()
+		mb.color = Art.WOOD
+		mb.add_box(Vector3(0.46, 0.22, 0.62), 0.02, _at(0, 0.44, 0.74), Vector2(1.22, 1.15))
+		mb.color = Art.WOOD_DARK
+		for sx in [-1.0, 1.0]:
+			var s: float = sx
+			mb.add_tube(PackedVector3Array([Vector3(s * 0.2, 0.4, 0.5), Vector3(s * 0.27, 0.84, 0.24)]), PackedFloat32Array([0.028, 0.024]), 5)
+			mb.add_tube(PackedVector3Array([Vector3(s * 0.18, 0.36, 0.52), Vector3(s * 0.18, 0.06, 0.5)]), PackedFloat32Array([0.025, 0.025]), 5)
+			mb.add_tube(PackedVector3Array([Vector3(s * 0.08, 0.36, 0.95), Vector3(s * 0.08, 0.17, 1.12)]), PackedFloat32Array([0.022, 0.022]), 5)
+		var axle := Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3(0, 0.17, 1.12))
+		mb.color = INK
+		mb.add_lathe(PackedVector2Array([Vector2(0.0, -0.03), Vector2(0.17, -0.03), Vector2(0.17, 0.03), Vector2(0.0, 0.03)]), 12, axle)
+		mb.color = Art.WOOD
+		mb.add_lathe(PackedVector2Array([Vector2(0.0, -0.045), Vector2(0.07, -0.045), Vector2(0.07, 0.045), Vector2(0.0, 0.045)]), 8, axle)
+		match kind:
+			"lumber":
+				for spot: Vector2 in [Vector2(-0.11, 0.6), Vector2(0.11, 0.6), Vector2(0.0, 0.74)]:
+					mb.color = Art.WOOD.lightened(0.12)
+					mb.add_tube(PackedVector3Array([Vector3(spot.x, spot.y, 0.42), Vector3(spot.x, spot.y, 1.06)]), PackedFloat32Array([0.085, 0.085]), 7)
+			"stone":
+				for spot: Vector3 in [Vector3(-0.1, 0.6, 0.62), Vector3(0.1, 0.61, 0.82), Vector3(0.02, 0.72, 0.7)]:
+					mb.color = Color(0.62, 0.64, 0.7).darkened(0.12 * spot.x + 0.05)
+					mb.add_blob(Vector3(0.15, 0.12, 0.15), Transform3D(Basis(), spot), null, 0.0, 5, 8)
+			_:
+				mb.color = Color(0.9, 0.82, 0.62)
+				mb.add_blob(Vector3(0.15, 0.17, 0.14), _at(-0.08, 0.64, 0.62), null, 0.0, 5, 8)
+				mb.add_blob(Vector3(0.14, 0.16, 0.14), _at(0.09, 0.63, 0.86), null, 0.0, 5, 8)
+				mb.color = Color(1.0, 0.8, 0.28)
+				mb.add_blob(Vector3(0.1, 0.1, 0.2), _at(0.02, 0.76, 0.74), null, 0.0, 5, 8)
+		_gear["barrow_" + kind] = mb.commit()
 
 
 func _process(delta: float) -> void:
@@ -353,6 +715,11 @@ func _process(delta: float) -> void:
 	if _think_timer <= 0.0:
 		_think_timer = 0.4
 		_think()
+		var cam := get_viewport().get_camera_3d()
+		if cam:
+			var d := cam.global_position.distance_to(global_position)
+			if _near != (d < (LOD_FAR if _near else LOD_NEAR)):
+				_apply_lod(not _near)
 	match state:
 		State.IDLE:
 			_timer -= delta
@@ -369,6 +736,8 @@ func _process(delta: float) -> void:
 			_update_fight(delta)
 		State.WALK:
 			var pace := 2.6 if raiding else (1.8 if goblin else 1.3)
+			if ogre:
+				pace = 2.1
 			if _move_towards(_target, pace * _speed_scale, delta):
 				state = State.IDLE
 				_timer = randf_range(4.0, 12.0) if goblin else randf_range(1.5, 5.0)
@@ -509,12 +878,12 @@ func _start_delivery() -> void:
 	_delivering = true
 	_working = false
 	_drop_pos = Game.village.drop_point(global_position)
+	# The load goes home in a wheelbarrow.
 	if _load == null:
 		_load = MeshInstance3D.new()
 		_load.material_override = Art.cloth()
-		_load.position = Vector3(0.0, 1.22, -0.27)
-		_body.add_child(_load)
-	_load.mesh = _gear[carry_kind]
+		add_child(_load)
+	_load.mesh = _gear["barrow_" + carry_kind]
 	_load.visible = true
 	if state == State.IDLE or state == State.WALK:
 		state = State.JOB
@@ -545,7 +914,8 @@ func become_soldier(post: Vector3) -> void:
 	max_hp = HEALTH * SOLDIER_HEALTH
 	hp = max_hp
 	damage = ATTACK_DAMAGE * SOLDIER_DAMAGE
-	_wear(_soldier_looks[randi() % _soldier_looks.size()])
+	_look = _soldier_looks[randi() % _soldier_looks.size()]
+	_apply_lod(_near)
 	_add_gear("sword", _arms[0], Vector3(0.0, -0.55, 0.0))
 	_add_gear("shield", _arms[1], Vector3(0.09, -0.36, 0.04))
 	Game.effects.spawn_dust(global_position, 0.5)
@@ -561,10 +931,8 @@ func _add_gear(kind: String, parent: Node3D, pos: Vector3, material: Material = 
 
 
 func _wear(look: Dictionary) -> void:
-	_torso.mesh = look.body
-	for k in 2:
-		_legs[k].mesh = look.leg
-		_arms[k].mesh = look.arm
+	_look = look
+	_apply_lod(_near)
 
 
 ## Trained at the Singing rocks: a robe, a tall hat and a glowing staff.
@@ -736,13 +1104,13 @@ func _update_fight(delta: float) -> void:
 	if wizard and _foe is Villager:
 		_cast_at(_foe as Villager, to, delta)
 		return
-	var reach := 1.2
+	var reach := 2.6 if ogre else 1.2
 	var building := _foe as Destructible
 	if building:
-		reach = building.footprint * 0.8 + 0.8
+		reach += building.footprint * 0.8 - 0.4
 	_in_reach = to.length() <= reach
 	if not _in_reach:
-		_move_towards(_foe.global_position, (3.0 if soldier else 2.6) * _speed_scale, delta)
+		_move_towards(_foe.global_position, (3.0 if soldier else (2.1 if ogre else 2.6)) * _speed_scale, delta)
 		return
 	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
 	if _attack_timer <= 0.0:
@@ -861,6 +1229,9 @@ func _animate(delta: float) -> void:
 		_legs[k].rotation.x = lerpf(_legs[k].rotation.x, stride * s, blend)
 		# Panicking villagers throw their arms in the air.
 		var arm := -2.7 + sin(_phase * 1.3 + k) * 0.35 if panicking else -stride * s * 0.8
+		if _delivering and state == State.JOB:
+			# Both hands on the wheelbarrow.
+			arm = -0.55
 		_arms[k].rotation.x = lerpf(_arms[k].rotation.x, arm, blend)
 		_arms[k].rotation.z = lerpf(_arms[k].rotation.z, s * (-0.35 if panicking else -0.08), blend)
 
@@ -927,6 +1298,10 @@ func flee(from: Vector3) -> void:
 func catch_fire() -> void:
 	if state == State.DEAD or state == State.BURNING or state == State.HELD or Game.fire.is_wet(global_position):
 		return
+	if ogre:
+		# Too big to go up in flames: it is only singed.
+		take_hit(HEALTH, null)
+		return
 	_working = false
 	state = State.BURNING
 	_timer = randf_range(3.0, 5.0)
@@ -952,6 +1327,11 @@ func douse() -> void:
 
 ## Thrown through the air by an explosion (charred) or a stomp (not).
 func fling(from: Vector3, force: float, charred := true) -> void:
+	if ogre and state != State.DEAD:
+		# A blast hurts an ogre badly but does not throw it.
+		take_hit(HEALTH * 5.0, null)
+		if state != State.DEAD:
+			return
 	var away := global_position - from
 	away.y = 0.0
 	away = away.normalized() if away.length_squared() > 0.001 else Vector3.FORWARD
@@ -963,6 +1343,9 @@ func fling(from: Vector3, force: float, charred := true) -> void:
 ## Flattened like a pancake under a giant foot.
 func squish() -> void:
 	if state == State.DEAD:
+		return
+	if ogre:
+		take_hit(HEALTH * 2.0, null)
 		return
 	_die(false)
 	_body.rotation = Vector3.ZERO
@@ -993,6 +1376,15 @@ func toss(velocity: Vector3) -> void:
 	_die(false)
 
 
+## The Blood Sacrifice spell.
+func sacrifice() -> void:
+	if state == State.DEAD:
+		return
+	Game.effects.spawn_blood(global_position)
+	_die(false)
+	_set_tint(Color(1.5, 0.2, 0.2))
+
+
 ## Swallowed whole.
 func eaten() -> void:
 	state = State.IDLE
@@ -1014,7 +1406,7 @@ func _die(charred: bool) -> void:
 	if state == State.DEAD:
 		return
 	state = State.DEAD
-	for group in ["villagers", "people", "goblins", "raiders", "soldiers", "wizards"]:
+	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards"]:
 		remove_from_group(group)
 	raiding = false
 	job = ""

@@ -17,6 +17,8 @@ const SPACING := 0.8
 const SOW_SECONDS := 0.2
 const REAP_SECONDS := 0.25
 const GROW_SECONDS := 50.0
+## Rained-on wheat grows this many times faster, while it is wet.
+const WET_GROWTH := 3.0
 ## Food from one square metre of ripe wheat at the default food rate.
 const FOOD_PER_M2 := 0.5
 const GREEN := Color(0.36, 0.62, 0.2)
@@ -33,6 +35,7 @@ var _crops: MultiMeshInstance3D
 var _spots := PackedVector3Array()
 var _turns := PackedFloat32Array()
 var _shown_scale := -1.0
+var _wet := 0.0
 
 
 static func cost_for(field_size: Vector2) -> Dictionary:
@@ -144,10 +147,16 @@ func add_work(seconds: float) -> float:
 	return food
 
 
+## Rain: the field stays wet, and grows faster, for `seconds`.
+func water(seconds: float) -> void:
+	_wet = maxf(_wet, seconds)
+
+
 func _process(delta: float) -> void:
+	_wet = maxf(0.0, _wet - delta)
 	if stage != Stage.GROWING:
 		return
-	progress += delta / GROW_SECONDS
+	progress += delta / GROW_SECONDS * (WET_GROWTH if _wet > 0.0 else 1.0)
 	if progress >= 1.0:
 		stage = Stage.RIPE
 		progress = 0.0
@@ -169,6 +178,9 @@ func _refresh() -> void:
 		Stage.GROWING:
 			grown = lerpf(0.15, 1.0, progress)
 			colour = GREEN.lerp(GOLD, smoothstep(0.55, 1.0, progress))
+			if _wet > 0.0:
+				# Lush and dark while it drinks.
+				colour = colour.lerp(Color(0.16, 0.6, 0.3), 0.35)
 		Stage.RIPE:
 			shown = int((1.0 - progress) * count)
 	_crops.multimesh.visible_instance_count = shown

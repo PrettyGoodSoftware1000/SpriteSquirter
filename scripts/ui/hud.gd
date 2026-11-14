@@ -39,7 +39,7 @@ const SETTING_SLIDERS := [
 	["goblin_rate", "Goblin spawn", 0.0, 20.0, 0.5, "/cave/min"],
 	["goblin_rate_growth", "Goblin spawn rise", 0.0, 10.0, 0.5, "/night"],
 ]
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find tortoise\nRight-click move tortoise   1-3 spells   B build   Esc cancel   ~ dev menu"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find tortoise\nRight-click move tortoise   1-4 spells   B build   Esc cancel   ~ dev menu"
 
 var _hint: Label
 var _resource_labels := {}
@@ -61,6 +61,9 @@ var _grass_button: Button
 var _brush: Label
 var _stats: Label
 var _dev_panel: PanelContainer
+var _root: Control
+var _blood := false
+var _drop_timer := 0.0
 
 
 func _ready() -> void:
@@ -68,6 +71,7 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	_root = root
 	root.theme = UiTheme.get_theme()
 	_build_player_panel(root)
 	_build_resource_bar(root)
@@ -224,7 +228,8 @@ func _build_spell_bar(root: Control) -> void:
 		b.toggle_mode = true
 		b.button_group = group
 		b.custom_minimum_size = Vector2(140, 58)
-		b.add_child(_stacked([_text("%d  %s" % [k + 1, spell.name], 16), ResourceIcon.cost_row({"magicko": spell.cost}, 15)]))
+		var price: Control = ResourceIcon.cost_row({"magicko": spell.cost}, 15) if spell.cost > 0 else _text("a villager", 15)
+		b.add_child(_stacked([_text("%d  %s" % [k + 1, spell.name], 16), price]))
 		b.pressed.connect(func() -> void: spell_selected.emit(k))
 		slot.add_child(b)
 		var bar := ProgressBar.new()
@@ -436,6 +441,8 @@ func set_prompt(text: String) -> void:
 func set_resources(village: PlayerVillage, clock: String) -> void:
 	for res in PlayerVillage.RESOURCES:
 		_resource_labels[res].text = str(village.amount(res))
+	if village.blood_active():
+		_resource_labels.magicko.text += " x2"
 	var pop := village.population()
 	var cap := village.housing()
 	_resource_labels.people.text = "%d/%d" % [pop, cap]
@@ -479,6 +486,42 @@ func _update_jobs(village: PlayerVillage) -> void:
 			for t in progress:
 				total += t
 			bar.value = total / progress.size()
+
+
+## Blood Sacrifice is running: the magicko counter turns red and bleeds.
+func set_blood(active: bool) -> void:
+	if active == _blood:
+		return
+	_blood = active
+	var label: Label = _resource_labels.magicko
+	label.add_theme_color_override("font_color", Color(1.0, 0.12, 0.12) if active else RESOURCE_COLORS.magicko)
+
+
+func _process(delta: float) -> void:
+	if not _blood:
+		return
+	_drop_timer -= delta
+	if _drop_timer > 0.0:
+		return
+	_drop_timer = randf_range(0.1, 0.28)
+	# A little drop of blood falls from the magicko counter and fades.
+	var label: Label = _resource_labels.magicko
+	var drop := Panel.new()
+	var shape := StyleBoxFlat.new()
+	shape.bg_color = Color(0.85, 0.04, 0.06)
+	shape.corner_radius_top_left = 1
+	shape.corner_radius_top_right = 1
+	shape.corner_radius_bottom_left = 4
+	shape.corner_radius_bottom_right = 4
+	drop.add_theme_stylebox_override("panel", shape)
+	drop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	drop.size = Vector2(5, 9) * randf_range(0.7, 1.2)
+	drop.position = label.global_position + Vector2(randf_range(0.0, 0.75) * label.size.x, label.size.y - 4.0)
+	_root.add_child(drop)
+	var fall := drop.create_tween().set_parallel(true)
+	fall.tween_property(drop, "position:y", drop.position.y + randf_range(34.0, 60.0), 0.75).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	fall.tween_property(drop, "modulate:a", 0.0, 0.75).set_ease(Tween.EASE_IN)
+	fall.chain().tween_callback(drop.queue_free)
 
 
 func set_spell(index: int) -> void:

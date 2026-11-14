@@ -79,8 +79,9 @@ func _ready() -> void:
 	raids = GoblinRaids.new()
 	add_child(raids)
 	raids.setup(day_cycle)
-	raids.raid_started.connect(func(count: int) -> void:
-		_announce("Midnight: %d goblins are marching on your village!" % count))
+	raids.raid_started.connect(func(count: int, ogres: int) -> void:
+		var extra := "" if ogres == 0 else (" and an ogre" if ogres == 1 else " and %d ogres" % ogres)
+		_announce("Midnight: %d goblins%s are marching on your village!" % [count, extra]))
 	raids.raid_ended.connect(func() -> void: _announce("Morning: the goblins go home."))
 
 	_ring = GroundRing.new()
@@ -389,9 +390,12 @@ func _cast(index: int) -> void:
 	if village.amount("magicko") < spell.cost:
 		hud.set_hint("Not enough magicko for %s: it costs %d." % [spell.name, spell.cost])
 		return
+	var target: Vector3 = _cursor_hit
+	if spell.id == "blood" and not village.sacrifice(target):
+		hud.set_hint("Blood Sacrifice needs one of your villagers within %d m of the click." % int(PlayerVillage.BLOOD_REACH))
+		return
 	village.give("magicko", -spell.cost)
 	_cooldowns[index] = spell.cooldown
-	var target: Vector3 = _cursor_hit
 	match spell.id:
 		"fireball":
 			var mouse := get_viewport().get_mouse_position()
@@ -627,6 +631,8 @@ func _update_ring() -> void:
 		_ring.draw(c, [RainCloud.RADIUS], Color(0.55, 0.75, 1.0))
 	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "roots":
 		_ring.draw(c, [RootPatch.RADIUS], Color(0.45, 1.0, 0.5))
+	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "blood":
+		_ring.draw(c, [PlayerVillage.BLOOD_REACH], Color(0.9, 0.1, 0.1))
 	elif mode == Mode.FIELD and _field_dragging:
 		_ring.draw_loop(CropField.rect_corners(_field_center, _field_size, _field_yaw),
 			Color(0.4, 1.0, 0.5) if _field_problem_text == "" else Color(1.0, 0.35, 0.3))
@@ -639,6 +645,7 @@ func _update_ring() -> void:
 func _update_ui() -> void:
 	hud.set_resources(village, day_cycle.clock_text() if not _choosing else "")
 	hud.update_spells(village.amount("magicko"), _cooldowns, not _choosing)
+	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():
 		hud.update_build_menu(village)
 	if mode == Mode.FIELD and _field_dragging:

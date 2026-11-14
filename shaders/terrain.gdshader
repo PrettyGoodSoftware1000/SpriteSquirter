@@ -53,8 +53,9 @@ void fragment() {
 	vec3 gn = texture(ground_normal, w_pos.xz * 0.21).xyz * 2.0 - 1.0;
 	vec3 dn = texture(dirt_normal, w_pos.xz * 0.3).xyz * 2.0 - 1.0;
 
-	vec3 grass = mix(grass_a, grass_b, nz.r);
-	grass = mix(grass, grass_dry, smoothstep(0.5, 0.8, nz.g) * 0.45);
+	// Flat patches of colour with hard edges, like areas filled in with ink.
+	vec3 grass = mix(grass_a, grass_b, 0.25 * nz.r + 0.75 * smoothstep(0.47, 0.5, nz.r));
+	grass = mix(grass, grass_dry, smoothstep(0.62, 0.65, nz.g) * 0.45);
 	grass *= mix(0.86, 1.0, smoothstep(0.6, 0.64, gd.r));
 	vec3 dirt = mix(dirt_a, dirt_b, smoothstep(0.45, 0.5, dd.g)) * mix(0.85, 1.0, smoothstep(0.6, 0.64, dd.r));
 	vec3 sand = sand_color * mix(0.9, 1.0, smoothstep(0.6, 0.64, dd.r));
@@ -86,7 +87,18 @@ void fragment() {
 	// Flat rock tones with ink lines in the cracks.
 	vec3 rock = mix(rock_a, rock_b, smoothstep(0.45, 0.5, rd.g)) * mix(0.2, 1.0, smoothstep(0.4, 0.5, rd.r));
 
+	// Pen strokes hatched across the open ground, and an ink line wherever
+	// one kind of ground meets another.
+	float hatch = texture(noise_tex, vec2(w_pos.x * 0.55 + w_pos.z * 0.2, w_pos.z * 0.06 - w_pos.x * 0.02)).g;
+	float strokes = smoothstep(0.69, 0.72, hatch) * smoothstep(0.38, 0.5, nz2.r);
+	albedo *= mix(1.0, 0.66, strokes);
+	float sand_line = 1.0 - smoothstep(1.0, 2.2, abs(sand_w - 0.5) / max(fwidth(sand_w), 0.0001));
+	float dirt_line = 1.0 - smoothstep(1.0, 2.2, abs(dirt_w - 0.5) / max(fwidth(dirt_w), 0.0001));
+	albedo *= mix(1.0, 0.5, max(sand_line, dirt_line));
+	float rock_line = 1.0 - smoothstep(1.2, 2.6, abs(rock_w - 0.5) / max(fwidth(rock_w), 0.0001));
+
 	albedo = mix(albedo, rock, rock_w);
+	albedo *= mix(1.0, 0.16, rock_line);
 	vec3 final_n = normalize(mix(ground_n, rock_n, rock_w));
 	albedo = mix(albedo, snow_color, snow_w);
 	final_n = normalize(mix(final_n, n, snow_w * 0.7));

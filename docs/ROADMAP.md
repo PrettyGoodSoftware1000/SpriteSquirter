@@ -46,6 +46,14 @@ stage.
 - Food upkeep and starvation; goblin caves spawn faster every night
 - Resource icons; UI scales with the window
 
+## Milestone 0.95: Comic look and ogres ✅
+- Halftone cel shading, darker coloured shadows, inked terrain, "Alpine" palette
+- Detailed close-up models for villagers, soldiers and goblins (two levels of detail)
+- Tortoise face: moving eyes, blinking, angry lids, an inked mouth that opens
+- Flame tongues drawn by a shader; wheelbarrows; roofs no longer cut by walls
+- Ogres join raids of 15 goblins
+- Blood Sacrifice spell; rain speeds up wheat
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)
@@ -69,8 +77,8 @@ stage.
 
 ## Milestone 3: Tower defense / conflict
 - [x] Goblin raids: every goblin leaves the cave at midnight and attacks the village
-- [x] Raids that grow night by night (caves spawn faster every night)
-- [ ] Goblin types
+- [x] Raids that grow night by night (caves spawn faster every night); ogres
+- [ ] More goblin types
 - [ ] Health bars and player orders for warriors and wizards
 - [ ] Defensive buildings that shoot
 - [x] Spell bar (fireball, rain, roots), magicko, cooldowns
@@ -84,7 +92,8 @@ stage.
 - [ ] More creature species (edit the shape list in `tools/bake_creature.py`)
 
 ## Process
-- Work on short-lived branches, open a PR, merge when the game still runs.
+- The project owner creates and names branches; ask before making a new one
+  (see CLAUDE.md). Merge into `main` when the game still runs.
 - Keep each script small with one job, and put tunables at the top.
 - GitHub Actions: export Windows/Linux/Web builds on every push
   (free for public repos). Optionally publish to itch.io with `butler`.

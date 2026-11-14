@@ -14,6 +14,18 @@ const SHADER_DIR := "res://shaders/"
 ## Nature palettes. Add a dictionary here to get a new button in the dev menu.
 const PALETTES := [
 	{
+		# Teal hills, red-brown trees and violet rock, after comic-style alpine art.
+		"name": "Alpine",
+		"grass_root": Color(0.08, 0.34, 0.30), "grass_tip": Color(0.46, 0.74, 0.36), "grass_dry": Color(0.84, 0.80, 0.34),
+		"leaf": Color(0.30, 0.66, 0.44), "leaf_dark": Color(0.08, 0.36, 0.38),
+		"pine": Color(0.12, 0.44, 0.42), "pine_dark": Color(0.05, 0.20, 0.32),
+		"accent": Color(0.86, 0.30, 0.20), "accent_dark": Color(0.50, 0.12, 0.18),
+		"bark": Color(0.48, 0.28, 0.24), "bark_dark": Color(0.25, 0.12, 0.18),
+		"rock": Color(0.60, 0.58, 0.72), "rock_dark": Color(0.34, 0.32, 0.54), "moss": Color(0.40, 0.68, 0.34),
+		"dirt": Color(0.64, 0.46, 0.34), "dirt_dark": Color(0.42, 0.27, 0.27), "sand": Color(0.88, 0.80, 0.56),
+		"water": Color(0.22, 0.80, 0.88), "water_deep": Color(0.08, 0.40, 0.74),
+	},
+	{
 		"name": "Meadow",
 		"grass_root": Color(0.10, 0.26, 0.07), "grass_tip": Color(0.44, 0.62, 0.15), "grass_dry": Color(0.66, 0.64, 0.22),
 		"leaf": Color(0.40, 0.66, 0.14), "leaf_dark": Color(0.14, 0.38, 0.10),
@@ -197,7 +209,7 @@ static func wood() -> ShaderMaterial:
 
 ## Cloth and skin for small characters, coloured by vertex colour.
 static func cloth() -> ShaderMaterial:
-	return surface("plaster", Color(1, 1, 1), Color(0.88, 0.88, 0.88), {"scale": 2.5, "ink": 0.2, "outline": 0.3})
+	return surface("plaster", Color(1, 1, 1), Color(0.88, 0.88, 0.88), {"scale": 2.5, "ink": 0.2, "outline": 0.42})
 
 
 ## Window panes. They light up when Art.set_window_glow() is raised at dusk.
@@ -350,9 +362,9 @@ static func particle(kind: String) -> ShaderMaterial:
 	match kind:
 		"flame":
 			m.set_shader_parameter("sprite_tex", tex("flame"))
-			m.set_shader_parameter("color_hot", Color(1.0, 0.86, 0.32))
-			m.set_shader_parameter("color_cool", Color(1.0, 0.27, 0.03))
-			m.set_shader_parameter("glow", 2.6)
+			m.set_shader_parameter("noise_tex", tex("noise"))
+			m.set_shader_parameter("flame", 1.0)
+			m.set_shader_parameter("glow", 2.4)
 		"ember":
 			m.set_shader_parameter("sprite_tex", tex("flame"))
 			m.set_shader_parameter("color_hot", Color(1.0, 0.8, 0.3))

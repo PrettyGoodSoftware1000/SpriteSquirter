@@ -58,6 +58,11 @@ const ARMY := {
 	"warrior": ["guard", WARRIORS_PER_GUARD, WARRIOR_SECONDS],
 	"wizard": ["wizard", WIZARDS_PER_ROCKS, WIZARD_SECONDS],
 }
+## Blood Sacrifice: how long the magicko boost lasts, how big it is, and
+## how near the click a villager must be.
+const BLOOD_SECONDS := 30.0
+const BLOOD_BOOST := 2.0
+const BLOOD_REACH := 9.0
 
 var founded := false
 var center := Vector3.ZERO
@@ -69,6 +74,8 @@ var birth_progress := 0.0
 var wanted := {"warrior": 0, "wizard": 0}
 ## Seconds with no food, and towards the next death from hunger.
 var hungry_for := 0.0
+## Magicko comes in BLOOD_BOOST times as fast until Game.now passes this.
+var blood_until := 0.0
 
 var _assign_timer := 0.0
 var _army_timer := 0.0
@@ -136,6 +143,27 @@ func housing() -> int:
 
 func amount(res: String) -> int:
 	return floori(resources.get(res, 0.0))
+
+
+func blood_active() -> bool:
+	return Game.now < blood_until
+
+
+## Blood Sacrifice: kills the villager of yours nearest to `pos` and doubles
+## the magicko income for BLOOD_SECONDS. False if nobody is near enough.
+func sacrifice(pos: Vector3) -> bool:
+	var victim: Villager = null
+	var best := BLOOD_REACH
+	for v in people():
+		var d := Vector2(v.global_position.x - pos.x, v.global_position.z - pos.z).length()
+		if d < best:
+			best = d
+			victim = v
+	if victim == null:
+		return false
+	victim.sacrifice()
+	blood_until = maxf(blood_until, Game.now) + BLOOD_SECONDS
+	return true
 
 
 func soldiers() -> int:
@@ -259,7 +287,8 @@ func _process(delta: float) -> void:
 	if not founded:
 		return
 	var grown := adults() - wizards()
-	give("magicko", (grown * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta)
+	var boost := BLOOD_BOOST if blood_active() else 1.0
+	give("magicko", (grown * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
 	_eat(delta)
 	if population() < housing() and amount("food") > 0:
 		birth_progress += delta

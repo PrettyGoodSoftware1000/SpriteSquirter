@@ -28,7 +28,11 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 
 | Piece | Where | Notes |
 |---|---|---|
-| Cel shading | `shaders/toon.gdshaderinc` | One light function shared by every lit shader. |
+| Cel shading | `shaders/toon.gdshaderinc` | One light function shared by every lit shader: sunlight on or off, halftone dots where they meet. Shadow colour and darkness come from `ambient_color` / `ambient_energy` in `Atmosphere.MOODS`. |
+| Terrain inking | `shaders/terrain.gdshader` | Flat patches of colour, hatched pen strokes, an ink line where grass meets rock, dirt or sand. |
+| Characters | `scripts/units/villager.gd` (`_villager_near`, `_goblin_near`, ...) | Two meshes per look: simple far away, detailed within `LOD_NEAR`. Small black shapes (`INK`) draw eyes, brows, mouths and seams. |
+| Tortoise face | `scripts/units/creature.gd` (`_update_face`, `_draw_mouth`) | Pupils, lids and the mouth line are separate pieces moved by code. |
+| Fire | `shaders/particle.gdshader` | Each particle is a flame tongue drawn by the shader, in hard bands of colour. |
 | Outlines | `shaders/outline.gdshader` | Second material pass: back faces pushed outwards, drawn black. |
 | Surfaces | `shaders/surface.gdshader`, `Art.surface()` / `Art.paint()` | Triplanar textures reduced to flat tones plus ink lines. Buildings are coloured per shape with `MeshBuilder.color`. |
 | Palettes | `Art.PALETTES`, `Art.set_palette()` | Add a dictionary to get a new button in the dev menu. |

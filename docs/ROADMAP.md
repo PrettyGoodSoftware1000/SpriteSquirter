@@ -37,6 +37,14 @@ stage.
 - Stone in boulder fields; Roots spell
 - The tortoise stomps, throws and eats goblins
 
+## Milestone 0.95: Comic look and ogres ✅
+- Halftone cel shading, darker coloured shadows, inked terrain, "Alpine" palette
+- Detailed close-up models for villagers, soldiers and goblins (two levels of detail)
+- Tortoise face: moving eyes, blinking, angry lids, an inked mouth that opens
+- Flame tongues drawn by a shader; wheelbarrows; roofs no longer cut by walls
+- Ogres join raids of 15 goblins; camps grow each night
+- Blood Sacrifice spell; rain speeds up wheat
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)
@@ -58,7 +66,8 @@ stage.
 
 ## Milestone 3: Tower defense / conflict
 - [x] Goblin raids: every goblin leaves the cave at midnight and attacks the village
-- [ ] Raids that grow night by night; goblin types
+- [x] Raids that grow night by night; ogres
+- [ ] More goblin types
 - [ ] Health bars and player orders for soldiers
 - [ ] Defensive buildings that shoot
 - [x] Spell bar (fireball, rain, roots), magicko, cooldowns

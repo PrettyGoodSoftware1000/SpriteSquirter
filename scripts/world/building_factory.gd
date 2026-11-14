@@ -153,7 +153,8 @@ static func _mini_house(b: Node3D, rng: RandomNumberGenerator, pos: Vector3, yaw
 	var mb := MeshBuilder.new()
 	mb.color = wall
 	mb.add_box(Vector3(size.x, size.y + sink, size.z), 0.14, Transform3D(Basis(), Vector3(0, (size.y - sink) * 0.5, 0)), Vector2(0.94, 0.94))
-	var part := _part(b, mb.commit(), Art.paint("planks"), pos, Vector3(rng.randf_range(-0.05, 0.05), yaw, rng.randf_range(-0.05, 0.05)))
+	var tilt := Vector3(rng.randf_range(-0.05, 0.05), yaw, rng.randf_range(-0.05, 0.05))
+	var part := _part(b, mb.commit(), Art.paint("planks"), pos, tilt)
 	var det := Details.new()
 	_timber_frame(det, rng, size.x * 0.97, size.y, size.z * 0.97)
 	if door:
@@ -170,8 +171,9 @@ static func _mini_house(b: Node3D, rng: RandomNumberGenerator, pos: Vector3, yaw
 	_gable_roof(mb, size.x, size.z, rh, 0.45, rng.randf_range(0.05, 0.25), rng.randf_range(0.15, 0.45))
 	mb.color = wall
 	_gable_walls(mb, size.x, size.z, rh, 0.45)
-	_part(b, mb.commit(), Art.paint("shingles"), pos + Vector3(0, size.y, 0), Vector3(0, yaw, 0))
-	return size.y + rh
+	# The roof leans exactly as the walls do, so they cannot cut through it.
+	_part(b, mb.commit(), Art.paint("shingles"), pos + Basis.from_euler(tilt) * Vector3(0, size.y, 0), tilt)
+	return size.y + rh + ROOF_LIFT
 
 
 static func _timber_frame(det: Details, rng: RandomNumberGenerator, w: float, h: float, d: float) -> void:
@@ -193,6 +195,11 @@ static func _timber_frame(det: Details, rng: RandomNumberGenerator, w: float, h:
 
 ## A solid gable roof with its ridge along X: curved slopes, a sagging ridge
 ## and upturned ends.
+## How far a gable roof sits above the top of its walls, so that wall tops
+## and beams never poke through the slope near the eaves.
+const ROOF_LIFT := 0.35
+
+
 static func _gable_roof(mb: MeshBuilder, w: float, d: float, h: float, overhang: float, sag: float, flare: float) -> void:
 	var half_len := w * 0.5 + overhang
 	var half_span := d * 0.5 + overhang
@@ -200,7 +207,7 @@ static func _gable_roof(mb: MeshBuilder, w: float, d: float, h: float, overhang:
 		var s: float = side
 		var top := func(u: float, v: float) -> Vector3:
 			var end := absf(u * 2.0 - 1.0)
-			var yy := -0.4 + (h + 0.4) * pow(v, 1.3) - sag * sin(u * PI) * v + flare * end * end * (0.35 + 0.65 * v)
+			var yy := ROOF_LIFT - 0.4 + (h + 0.4) * pow(v, 1.3) - sag * sin(u * PI) * v + flare * end * end * (0.35 + 0.65 * v)
 			return Vector3((u - 0.5) * 2.0 * half_len, yy, s * half_span * (1.0 - v))
 		var under := func(u: float, v: float) -> Vector3:
 			var p: Vector3 = top.call(u, v)
@@ -221,7 +228,7 @@ static func _gable_walls(mb: MeshBuilder, w: float, d: float, h: float, overhang
 		for k in 9:
 			var z := lerpf(-d * 0.5 + 0.1, d * 0.5 - 0.1, k / 8.0)
 			var v := 1.0 - absf(z) / half_span
-			pts.append(Vector3(x, -0.4 + (h + 0.4) * pow(v, 1.3) - 0.3, z))
+			pts.append(Vector3(x, ROOF_LIFT - 0.4 + (h + 0.4) * pow(v, 1.3) - 0.3, z))
 		pts.append(Vector3(x, -0.05, d * 0.5 - 0.1))
 		mb.add_fan(pts, Vector3(side, 0, 0))
 
@@ -303,8 +310,10 @@ static func _build_tall_house(b: Destructible, rng: RandomNumberGenerator) -> fl
 		det.window(_face(3, w, w, 0.0, fh * 0.55), 0.7, 1.0)
 		det.attach(part)
 		y += fh
-		twist += rng.randf_range(-0.16, 0.16)
-		lean += Vector3(rng.randf_range(-0.35, 0.35), 0, rng.randf_range(-0.35, 0.35))
+		if f < floors - 1:
+			# Each floor sits askew on the one below; the roof sits square on the top one.
+			twist += rng.randf_range(-0.16, 0.16)
+			lean += Vector3(rng.randf_range(-0.35, 0.35), 0, rng.randf_range(-0.35, 0.35))
 		w *= 1.05
 	var rh := rng.randf_range(3.2, 4.2)
 	mb = MeshBuilder.new()

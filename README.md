@@ -5,8 +5,8 @@ location on an island floating in the sky, and your tiny villagers gather
 lumber, stone and food, farm wheat, raise surreal buildings and have
 children. Every night at midnight the **goblins raid**: your villagers and
 soldiers fight them off, helped by a giant, gloomy tortoise that stomps,
-throws and eats goblins. You cast **fireballs**, **rain** and **roots**
-with magicko. Make your own islands in the **map editor**. The long-term plan is
+throws and eats goblins. You cast **fireballs**, **rain**, **roots** and
+a **blood sacrifice** with magicko. Make your own islands in the **map editor**. The long-term plan is
 to grow it into an RTS / tower-defense game (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 The art direction is **surreal and cel shaded**: flat bands of light, black
@@ -40,7 +40,8 @@ Large 384 m), your **saved maps**, and the **map editor**.
    nearest **Storehouse** (or to the middle of the village while you have
    none); it only counts once it arrives. Boulders come in small boulder
    fields dotted over the island. Trees and boulders run out, so the
-   workers move on.
+   workers move on. A worker with a full load wheels it home in a
+   wheelbarrow.
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
    building, and place its outline (**R** rotates it). The cost is paid up
    front and the villagers come and build it: every grown-up helps, and 10
@@ -59,7 +60,11 @@ Large 384 m), your **saved maps**, and the **map editor**.
 6. **Survive the night.** The night is half as long as the daylight. Halfway
    through it every goblin leaves its cave and marches on your village,
    swimming rivers on the way. They attack villagers first, then buildings,
-   and go home in the morning; each cave refills at the next nightfall.
+   and go home in the morning; each cave refills at the next nightfall and
+   grows by two goblins a night (11, 13, 15... up to 21). Once a raid has
+   15 goblins an **ogre** with a spiked club joins it, and another for
+   every 15 more: ten times a goblin's health, three times its damage, too
+   big to pick up or throw, and only singed by fire.
    A goblin has the same health, damage and attack speed as a grown-up
    villager. Grown-ups fight back, children run, and **soldiers** (leather
    armour, helmet, sword and shield; four times the health and twice the
@@ -68,12 +73,17 @@ Large 384 m), your **saved maps**, and the **map editor**.
    (it never stomps when a villager or one of your buildings would be
    caught), or it scoops up three to five of them and **throws** or
    **eats** them. During a raid it walks to the raiders unless you have
-   sent it somewhere.
+   sent it somewhere. With goblins about it moves 20% faster, scowls and
+   opens its mouth. Nobody runs away from the tortoise any more.
 7. **Cast spells** from the spell bar at the bottom: **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while, and **Roots** grows a glowing green patch
    of roots that holds everything in the circle (villagers, goblins and the
-   tortoise alike) where it stands for a minute. All cost magicko.
+   tortoise alike) where it stands for a minute. Rain also makes wheat
+   under the cloud grow three times as fast while it is wet. These cost
+   magicko. **Blood Sacrifice** costs none: click near one of your
+   villagers and they die, and magicko comes in twice as fast for 30
+   seconds (the counter turns red and drips while it lasts).
 
 The counter at the top shows lumber, stone, food, people (and housing),
 magicko, the day and the time to the next birth. Days turn from dawn to
@@ -89,7 +99,7 @@ daytime, evening and night.
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
-| 1–3 | Pick a spell (Fireball, Rain, Roots), then click to cast |
+| 1–4 | Pick a spell (Fireball, Rain, Roots, Blood Sacrifice), then click to cast |
 | F | Throw a fireball from the cursor (any time) |
 | B / Backspace | Open or close the build menu (1–8 pick a building or the field) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
@@ -162,8 +172,13 @@ the main menu opens it, so maps can be copied and shared.
   villagers, and leaves the ground too wet to burn for a while.
 - **Roots:** glowing green roots that snare everything in a 9 m circle for
   a minute.
-- **Cel shading:** banded light, ink outlines, a sun that never sits
-  overhead, weather moods and swappable nature palettes.
+- **Cel shading:** sunlight that is either on or off, with halftone dots
+  where light meets shadow, dark blue-violet shadows, ink outlines, pen
+  strokes hatched over the ground, a sun that never sits overhead, weather
+  moods and swappable nature palettes (the default is "Alpine").
+- **Detail up close:** villagers, soldiers and goblins switch to detailed
+  models with inked faces, hands, belts and trims when the camera is
+  within about 60 m, and back to simple ones when they are small.
 
 ## Project layout
 

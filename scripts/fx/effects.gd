@@ -30,11 +30,11 @@ func _ready() -> void:
 	_dust_mesh = _sprite_quad("dust", 2.0)
 	# Particle colours multiply the sprite: flames stay bright, then redden
 	# and fade; smoke and dust fade in and out.
-	_fire_gradient = _gradient([0.0, 0.45, 0.8, 1.0], [
+	# For flames only the alpha matters: the shader reads it as the tongue's age.
+	_fire_gradient = _gradient([0.0, 0.35, 1.0], [
 		Color(1.0, 1.0, 1.0, 1.0),
-		Color(1.0, 0.85, 0.7, 1.0),
-		Color(0.9, 0.45, 0.3, 0.7),
-		Color(0.5, 0.15, 0.1, 0.0)])
+		Color(1.0, 1.0, 1.0, 0.85),
+		Color(1.0, 1.0, 1.0, 0.0)])
 	_ember_gradient = _gradient([0.0, 0.7, 1.0], [
 		Color(1.0, 1.0, 1.0, 1.0),
 		Color(1.0, 0.7, 0.5, 1.0),
@@ -99,19 +99,24 @@ func release_fire_light() -> void:
 
 func make_flames(size: float) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
+	# Each particle is one tongue of flame (drawn by the particle shader):
+	# many small ones round the base, a few tall ones leaping out of the middle.
 	p.mesh = _flame_mesh
-	p.amount = clampi(int(18 * size), 8, 48)
-	p.lifetime = 0.8
+	p.amount = clampi(int(24 * size), 10, 60)
+	p.lifetime = 1.0
+	p.lifetime_randomness = 0.55
 	p.local_coords = false
-	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	p.emission_sphere_radius = 0.5 * size
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(0.6, 0.12, 0.6) * size
 	p.direction = Vector3.UP
-	p.spread = 12.0
-	p.gravity = Vector3(0.0, 2.5 * size, 0.0)
-	p.initial_velocity_min = 0.8 * size
-	p.initial_velocity_max = 2.0 * size
-	p.scale_amount_min = 0.9 * size
-	p.scale_amount_max = 1.7 * size
+	p.spread = 16.0
+	p.gravity = Vector3(0.0, 3.0 * size, 0.0)
+	p.initial_velocity_min = 0.3 * size
+	p.initial_velocity_max = 2.4 * size
+	p.angle_min = -9.0
+	p.angle_max = 9.0
+	p.scale_amount_min = 0.45 * size
+	p.scale_amount_max = 1.9 * size
 	p.scale_amount_curve = _grow_shrink
 	p.color_ramp = _fire_gradient
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -223,6 +228,9 @@ func _spawn_oneshot(p: CPUParticles3D, pos: Vector3, life: float) -> void:
 
 func spawn_explosion(pos: Vector3, radius: float) -> void:
 	var fireball := _burst(_flame_mesh, _fire_gradient, 70, 0.9, radius * 0.6, radius * 1.7, 1.6, 3.8, Vector3(0, 2, 0))
+	# Tongues of flame pointing every way.
+	fireball.angle_min = -180.0
+	fireball.angle_max = 180.0
 	fireball.damping_min = radius * 0.9
 	fireball.damping_max = radius * 1.5
 	_spawn_oneshot(fireball, pos + Vector3.UP, 2.0)
@@ -292,6 +300,15 @@ func _spawn_dirt(pos: Vector3, radius: float) -> void:
 	dirt.direction = Vector3.UP
 	dirt.spread = 45.0
 	_spawn_oneshot(dirt, pos, 3.0)
+
+
+## A spray of blood for the Blood Sacrifice spell.
+func spawn_blood(pos: Vector3) -> void:
+	var red := _gradient([0.0, 0.7, 1.0], [Color(0.75, 0.02, 0.04, 1.0), Color(0.6, 0.0, 0.03, 1.0), Color(0.4, 0.0, 0.02, 0.0)])
+	var drops := _burst(_dust_mesh, red, 28, 1.0, 2.5, 6.5, 0.1, 0.28, Vector3(0, -14.0, 0))
+	drops.spread = 60.0
+	drops.emission_sphere_radius = 0.2
+	_spawn_oneshot(drops, pos + Vector3.UP * 1.2, 1.6)
 
 
 func spawn_dust(pos: Vector3, size: float) -> void:

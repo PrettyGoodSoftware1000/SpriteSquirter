@@ -3,6 +3,7 @@ extends Node3D
 ## The rain spell: a dark cloud gathers over the target and pours for a few
 ## seconds. Everything under it is put out (ground fires, burning buildings,
 ## trees and villagers) and stays too wet to burn for a while afterwards.
+## Wheat fields under the cloud grow faster while they are wet.
 ## Call cast() right after adding it to the tree.
 
 const RADIUS := 14.0
@@ -68,6 +69,11 @@ func _process(delta: float) -> void:
 	if _soak_timer <= 0.0 and _time > 0.6:
 		_soak_timer = 0.3
 		Game.fire.soak(_center, RADIUS, DURATION - _time + WET_AFTER)
+		# Wheat under the cloud drinks it up and grows faster.
+		for node in get_tree().get_nodes_in_group("fields"):
+			var field := node as CropField
+			if field.contains(_center, RADIUS):
+				field.water(DURATION - _time + WET_AFTER)
 	if _time >= DURATION:
 		_end()
 

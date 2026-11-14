@@ -129,6 +129,35 @@ func _run() -> void:
 	play.raids.refill_caves()
 	_check(get_tree().get_nodes_in_group("goblins").size() >= GoblinRaids.CAMP_SIZE, "caves refill at nightfall")
 
+	# Camps grow; at 15 goblins an ogre joins the raid.
+	play.raids.night = 2
+	play.raids.refill_caves()
+	_check(get_tree().get_nodes_in_group("goblins").size() >= 15, "camps grow night by night (%d goblins)" % get_tree().get_nodes_in_group("goblins").size())
+	play.raids.start_raid()
+	var ogres := get_tree().get_nodes_in_group("ogres")
+	_check(ogres.size() == 1, "an ogre joins a raid of 15 goblins (%d)" % ogres.size())
+	if not ogres.is_empty():
+		var ogre := ogres[0] as Villager
+		_check(is_equal_approx(ogre.max_hp, Villager.HEALTH * 10.0) and is_equal_approx(ogre.damage, Villager.ATTACK_DAMAGE * 3.0),
+			"the ogre has 10x health and 3x damage")
+	await _wait(15.0)
+	play.raids.end_raid()
+
+	# Blood Sacrifice: a villager dies, magicko comes in twice as fast.
+	var people_before := village.population()
+	_check(village.sacrifice(village.people()[0].global_position), "blood sacrifice finds a villager")
+	_check(village.population() == people_before - 1 and village.blood_active(), "the sacrifice kills one villager and starts the boost")
+	await _wait(2.0)
+
+	# Rain makes wheat grow faster.
+	field.stage = CropField.Stage.GROWING
+	field.progress = 0.0
+	var wet := RainCloud.new()
+	game.world_root.add_child(wet)
+	wet.cast(field.global_position)
+	await _wait(10.0)
+	_check(field.stage != CropField.Stage.GROWING or field.progress > 10.0 / CropField.GROW_SECONDS * 1.8, "rain speeds up the wheat (%.2f)" % field.progress)
+
 	# Rain puts out fires.
 	var fire_at := village.center + Vector3(6, 0, 6)
 	game.fire.start_fire(fire_at)

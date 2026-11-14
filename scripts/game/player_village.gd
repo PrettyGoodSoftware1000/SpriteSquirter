@@ -12,8 +12,19 @@ extends Node
 ## first.
 ##
 ## A new child is born every `birth_seconds` while there is housing for it
-## (Homes add housing), and grows up in Villager.GROW_SECONDS. Each Town
-## guard turns workers into soldiers, one at a time.
+## (Homes add housing) and food in store, and grows up in Villager.GROW_SECONDS.
+##
+## Grown-ups are workers unless the player asks for warriors or wizards
+## (the jobs panel). Each Town guard trains one warrior at a time, taking
+## WARRIOR_SECONDS, up to WARRIORS_PER_GUARD; each Singing rocks trains one
+## wizard at a time, taking WIZARD_SECONDS, up to WIZARDS_PER_ROCKS.
+## Buildings train side by side. A warrior or wizard sent back to work
+## must train from the start to return.
+##
+## Everyone eats: villagers FOOD_PER_VILLAGER a minute, warriors
+## FOOD_PER_WARRIOR and wizards FOOD_PER_WIZARD. With no food, no children
+## are born; after STARVE_AFTER seconds without food, someone starves every
+## STARVE_EVERY seconds until there is food again.
 
 const RESOURCES := ["lumber", "stone", "food", "magicko"]
 const START_RESOURCES := {"lumber": 80.0, "stone": 50.0, "food": 40.0, "magicko": 30.0}
@@ -30,12 +41,23 @@ const MAX_PER_TARGET := 2
 const TREE_WOOD := 30.0
 const BUSH_WOOD := 10.0
 const ROCK_STONE := 35.0
-## Soldiers each Town guard trains, and the seconds between recruits.
-const SOLDIERS_PER_GUARD := 4
-const TRAIN_SECONDS := 12.0
-## The village keeps at least this many workers out of the army, and never
-## has more than one grown-up in three as a soldier.
-const MIN_WORKERS := 4
+const WARRIORS_PER_GUARD := 4
+const WARRIOR_SECONDS := 60.0
+const WIZARDS_PER_ROCKS := 2
+const WIZARD_SECONDS := 180.0
+## Magicko each wizard makes per minute.
+const WIZARD_MAGICKO := 5.0
+## Food eaten per minute.
+const FOOD_PER_VILLAGER := 1.0
+const FOOD_PER_WARRIOR := 3.0
+const FOOD_PER_WIZARD := 2.0
+const STARVE_AFTER := 60.0
+const STARVE_EVERY := 30.0
+## role -> [building role in the catalog, per building, seconds to train]
+const ARMY := {
+	"warrior": ["guard", WARRIORS_PER_GUARD, WARRIOR_SECONDS],
+	"wizard": ["wizard", WIZARDS_PER_ROCKS, WIZARD_SECONDS],
+}
 
 var founded := false
 var center := Vector3.ZERO
@@ -43,8 +65,16 @@ var resources := {}
 ## Seconds towards the next birth.
 var birth_progress := 0.0
 
+## How many warriors and wizards the player asked for.
+var wanted := {"warrior": 0, "wizard": 0}
+## Seconds with no food, and towards the next death from hunger.
+var hungry_for := 0.0
+
 var _assign_timer := 0.0
-var _train_timer := 0.0
+var _army_timer := 0.0
+var _starve_timer := 0.0
+## Training building -> {"v": the trainee, "t": seconds trained, "role": ...}
+var _training := {}
 
 
 func _ready() -> void:
@@ -112,6 +142,53 @@ func soldiers() -> int:
 	return get_tree().get_nodes_in_group("soldiers").size()
 
 
+func wizards() -> int:
+	return get_tree().get_nodes_in_group("wizards").size()
+
+
+func count(role: String) -> int:
+	return soldiers() if role == "warrior" else wizards()
+
+
+## The most warriors (or wizards) the village's buildings can train.
+func max_count(role: String) -> int:
+	return _training_buildings(role).size() * ARMY[role][1]
+
+
+## Grown-ups that are not warriors, wizards or in training.
+func workers() -> int:
+	var n := 0
+	for v in people():
+		if v.can_work() and v.job != "train":
+			n += 1
+	return n
+
+
+## Sets how many warriors or wizards the player wants (clamped to what the
+## buildings allow).
+func set_wanted(role: String, value: int) -> void:
+	wanted[role] = clampi(value, 0, max_count(role))
+	_army_timer = 0.0
+
+
+## Progress (0..1) of each recruit now training for `role`.
+func training_progress(role: String) -> Array[float]:
+	var out: Array[float] = []
+	for b in _training:
+		var entry: Dictionary = _training[b]
+		if entry.role == role:
+			out.append(clampf(entry.t / ARMY[role][2], 0.0, 1.0))
+	return out
+
+
+## Food eaten per minute by everyone in the village.
+func food_upkeep() -> float:
+	var total := 0.0
+	for v in people():
+		total += FOOD_PER_WARRIOR if v.soldier else (FOOD_PER_WIZARD if v.wizard else FOOD_PER_VILLAGER)
+	return total
+
+
 ## Where a worker standing at `from` takes what it gathered: the door of
 ## the nearest Storehouse, or the middle of the village if there is none.
 func drop_point(from: Vector3) -> Vector3:
@@ -173,7 +250,7 @@ func in_territory(p: Vector3) -> bool:
 
 ## Seconds until the next child, or -1 when the village is out of housing.
 func next_birth_in() -> float:
-	if population() >= housing():
+	if population() >= housing() or amount("food") <= 0:
 		return -1.0
 	return maxf(0.0, Game.settings.birth_seconds - birth_progress)
 
@@ -181,9 +258,10 @@ func next_birth_in() -> float:
 func _process(delta: float) -> void:
 	if not founded:
 		return
-	var grown := adults()
-	give("magicko", grown * Game.settings.magicko_rate / 60.0 * delta)
-	if population() < housing():
+	var grown := adults() - wizards()
+	give("magicko", (grown * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta)
+	_eat(delta)
+	if population() < housing() and amount("food") > 0:
 		birth_progress += delta
 		if birth_progress >= Game.settings.birth_seconds:
 			birth_progress = 0.0
@@ -192,9 +270,28 @@ func _process(delta: float) -> void:
 	if _assign_timer <= 0.0:
 		_assign_timer = 0.5
 		_assign_jobs()
-	_train_timer += delta
-	if _train_timer >= TRAIN_SECONDS:
-		_train_soldier()
+	_army_timer -= delta
+	if _army_timer <= 0.0:
+		_army_timer = 0.5
+		_manage_army()
+
+
+func _eat(delta: float) -> void:
+	give("food", -food_upkeep() / 60.0 * delta)
+	if resources.food > 0.0:
+		hungry_for = 0.0
+		_starve_timer = 0.0
+		return
+	resources.food = 0.0
+	hungry_for += delta
+	if hungry_for < STARVE_AFTER:
+		return
+	_starve_timer -= delta
+	if _starve_timer <= 0.0:
+		_starve_timer = STARVE_EVERY
+		var all := people()
+		if not all.is_empty():
+			all[randi() % all.size()].starve()
 
 
 func _spawn_child() -> void:
@@ -219,9 +316,20 @@ func work(v: Villager, delta: float) -> void:
 			var site := v.job_target as ConstructionSite
 			if site:
 				site.add_work(delta)
-		"enlist":
+		"train":
 			var post := v.job_target as Node3D
-			v.become_soldier(post.global_position if post else center)
+			var entry: Dictionary = _training.get(post, {})
+			if entry.is_empty() or entry.v != v:
+				v.clear_job()
+				return
+			entry.t += delta
+			if entry.t >= ARMY[entry.role][2]:
+				_training.erase(post)
+				if entry.role == "warrior":
+					v.guard = post
+					v.become_soldier(post.global_position)
+				else:
+					v.become_wizard(post.global_position)
 		"food":
 			v.gather("food", Game.settings.food_rate / 60.0 * delta)
 		"farm":
@@ -264,7 +372,7 @@ func _break_rock(rock: Node3D) -> void:
 func _assign_jobs() -> void:
 	var workers: Array[Villager] = []
 	for v in people():
-		if v.can_work() and v.job != "enlist":
+		if v.can_work() and v.job != "train":
 			workers.append(v)
 	if workers.is_empty():
 		return
@@ -328,36 +436,76 @@ func _spare_worker(workers: Array[Villager]) -> Villager:
 	return null
 
 
-## Sends one worker to a Town guard that still has room for soldiers.
-func _train_soldier() -> void:
-	# Look again in a second if nobody can be sent now.
-	_train_timer = TRAIN_SECONDS - 1.0
-	var workers: Array[Villager] = []
-	var enlisted := {}
-	for v in people():
-		if v.soldier or v.job == "enlist":
-			enlisted[v.guard] = enlisted.get(v.guard, 0) + 1
-		elif v.can_work() and v.job != "build":
-			workers.append(v)
-	# Keep the village working: a few workers at least, and no more than
-	# one grown-up in three under arms.
-	if workers.size() <= MIN_WORKERS or soldiers() * 3 >= adults():
-		return
+func _training_buildings(role: String) -> Array[Destructible]:
+	var out: Array[Destructible] = []
 	for node in get_tree().get_nodes_in_group("player_buildings"):
 		var b := node as Destructible
-		if BuildingCatalog.role(b.get_meta("kind", "")) != "guard" or enlisted.get(b, 0) >= SOLDIERS_PER_GUARD:
+		if BuildingCatalog.role(b.get_meta("kind", "")) == ARMY[role][0] and not b.destroyed:
+			out.append(b)
+	return out
+
+
+## Trains or stands down warriors and wizards until each matches what the
+## player asked for. Each training building takes one recruit at a time.
+func _manage_army() -> void:
+	# Forget recruits who died, were stood down or lost their building.
+	for b in _training.keys():
+		var entry: Dictionary = _training[b]
+		var v: Villager = entry.v
+		if not is_instance_valid(b) or (b as Destructible).destroyed or not is_instance_valid(v) \
+				or not v.is_alive() or v.job != "train" or v.job_target != b:
+			if is_instance_valid(v) and v.is_alive() and v.job == "train":
+				v.clear_job()
+			_training.erase(b)
+	for role: String in ARMY:
+		wanted[role] = mini(wanted[role], max_count(role))
+		var training := training_progress(role).size()
+		var have := count(role)
+		# Too many: stop training first, then send the rest back to work.
+		while have + training > wanted[role]:
+			if training > 0:
+				for b in _training.keys():
+					if _training[b].role == role:
+						(_training[b].v as Villager).clear_job()
+						_training.erase(b)
+						break
+				training -= 1
+			else:
+				for v in people():
+					if (v.soldier and role == "warrior") or (v.wizard and role == "wizard"):
+						v.become_worker()
+						break
+				have -= 1
+		if have + training >= wanted[role]:
 			continue
-		var recruit := workers[0]
-		for v in workers:
-			if v.global_position.distance_to(b.global_position) < recruit.global_position.distance_to(b.global_position):
-				recruit = v
-		var out := recruit.global_position - b.global_position
-		out.y = 0.0
-		out = out.normalized() if out.length_squared() > 0.01 else Vector3.RIGHT
-		recruit.guard = b
-		recruit.assign_job("enlist", b.global_position + out * (b.footprint + 0.8), b)
-		_train_timer = 0.0
-		return
+		# Too few: each free training building with room takes a recruit.
+		for b in _training_buildings(role):
+			if have + training >= wanted[role]:
+				break
+			if _training.has(b):
+				continue
+			var recruit := _nearest_worker(b.global_position)
+			if recruit == null:
+				break
+			var out := recruit.global_position - b.global_position
+			out.y = 0.0
+			out = out.normalized() if out.length_squared() > 0.01 else Vector3.RIGHT
+			recruit.assign_job("train", b.global_position + out * (b.footprint + 0.8), b)
+			_training[b] = {"v": recruit, "t": 0.0, "role": role}
+			training += 1
+
+
+func _nearest_worker(to: Vector3) -> Villager:
+	var best: Villager = null
+	var best_d := INF
+	for v in people():
+		if not v.can_work() or v.job == "train":
+			continue
+		var d := v.global_position.distance_to(to)
+		if d < best_d:
+			best_d = d
+			best = v
+	return best
 
 
 func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
@@ -368,7 +516,7 @@ func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
 				var d := randf_range(8.0, 22.0)
 				var p := center + Vector3(cos(a) * d, 0.0, sin(a) * d)
 				var t := Game.terrain
-				if t.is_inside(p.x, p.z) and t.get_height(p.x, p.z) > Terrain.WATER_LEVEL + 0.4 and t.get_normal(p.x, p.z).y > 0.85:
+				if t.is_dry(p.x, p.z) and t.get_normal(p.x, p.z).y > 0.85:
 					v.assign_job("food", p, self)
 					return true
 		"lumber", "stone":

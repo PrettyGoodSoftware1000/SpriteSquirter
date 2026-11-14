@@ -14,6 +14,8 @@ const DEFAULT_SETTINGS := {
 	"food_rate": 6.0, # per worker per minute
 	"birth_seconds": 45.0, # time between new villagers
 	"magicko_rate": 1.0, # per grown-up villager per minute
+	"goblin_rate": 1.0, # goblins per starting cave per minute, on day 1
+	"goblin_rate_growth": 0.5, # added to goblin_rate every night
 }
 
 ## Seed for the current world. Kept here so it survives a scene reload.
@@ -26,7 +28,9 @@ var grass_level: int = 0
 var dev_menu := false
 ## mode: "menu", "play" or "editor". map_path: a saved map, or "" for a
 ## world made from world_seed. size: map size for a world made from a seed.
-var session := {"mode": "menu", "map_path": "", "size": 256}
+## map_data: a map held in memory instead of a file (the editor uses it to
+## grow the map square without saving first).
+var session := {"mode": "menu", "map_path": "", "size": 384, "map_data": {}}
 var settings := DEFAULT_SETTINGS.duplicate()
 
 var world_root: Node3D
@@ -52,8 +56,8 @@ func _process(delta: float) -> void:
 
 ## Leaves the current world and builds a new one. With no map_path the
 ## world comes from a fresh random seed of the given size.
-func start(mode: String, map_path := "", size := 256, new_seed := true) -> void:
-	session = {"mode": mode, "map_path": map_path, "size": size}
+func start(mode: String, map_path := "", size := 384, new_seed := true, map_data := {}) -> void:
+	session = {"mode": mode, "map_path": map_path, "size": size, "map_data": map_data}
 	if new_seed:
 		world_seed = randi()
 	village = null

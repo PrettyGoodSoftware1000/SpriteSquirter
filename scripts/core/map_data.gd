@@ -5,6 +5,8 @@ extends RefCounted
 ## A map is one compressed file in user://maps/ holding a Dictionary:
 ##   version, name, size, seed       (the seed rebuilds the island outline)
 ##   heights, bare, rivers           (the terrain, from Terrain.export_map)
+##   island, water, sand, rock       (land mask, water surface, painted
+##                                    layers; version 2 and later)
 ##   starts: PackedVector2Array      (start locations the player picks from)
 ##   caves:  [{pos: Vector2, facing: float}]
 ##   trees:  [[x, z, rotation, seed]]  rocks: [[x, z, seed]]
@@ -12,7 +14,7 @@ extends RefCounted
 
 const DIR := "user://maps/"
 const EXT := ".map"
-const VERSION := 1
+const VERSION := 2
 const MAX_STARTS := 8
 
 
@@ -73,6 +75,34 @@ static func list_maps() -> Array[Dictionary]:
 	return maps
 
 
+## The map with `add` metres of empty sky added on every side. Things on
+## the map keep their world positions, because the map stays centred.
+static func expand(data: Dictionary, add: int) -> Dictionary:
+	var old_n: int = int(data.size) + 1
+	var size: int = int(data.size) + add * 2
+	var n := size + 1
+	var out := data.duplicate()
+	out.size = size
+	var layers := {"heights": Terrain.VOID_HEIGHT, "bare": 0.0, "water": Terrain.NO_WATER, "sand": 0.0, "rock": 0.0}
+	for key in layers:
+		var src: PackedFloat32Array = data[key]
+		var dst := PackedFloat32Array()
+		dst.resize(n * n)
+		dst.fill(layers[key])
+		for j in old_n:
+			for i in old_n:
+				dst[(j + add) * n + i + add] = src[j * old_n + i]
+		out[key] = dst
+	var land := PackedByteArray()
+	land.resize(n * n)
+	var old_land: PackedByteArray = data.island
+	for j in old_n:
+		for i in old_n:
+			land[(j + add) * n + i + add] = old_land[j * old_n + i]
+	out.island = land
+	return out
+
+
 static func size_name(size: int) -> String:
 	var k := Terrain.SIZES.find(size)
 	return "%s (%d m)" % [Terrain.SIZE_NAMES[k] if k >= 0 else "Custom", size]
@@ -82,9 +112,15 @@ static func _is_valid(d: Dictionary) -> bool:
 	for key in ["version", "name", "size", "seed", "heights", "bare", "rivers", "starts", "caves", "trees", "rocks"]:
 		if not d.has(key):
 			return false
-	if int(d.version) > VERSION or not int(d.size) in Terrain.SIZES:
+	if int(d.version) > VERSION or not Terrain.valid_size(int(d.size)):
 		return false
 	var n: int = int(d.size) + 1
-	return d.heights is PackedFloat32Array and (d.heights as PackedFloat32Array).size() == n * n \
-		and d.bare is PackedFloat32Array and (d.bare as PackedFloat32Array).size() == n * n \
-		and d.starts is PackedVector2Array
+	var layers := ["heights", "bare"]
+	if int(d.version) >= 2:
+		layers.append_array(["water", "sand", "rock"])
+		if not (d.get("island") is PackedByteArray and (d.island as PackedByteArray).size() == n * n):
+			return false
+	for key in layers:
+		if not (d.get(key) is PackedFloat32Array and (d[key] as PackedFloat32Array).size() == n * n):
+			return false
+	return d.starts is PackedVector2Array

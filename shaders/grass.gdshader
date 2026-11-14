@@ -2,7 +2,8 @@ shader_type spatial;
 render_mode cull_disabled, world_vertex_coords;
 // Instanced grass. Every terrain chunk reuses the same patch of blade
 // clumps; this shader lifts each clump onto the terrain using the height
-// texture and hides it on rock, sand, snow, bare dirt and burnt ground.
+// texture and hides it on rock, sand, snow, bare dirt, burnt ground, under
+// water and off the edge of the island.
 // Vertex colour R = 0 at the root, 1 at the tip of a blade.
 
 // Samples along one side of the terrain data textures (map size + 1).
@@ -10,6 +11,7 @@ uniform float world_n = 257.0;
 uniform sampler2D height_tex : filter_linear, repeat_disable;
 uniform sampler2D scorch_tex : filter_linear, repeat_disable;
 uniform sampler2D mask_tex : filter_linear, repeat_disable;
+uniform sampler2D ground_tex : filter_linear, repeat_disable;
 uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
 uniform vec3 color_root : source_color = vec3(0.1, 0.24, 0.06);
 uniform vec3 color_tip : source_color = vec3(0.4, 0.6, 0.15);
@@ -28,13 +30,20 @@ void vertex() {
 	float h = textureLod(height_tex, muv, 0.0).r;
 	float hx = textureLod(height_tex, muv + vec2(texel, 0.0), 0.0).r;
 	float hz = textureLod(height_tex, muv + vec2(0.0, texel), 0.0).r;
+	float hxm = textureLod(height_tex, muv - vec2(texel, 0.0), 0.0).r;
+	float hzm = textureLod(height_tex, muv - vec2(0.0, texel), 0.0).r;
+	vec3 ground = textureLod(ground_tex, muv, 0.0).rgb;
 	float slope = length(vec2(hx - h, hz - h));
 	float scorch = textureLod(scorch_tex, muv, 0.0).r;
 	float bare = textureLod(mask_tex, muv, 0.0).r;
 	vec3 nz = textureLod(noise_tex, origin.xz * 0.02, 0.0).rgb;
 	vec3 nz2 = textureLod(noise_tex, origin.xz * 0.11 + 0.3, 0.0).rgb;
 
-	float grow = smoothstep(0.35, 1.1, h + (nz2.r - 0.5) * 0.6);
+	// Nothing grows near the void, on sand or stone, or under water.
+	float grow = step(-20.0, min(min(h, hx), min(min(hz, hxm), hzm)));
+	grow *= 1.0 - smoothstep(0.3, 0.7, ground.r + (nz2.r - 0.5) * 0.5);
+	grow *= 1.0 - smoothstep(0.25, 0.6, ground.g + (nz2.g - 0.5) * 0.4);
+	grow *= 1.0 - step(0.02, ground.b);
 	grow *= 1.0 - smoothstep(0.2, 0.36, slope * 0.75 + (nz2.g - 0.5) * 0.12);
 	grow *= 1.0 - smoothstep(29.0, 32.5, h + (nz.b - 0.5) * 4.0);
 	grow *= 1.0 - smoothstep(0.25, 0.55, bare + (nz2.b - 0.5) * 0.4);

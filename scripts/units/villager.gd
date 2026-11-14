@@ -35,10 +35,19 @@ const AGGRO := 13.0
 const SOLDIER_AGGRO := 60.0
 ## Units of a resource a worker gathers before walking it to the storehouse.
 const CARRY_CAPACITY := 2.0
+## Speed while wading through roots.
+const SLOWED_SPEED := 0.25
+## Wizards throw a firebolt every FIREBOLT_SECONDS at goblins within
+## WIZARD_RANGE. That beats a soldier's sword (12 damage a second), and a
+## bolt may set the goblin alight.
+const WIZARD_RANGE := 16.0
+const FIREBOLT_SECONDS := 0.7
+const FIREBOLT_DAMAGE := 11.0
 
 static var _looks: Array[Dictionary] = []
 static var _goblin_looks: Array[Dictionary] = []
 static var _soldier_looks: Array[Dictionary] = []
+static var _wizard_looks: Array[Dictionary] = []
 ## Shared meshes: sword, shield and the loads workers carry.
 static var _gear := {}
 
@@ -54,16 +63,20 @@ var child := false
 var soldier := false
 ## The Town guard building this soldier belongs to.
 var guard: Node
+## Trained at the Singing rocks: robed, makes magicko and throws firebolts.
+var wizard := false
 ## A goblin on a night raid.
 var raiding := false
 
 var max_hp := HEALTH
 var hp := HEALTH
 var damage := ATTACK_DAMAGE
-## Cannot walk until Game.now passes this (the roots spell).
+## Cannot walk until Game.now passes this (the roots spell, on goblins).
 var snared_until := 0.0
+## Walks at SLOWED_SPEED until Game.now passes this (roots, on your own people).
+var slowed_until := 0.0
 
-## Current job: "", "lumber", "stone", "food", "farm", "build" or "enlist".
+## Current job: "", "lumber", "stone", "food", "farm", "build" or "train".
 var job := ""
 ## What the job works on: a tree, rock, field, construction site, Town
 ## guard or the village.
@@ -108,6 +121,8 @@ var _delivering := false
 var _drop_pos := Vector3.ZERO
 var _farm_timer := 0.0
 var _load: MeshInstance3D
+var _base_look := {}
+var _gear_nodes: Array[Node3D] = []
 
 
 func _ready() -> void:
@@ -125,6 +140,7 @@ func _build_body() -> void:
 		_build_looks()
 	var library := _goblin_looks if goblin else _looks
 	var look: Dictionary = library[randi() % library.size()]
+	_base_look = look
 	_body = Node3D.new()
 	add_child(_body)
 	_torso = _add_mesh(look.body, Vector3.ZERO)
@@ -264,6 +280,41 @@ static func _build_looks() -> void:
 	shield.add_lathe(PackedVector2Array([Vector2(0.1, 0.05), Vector2(0.07, 0.11), Vector2(0.0, 0.13)]), 8, sideways)
 	_gear["shield"] = shield.commit()
 
+	# Wizards: long robes and tall pointed hats in night colours.
+	var robes := [Color(0.24, 0.2, 0.55), Color(0.36, 0.16, 0.5), Color(0.14, 0.3, 0.52), Color(0.5, 0.14, 0.3)]
+	for k in robes.size():
+		var robe: Color = robes[k]
+		var skin: Color = Art.SKIN_COLORS[k % Art.SKIN_COLORS.size()]
+		var body := MeshBuilder.new()
+		body.color = robe
+		body.add_lathe(PackedVector2Array([Vector2(0.0, 0.06), Vector2(0.36, 0.06), Vector2(0.22, 0.9),
+			Vector2(0.25, 1.3), Vector2(0.13, 1.44), Vector2(0.0, 1.46)]), 12)
+		body.color = Color(0.95, 0.8, 0.3)
+		body.add_lathe(PackedVector2Array([Vector2(0.36, 0.06), Vector2(0.37, 0.12), Vector2(0.345, 0.16)]), 12)
+		body.color = skin
+		body.add_blob(Vector3(0.15, 0.17, 0.16), Transform3D(Basis(), Vector3(0, 1.58, 0)), null, 0.0, 6, 10)
+		body.color = Color(0.9, 0.9, 0.92)
+		body.add_blob(Vector3(0.11, 0.16, 0.07), Transform3D(Basis(), Vector3(0, 1.45, 0.12)), null, 0.0, 5, 8)
+		body.color = robe.darkened(0.2)
+		body.add_lathe(PackedVector2Array([Vector2(0.0, 1.66), Vector2(0.32, 1.65), Vector2(0.32, 1.68), Vector2(0.15, 1.73),
+			Vector2(0.07, 2.1), Vector2(0.0, 2.4)]), 12)
+		var leg := MeshBuilder.new()
+		leg.color = robe.darkened(0.35)
+		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.08, 0.07]), 6)
+		var arm := MeshBuilder.new()
+		arm.color = robe
+		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.5, 0)]), PackedFloat32Array([0.1, 0.09]), 6)
+		arm.color = skin
+		arm.add_blob(Vector3(0.06, 0.07, 0.06), Transform3D(Basis(), Vector3(0, -0.55, 0)), null, 0.0, 4, 8)
+		_wizard_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
+	var staff := MeshBuilder.new()
+	staff.color = Art.WOOD_DARK
+	staff.add_tube(PackedVector3Array([Vector3(0, -0.7, 0), Vector3(0, 0.75, 0)]), PackedFloat32Array([0.035, 0.03]), 6)
+	_gear["staff"] = staff.commit()
+	var orb := MeshBuilder.new()
+	orb.add_blob(Vector3(0.09, 0.09, 0.09), Transform3D(Basis(), Vector3(0, 0.83, 0)), null, 0.0, 6, 8)
+	_gear["orb"] = orb.commit()
+
 	# What workers carry on their backs.
 	var logs := MeshBuilder.new()
 	logs.color = Art.WOOD
@@ -345,7 +396,7 @@ func _process(delta: float) -> void:
 		return
 	var ground := Game.terrain.get_height(global_position.x, global_position.z)
 	# Goblins swim across rivers and lakes.
-	global_position.y = maxf(ground, Terrain.WATER_LEVEL - 0.95 * scale.y) if goblin else ground
+	global_position.y = maxf(ground, Game.terrain.water_level_at(global_position.x, global_position.z) - 0.95 * scale.y) if goblin else ground
 	_animate(delta)
 
 
@@ -363,7 +414,7 @@ func is_adult() -> bool:
 
 ## True if the villager could start a job right now.
 func can_work() -> bool:
-	return owned and not child and not soldier and state != State.DEAD and state != State.BURNING and state != State.HELD
+	return owned and not child and not soldier and not wizard and state != State.DEAD and state != State.BURNING and state != State.HELD
 
 
 ## Grown-up villagers of the player's village and goblins fight. Children
@@ -494,22 +545,72 @@ func become_soldier(post: Vector3) -> void:
 	max_hp = HEALTH * SOLDIER_HEALTH
 	hp = max_hp
 	damage = ATTACK_DAMAGE * SOLDIER_DAMAGE
-	var look: Dictionary = _soldier_looks[randi() % _soldier_looks.size()]
-	_torso.mesh = look.body
-	for k in 2:
-		_legs[k].mesh = look.leg
-		_arms[k].mesh = look.arm
+	_wear(_soldier_looks[randi() % _soldier_looks.size()])
 	_add_gear("sword", _arms[0], Vector3(0.0, -0.55, 0.0))
 	_add_gear("shield", _arms[1], Vector3(0.09, -0.36, 0.04))
 	Game.effects.spawn_dust(global_position, 0.5)
 
 
-func _add_gear(kind: String, parent: Node3D, pos: Vector3) -> void:
+func _add_gear(kind: String, parent: Node3D, pos: Vector3, material: Material = null) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _gear[kind]
-	mi.material_override = Art.cloth()
+	mi.material_override = material if material else Art.cloth()
 	mi.position = pos
 	parent.add_child(mi)
+	_gear_nodes.append(mi)
+
+
+func _wear(look: Dictionary) -> void:
+	_torso.mesh = look.body
+	for k in 2:
+		_legs[k].mesh = look.leg
+		_arms[k].mesh = look.arm
+
+
+## Trained at the Singing rocks: a robe, a tall hat and a glowing staff.
+func become_wizard(post: Vector3) -> void:
+	if wizard or soldier or goblin or state == State.DEAD:
+		return
+	_unload()
+	clear_job()
+	wizard = true
+	add_to_group("wizards")
+	home = post
+	home_radius = 10.0
+	_wear(_wizard_looks[randi() % _wizard_looks.size()])
+	_add_gear("staff", _arms[0], Vector3(0.0, -0.55, 0.08))
+	_add_gear("orb", _arms[0], Vector3(0.0, -0.55, 0.08), Art.glow(3.0))
+	Game.effects.spawn_dust(global_position, 0.5)
+
+
+## A soldier or wizard goes back to ordinary work (and would have to train
+## again to return).
+func become_worker() -> void:
+	if not (soldier or wizard) or state == State.DEAD:
+		return
+	for g in _gear_nodes:
+		g.queue_free()
+	_gear_nodes.clear()
+	soldier = false
+	wizard = false
+	guard = null
+	remove_from_group("soldiers")
+	remove_from_group("wizards")
+	max_hp = HEALTH
+	hp = minf(hp, max_hp)
+	damage = ATTACK_DAMAGE
+	_wear(_base_look)
+	_foe = null
+	if state == State.FIGHT:
+		state = State.IDLE
+	if is_instance_valid(Game.village):
+		home = Game.village.center
+		home_radius = PlayerVillage.HOME_RADIUS
+
+
+## Dies of hunger when the village has no food.
+func starve() -> void:
+	_die(false)
 
 
 # --- Fighting -------------------------------------------------------------------
@@ -556,7 +657,7 @@ func _think() -> void:
 		return
 	var fighter := can_fight()
 	var best: Villager = null
-	var best_d := SOLDIER_AGGRO if soldier else (AGGRO if fighter else 8.0)
+	var best_d := SOLDIER_AGGRO if soldier or wizard else (AGGRO if fighter else 8.0)
 	for node in raiders:
 		var g := node as Villager
 		var d := _flat_to(g.global_position)
@@ -632,6 +733,9 @@ func _update_fight(delta: float) -> void:
 		return
 	var to := _foe.global_position - global_position
 	to.y = 0.0
+	if wizard and _foe is Villager:
+		_cast_at(_foe as Villager, to, delta)
+		return
 	var reach := 1.2
 	var building := _foe as Destructible
 	if building:
@@ -648,6 +752,20 @@ func _update_fight(delta: float) -> void:
 			building.damage(damage * 0.5, global_position, 3.0)
 		else:
 			(_foe as Villager).take_hit(damage, self)
+
+
+## Wizards keep their distance and throw firebolts.
+func _cast_at(foe: Villager, to: Vector3, delta: float) -> void:
+	_in_reach = to.length() <= WIZARD_RANGE
+	if not _in_reach:
+		_move_towards(foe.global_position, 2.4 * _speed_scale, delta)
+		return
+	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
+	if _attack_timer <= 0.0:
+		_attack_timer = FIREBOLT_SECONDS
+		var bolt := Firebolt.new()
+		Game.world_root.add_child(bolt)
+		bolt.launch(global_position + Vector3.UP * 1.9 * scale.y + to.normalized() * 0.4, foe, self)
 
 
 ## Loses health to a blow. Fighters hit back.
@@ -672,7 +790,7 @@ func _choose_wander_target() -> void:
 		var a := randf() * TAU
 		var d := randf() * home_radius
 		var p := home + Vector3(cos(a) * d, 0.0, sin(a) * d)
-		if Game.terrain.get_height(p.x, p.z) > Terrain.WATER_LEVEL + 0.3:
+		if Game.terrain.is_dry(p.x, p.z):
 			_target = p
 			state = State.WALK
 			return
@@ -689,6 +807,9 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	if Game.now < snared_until:
 		# Held fast by roots.
 		return false
+	if Game.now < slowed_until:
+		# Wading through roots.
+		speed *= SLOWED_SPEED
 	var step := to / dist * minf(speed * delta, dist)
 	if not _open(global_position + step):
 		if not raiding:
@@ -715,7 +836,7 @@ func _open(p: Vector3) -> bool:
 	var terrain := Game.terrain
 	if not terrain.is_inside(p.x, p.z):
 		return false
-	return goblin or terrain.get_height(p.x, p.z) >= Terrain.WATER_LEVEL + 0.15
+	return goblin or terrain.water_depth(p.x, p.z) < 0.15
 
 
 func _animate(delta: float) -> void:
@@ -777,7 +898,10 @@ func _animate_fight(blend: float) -> void:
 		var s := 1.0 if k == 0 else -1.0
 		_legs[k].rotation.x = lerpf(_legs[k].rotation.x, 0.3 * s, blend)
 		var arm := -0.4 - 2.3 * wind
-		if k == 1:
+		if wizard:
+			# The staff is raised to throw; the other hand points.
+			arm = -2.4 + 0.6 * wind if k == 0 else -1.5
+		elif k == 1:
 			# Soldiers keep the shield up; everyone else flails with both arms.
 			arm = -1.1 if soldier else -0.4 - 2.3 * (1.0 - wind)
 		_arms[k].rotation.x = lerpf(_arms[k].rotation.x, arm, minf(1.0, blend * 2.0))
@@ -890,7 +1014,7 @@ func _die(charred: bool) -> void:
 	if state == State.DEAD:
 		return
 	state = State.DEAD
-	for group in ["villagers", "people", "goblins", "raiders", "soldiers"]:
+	for group in ["villagers", "people", "goblins", "raiders", "soldiers", "wizards"]:
 		remove_from_group(group)
 	raiding = false
 	job = ""

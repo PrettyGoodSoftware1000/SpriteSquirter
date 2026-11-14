@@ -1,11 +1,13 @@
 shader_type spatial;
 // Terrain surface: grass, dirt, sand, rock and snow blended by height,
-// slope and the masks painted by gameplay (bare ground and scorch marks).
+// slope and the painted layers: bare ground, scorch marks, sand, stone and
+// water depth (ground_tex: R sand, G stone, B water depth).
 
 // Samples along one side of the terrain data textures (map size + 1).
 uniform float world_n = 257.0;
 uniform sampler2D scorch_tex : filter_linear, repeat_disable;
 uniform sampler2D mask_tex : filter_linear, repeat_disable;
+uniform sampler2D ground_tex : filter_linear, repeat_disable;
 uniform sampler2D noise_tex : filter_linear_mipmap, repeat_enable;
 uniform sampler2D ground_detail : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D ground_normal : filter_linear_mipmap_anisotropic, repeat_enable;
@@ -33,13 +35,14 @@ void vertex() {
 
 void fragment() {
 	// Everything below this height is the void around the floating island.
-	if (w_pos.y < -14.0) {
+	if (w_pos.y < -40.0) {
 		discard;
 	}
 	vec3 n = normalize(w_nrm);
 	vec2 muv = (w_pos.xz + world_n * 0.5) / world_n;
 	float scorch = texture(scorch_tex, muv).r;
 	float bare = texture(mask_tex, muv).r;
+	vec3 ground = texture(ground_tex, muv).rgb;
 	vec3 nz = texture(noise_tex, w_pos.xz * 0.02).rgb;
 	vec3 nz2 = texture(noise_tex, w_pos.xz * 0.11 + 0.3).rgb;
 	float h = w_pos.y;
@@ -57,8 +60,9 @@ void fragment() {
 	vec3 sand = sand_color * mix(0.9, 1.0, smoothstep(0.6, 0.64, dd.r));
 
 	float dirt_w = smoothstep(0.25, 0.55, bare + (nz2.b - 0.5) * 0.4);
-	float sand_w = 1.0 - smoothstep(0.35, 1.1, h + (nz2.r - 0.5) * 0.6);
-	float rock_w = smoothstep(0.2, 0.36, slope + (nz2.g - 0.5) * 0.12);
+	float sand_w = smoothstep(0.3, 0.7, ground.r + (nz2.r - 0.5) * 0.5);
+	float rock_w = max(smoothstep(0.2, 0.36, slope + (nz2.g - 0.5) * 0.12),
+		smoothstep(0.25, 0.6, ground.g + (nz2.g - 0.5) * 0.4));
 	float snow_w = smoothstep(30.0, 34.0, h + (nz.b - 0.5) * 4.0) * (1.0 - smoothstep(0.4, 0.6, slope));
 
 	vec3 albedo = mix(grass, dirt, dirt_w);
@@ -87,8 +91,8 @@ void fragment() {
 	albedo = mix(albedo, snow_color, snow_w);
 	final_n = normalize(mix(final_n, n, snow_w * 0.7));
 
-	// Damp sand at the waterline, then burn marks on top of everything.
-	albedo *= mix(0.55, 1.0, smoothstep(-0.3, 0.45, h));
+	// Damp ground under and along the water, then burn marks on top.
+	albedo *= mix(1.0, 0.55, smoothstep(0.0, 0.5, ground.b * 4.0));
 	albedo = mix(albedo, vec3(0.03, 0.027, 0.025) * (0.6 + 0.8 * dd.r), clamp(scorch * 0.95, 0.0, 1.0));
 
 	ALBEDO = albedo;

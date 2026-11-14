@@ -1,14 +1,15 @@
 class_name RootPatch
 extends Node3D
-## The roots spell: glowing green roots burst out of the ground and hold
-## everything in the circle where it stands. Villagers, goblins and the
-## tortoise cannot walk (they can still fight what is in reach) until the
-## patch withers, DURATION seconds later. Anything that wanders in while
-## the roots are up is caught too.
+## The roots spell: glowing green roots burst out of the ground for
+## DURATION seconds. Goblins, strangers and the tortoise in the circle are
+## held where they stand (they can still fight what is in reach); the
+## player's own villagers, warriors and wizards are only slowed, to
+## Villager.SLOWED_SPEED. Anything that wanders in while the roots are up
+## is caught too.
 ## Call cast() right after adding it to the tree.
 
 const RADIUS := 9.0
-const DURATION := 60.0
+const DURATION := 20.0
 
 var _ends := 0.0
 var _check := 0.0
@@ -43,7 +44,11 @@ func _process(delta: float) -> void:
 func _snare() -> void:
 	for node in get_tree().get_nodes_in_group("villagers"):
 		var v := node as Villager
-		if _inside(v.global_position):
+		if not _inside(v.global_position):
+			continue
+		if v.owned:
+			v.slowed_until = maxf(v.slowed_until, _ends)
+		else:
 			v.snared_until = maxf(v.snared_until, _ends)
 	var creature := Game.creature
 	if is_instance_valid(creature) and _inside(creature.global_position):

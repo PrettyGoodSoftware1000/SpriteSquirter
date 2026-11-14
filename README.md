@@ -3,8 +3,8 @@
 A 3D village game built with [Godot 4](https://godotengine.org). Pick a start
 location on an island floating in the sky, and your tiny villagers gather
 lumber, stone and food, farm wheat, raise surreal buildings and have
-children. Every night at midnight the **goblins raid**: your villagers and
-soldiers fight them off, helped by a giant, gloomy tortoise that stomps,
+children. Every night at midnight the **goblins raid**: your villagers,
+warriors and wizards fight them off, helped by a giant, gloomy tortoise that stomps,
 throws and eats goblins. You cast **fireballs**, **rain** and **roots**
 with magicko. Make your own islands in the **map editor**. The long-term plan is
 to grow it into an RTS / tower-defense game (see [docs/ROADMAP.md](docs/ROADMAP.md)).
@@ -28,8 +28,10 @@ The first import takes a few seconds while Godot builds its cache in `.godot/`.
 
 ## Playing
 
-The main menu offers a **random island** (Small 192 m, Medium 256 m or
-Large 384 m), your **saved maps**, and the **map editor**.
+The main menu offers a **random island** (Small 192 m, Medium 384 m or
+Large 768 m square; the islands are about 170, 350 and 700 m across), your
+**saved maps**, and the **map editor**. Menus and text scale with the window
+size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
 
 1. **Choose a start location.** Numbered banners mark them; click one. On a
    random island each banner is an existing village, which becomes yours. On
@@ -46,22 +48,37 @@ Large 384 m), your **saved maps**, and the **map editor**.
    front and the villagers come and build it: every grown-up helps, and 10
    villagers take one minute. The building rises out of the ground as they work.
    The buildings have jobs: a **Home** (or Mushroom cottage) adds housing, a
-   **Storehouse** is where resources are carried, and a **Town guard**
-   turns up to four of your workers into soldiers, one every 12 seconds
-   (never more than one grown-up in three).
-4. **Farm.** Pick **Wheat field** in the build menu, then hold the left
+   **Storehouse** is where resources are carried, a **Town guard** trains
+   warriors and the **Singing rocks** train wizards.
+4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
+   in the **Jobs** row under the resource counter (the - and + buttons).
+   Each Town guard allows 4 warriors and trains one at a time, taking a
+   minute each; each Singing rocks allows 2 wizards and trains one at a
+   time, taking 3 minutes each. More buildings train side by side. A grey
+   bar fills over the count while recruits train. Lower the number and
+   warriors or wizards go straight back to work; they have to train again
+   to return. **Wizards** make 5 magicko a minute each and throw tiny
+   **firebolts** at goblins from a distance, faster than a warrior's sword,
+   sometimes setting them alight.
+5. **Feed everyone.** Each villager (children too) eats 1 food a minute,
+   each warrior 3 and each wizard 2; the counter shows how much is eaten.
+   With no food, no children are born, and after a minute without food
+   someone starves every 30 seconds until there is food again.
+6. **Farm.** Pick **Wheat field** in the build menu, then hold the left
    mouse button and drag out a square on the ground (1 lumber per 10 m²).
    Villagers sow it, the wheat grows and turns gold, and they reap it for
    much more food than foraging gives. Then they sow it again.
-5. **Grow.** A tiny villager is born every *birth timer* seconds while there
-   is housing (10, plus what your Homes add). Children grow up in a minute
+7. **Grow.** A tiny villager is born every *birth timer* seconds while there
+   is housing (10, plus what your Homes add) and food. Children grow up in a minute
    and then start working.
-6. **Survive the night.** The night is half as long as the daylight. Halfway
+8. **Survive the night.** The night is half as long as the daylight. Halfway
    through it every goblin leaves its cave and marches on your village,
    swimming rivers on the way. They attack villagers first, then buildings,
-   and go home in the morning; each cave refills at the next nightfall.
+   and go home in the morning. Every cave that was there when the game
+   began keeps spawning goblins (1 a minute at first, half a goblin more
+   per minute every night; both in the dev menu).
    A goblin has the same health, damage and attack speed as a grown-up
-   villager. Grown-ups fight back, children run, and **soldiers** (leather
+   villager. Grown-ups fight back, children run, and **warriors** (leather
    armour, helmet, sword and shield; four times the health and twice the
    damage) go looking for raiders. The **tortoise** helps by itself: goblins
    within its reach get a **stomp** that hurts everything round its foot
@@ -69,14 +86,18 @@ Large 384 m), your **saved maps**, and the **map editor**.
    caught), or it scoops up three to five of them and **throws** or
    **eats** them. During a raid it walks to the raiders unless you have
    sent it somewhere.
-7. **Cast spells** from the spell bar at the bottom: **Fireball** blows
+9. **Cast spells** from the spell bar at the bottom (keys 1 to 3, then click): **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while, and **Roots** grows a glowing green patch
-   of roots that holds everything in the circle (villagers, goblins and the
-   tortoise alike) where it stands for a minute. All cost magicko.
+   of roots for 20 seconds: goblins and the tortoise in it are held where
+   they stand, and your own people wade through at a quarter of their
+   speed. The cost in magicko (the blue droplet) is under each spell.
+   A fireball crater is bare stone; it only fills with water when it
+   breaks into water nearby.
 
-The counter at the top shows lumber, stone, food, people (and housing),
-magicko, the day and the time to the next birth. Days turn from dawn to
+The counter at the top shows lumber (log), stone, food (wheat), people
+(and housing), magicko (blue droplet), the day, the time to the next birth
+and how much food is eaten each minute. Days turn from dawn to
 daytime, evening and night.
 
 ## Controls
@@ -90,7 +111,6 @@ daytime, evening and night.
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
 | 1–3 | Pick a spell (Fireball, Rain, Roots), then click to cast |
-| F | Throw a fireball from the cursor (any time) |
 | B / Backspace | Open or close the build menu (1–8 pick a building or the field) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
 | R / Shift+R | Rotate the building outline |
@@ -106,11 +126,13 @@ daytime, evening and night.
 | Day length | Minutes for a whole day and night |
 | Lumber / Stone / Food rate | Units each worker gathers per minute |
 | Birth timer | Seconds between new villagers |
-| Magicko rate | Magicko each grown-up adds per minute |
+| Magicko rate | Magicko each grown-up worker adds per minute (wizards make 5) |
+| Goblin spawn | Goblins each starting cave spawns per minute on the first day |
+| Goblin spawn rise | How much faster the caves spawn after every night |
 | Give 100 of everything | For testing |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; `[` and `]` change the brush size |
 | New random world (N) | Generate a brand-new island of the same size |
-| Weather (L) | Meadow day, golden hour, misty dawn, night (until the next part of the day) |
+| Weather (L) | Meadow day, golden hour, dawn, night (until the next part of the day) |
 | Nature palette (P) | Recolour grass, trees, rocks and water instantly |
 | Grass detail (G) | High / Medium / Low / Off, for slower machines |
 
@@ -127,11 +149,21 @@ game, villagers build everything.
 | Tool (key) | Action |
 |---|---|
 | Raise, Lower, Flatten, Smooth (1–4) | Sculpt the terrain; `[` and `]` change the brush size |
-| Start location (5) | Click to place a numbered start banner (1 to 8 per map) |
-| Goblin cave (6) | Click to place a cave; R / Shift+R turn it first. Goblins move in when the game starts |
-| Trees (7) | Hold to plant trees inside the brush |
-| Rocks (8) | Click or hold to place rocks |
-| Erase (9) | Hold to remove trees, rocks, start locations and caves inside the brush |
+| Land (5) | Hold over the sky beside the island to grow new land |
+| Sand (6) | Paint sand |
+| Grass (7) | Paint grass; clears sand, stone and dirt, and fills in water |
+| Water (8) | Flood the ground at the height where you clicked; the ground is flattened under it with a bank round it, so ponds can sit up on hills |
+| Start location (9) | Click to place a numbered start banner (1 to 8 per map) |
+| Goblin cave (0) | Click to place a cave; R / Shift+R turn it first. Goblins move in when the game starts |
+| Trees | Hold to plant trees inside the brush |
+| Rocks | Click or hold to place rocks |
+| Erase | Hold to remove trees, rocks, start locations and caves inside the brush |
+
+Water flows: lower the ground next to a river or lake and the water runs
+in, and wherever water reaches the edge of the island it pours over as a
+waterfall. When the land brush reaches the edge of the map square, the
+editor asks whether to make the map bigger (64 m more on every side, up to
+1024 m); nothing on the map moves.
 
 Name the map and press **Save** (or Ctrl+S); a map needs at least one start
 location. **Save and play** starts a game on it straight away. Maps are
@@ -160,8 +192,8 @@ the main menu opens it, so maps can be copied and shared.
   spread, char buildings and eventually collapse them.
 - **Rain:** a storm cloud that puts out fires, burning buildings and burning
   villagers, and leaves the ground too wet to burn for a while.
-- **Roots:** glowing green roots that snare everything in a 9 m circle for
-  a minute.
+- **Roots:** glowing green roots in a 9 m circle for 20 seconds: goblins
+  and the tortoise are held, your own people slowed.
 - **Cel shading:** banded light, ink outlines, a sun that never sits
   overhead, weather moods and swappable nature palettes.
 
@@ -181,14 +213,16 @@ scripts/
   core/mesh_builder.gd     Builds rounded meshes in code (lathes, tubes, blobs...)
   core/map_data.gd         Saving, loading and listing map files
   game/play_mode.gd        The game: start choice, spells, building placement, dev tools
-  game/player_village.gd   Resources, villager jobs, carrying, births, housing, soldiers
+  game/player_village.gd   Resources, villager jobs, carrying, births, housing, food,
+                           training warriors and wizards
   game/construction_site.gd  A building the villagers are putting up
   game/building_catalog.gd   Build menu: names, costs and what each building is for
   game/crop_field.gd       A wheat field: sowing, growing, reaping
-  game/goblin_raids.gd     The midnight raid and refilling the caves
+  game/goblin_raids.gd     Goblins spawning at the caves, and the midnight raid
   game/spell_book.gd       Spells: costs and cooldowns
   editor/editor_mode.gd    The map editor's tools and saving
-  world/terrain.gd         Island heightmap (any map size), rivers, waterfalls, collision, sculpting
+  world/terrain.gd         Island heightmap (any map size), land mask and rock skirt, water
+                           layer that flows and pours off the edge, paint layers, sculpting
   world/grass.gd           Instanced grass with distance-based detail
   world/atmosphere.gd      Sun, sky, haze and the weather moods
   world/building_factory.gd  The surreal buildings, goblin hut and cave
@@ -200,10 +234,11 @@ scripts/
   world/start_marker.gd    Numbered start-location banners
   world/ground_ring.gd     Circles drawn on the ground (brushes, outlines)
   units/creature.gd        The tortoise: locomotion, skeleton posing, IK, stomping and grabbing goblins
-  units/villager.gd        Villager, soldier and goblin looks, jobs, fighting, state machine
+  units/villager.gd        Villager, warrior, wizard and goblin looks, jobs, fighting, state machine
   spells/fireball.gd       Projectile
   spells/rain.gd           The rain cloud
   spells/roots.gd          The patch of snaring roots
+  spells/firebolt.gd       A wizard's firebolt
   spells/explosion.gd      Blast gameplay: damage, craters, flinging, fires
   fx/effects.gd            Particles, flashes, dust, debris bodies
   fx/fire_emitter.gd       A single flickering fire
@@ -212,6 +247,7 @@ scripts/
   ui/editor_hud.gd         The map editor's panel
   ui/main_menu.gd          The title menu
   ui/ui_theme.gd           Shared panel style
+  ui/resource_icon.gd      Vector icons for lumber, stone, food, magicko and people
 ```
 
 ### Regenerating assets

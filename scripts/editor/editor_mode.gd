@@ -1,20 +1,27 @@
 class_name EditorMode
 extends Node3D
-## The map editor. Shape the island, place start locations and goblin
-## caves, plant or clear trees and rocks, then save the map for play.
+## The map editor. Shape the island (sculpt it, grow new land, paint sand,
+## grass and water), place start locations and goblin caves, plant or clear
+## trees and rocks, then save the map for play.
 ## Maps never get buildings: villagers build those during the game.
 ##
 ## A new map starts from a random island of the chosen size without
 ## villages; a saved map is loaded as it was left.
 
-enum Tool { RAISE, LOWER, FLATTEN, SMOOTH, START, CAVE, TREES, ROCKS, ERASE }
+enum Tool { RAISE, LOWER, FLATTEN, SMOOTH, LAND, SAND, GRASS, WATER, START, CAVE, TREES, ROCKS, ERASE }
 
-const TOOL_NAMES := ["Raise", "Lower", "Flatten", "Smooth", "Start location", "Goblin cave", "Trees", "Rocks", "Erase"]
+## Keys 1-9 and 0 pick the first ten tools.
+const TOOL_NAMES := ["Raise", "Lower", "Flatten", "Smooth", "Land", "Sand", "Grass", "Water",
+	"Start location", "Goblin cave", "Trees", "Rocks", "Erase"]
 const TOOL_HINTS := [
 	"Hold left mouse to raise the ground.",
-	"Hold left mouse to dig the ground down.",
+	"Hold left mouse to dig the ground down. Water next to it flows in.",
 	"Hold left mouse to flatten to the height where you first clicked.",
 	"Hold left mouse to smooth bumps.",
+	"Hold left mouse over the sky by the island to grow new land, at the height where you started (2.4 m when you start in the sky). At the edge of the map you are asked about making the map bigger.",
+	"Hold left mouse to paint sand.",
+	"Hold left mouse to paint grass. It clears sand, stone and dirt, and fills in water.",
+	"Hold left mouse to flood the ground with water at the height where you first clicked. The ground is flattened under it, with a bank round it.",
 	"Click to place a start location (up to 8). Players pick one when the game begins.",
 	"Click to place a goblin cave. R / Shift+R turn it. Goblins live there.",
 	"Hold left mouse to plant trees inside the brush. Trees give lumber.",
@@ -25,6 +32,8 @@ const BRUSH_MIN := 3.0
 const BRUSH_MAX := 30.0
 const START_SPACING := 14.0
 const CAVE_SPACING := 30.0
+## Metres of sky added on each side when the map square grows.
+const GROW_BY := 64
 
 var tool: Tool = Tool.START
 var brush_radius := 8.0
@@ -37,6 +46,9 @@ var _cave_facing := 0.0
 var _cursor_hit: Variant = null
 var _painting := false
 var _flatten_height := 0.0
+var _water_level := 0.0
+var _land_height := 2.4
+var _asked_edge := false
 var _paint_timer := 0.0
 var _ring: GroundRing
 var _cave_ghost: Node3D
@@ -73,6 +85,9 @@ func _ready() -> void:
 	hud.name_changed.connect(func(text: String) -> void:
 		_map_name = text
 		_confirm = "")
+	hud.expand_requested.connect(_expand)
+	# A map grown in memory (see _expand) has not been saved yet.
+	_dirty = _info.get("unsaved", false)
 	hud.set_map(_map_name, Terrain.SIZE)
 	hud.set_brush(brush_radius)
 	Game.terrain.changed.connect(func(_c: Vector3, _r: float) -> void: _dirty = true)
@@ -82,7 +97,10 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	_cursor_hit = Game.pick_ground(get_viewport().get_mouse_position())
+	var mouse := get_viewport().get_mouse_position()
+	_cursor_hit = Game.pick_ground(mouse)
+	if tool == Tool.LAND and (_cursor_hit == null or not Game.terrain._land((_cursor_hit as Vector3).x, (_cursor_hit as Vector3).z)):
+		_cursor_hit = _sky_hit(mouse, _land_height)
 	_painting = _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	if _painting and _cursor_hit != null:
 		_paint(_cursor_hit, delta)
@@ -93,7 +111,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key and key.pressed and not key.echo:
 		var number := key.physical_keycode - KEY_1
-		if number >= 0 and number < Tool.size():
+		if key.physical_keycode == KEY_0:
+			number = 9
+		if number >= 0 and number < 10:
 			_set_tool(number as Tool)
 			return
 		match key.physical_keycode:
@@ -146,8 +166,15 @@ func _on_click(p: Vector3) -> void:
 			_painting = true
 			_flatten_height = p.y
 			_paint_timer = 0.0
-			if tool == Tool.ROCKS:
-				_plant_rock(p)
+			match tool:
+				Tool.ROCKS:
+					_plant_rock(p)
+				Tool.WATER:
+					var level := Game.terrain.water_level_at(p.x, p.z)
+					_water_level = level if level != Terrain.NO_WATER else p.y
+				Tool.LAND:
+					_asked_edge = false
+					_land_height = p.y if Game.terrain._land(p.x, p.z) else 2.4
 
 
 # --- Tools --------------------------------------------------------------------
@@ -156,6 +183,22 @@ func _paint(p: Vector3, delta: float) -> void:
 	match tool:
 		Tool.RAISE, Tool.LOWER, Tool.FLATTEN, Tool.SMOOTH:
 			Game.terrain.sculpt(int(tool) as Terrain.Brush, p, brush_radius, delta, _flatten_height)
+		Tool.SAND:
+			Game.terrain.paint_sand(p, brush_radius, 3.0 * delta)
+			_changed()
+		Tool.GRASS:
+			Game.terrain.paint_grass(p, brush_radius, 3.0 * delta)
+			_changed()
+		Tool.WATER:
+			Game.terrain.paint_water(p, brush_radius, _water_level)
+		Tool.LAND:
+			var limit := Terrain.HALF - Terrain.EDGE_MARGIN
+			var hit_edge := absf(p.x) > limit or absf(p.z) > limit
+			hit_edge = Game.terrain.paint_land(p, brush_radius, _land_height) or hit_edge
+			if hit_edge and not _asked_edge:
+				_asked_edge = true
+				_painting = false
+				_ask_expand()
 		Tool.TREES:
 			_paint_timer -= delta
 			while _paint_timer <= 0.0:
@@ -168,6 +211,33 @@ func _paint(p: Vector3, delta: float) -> void:
 				_plant_rock(p)
 		Tool.ERASE:
 			_erase(p)
+
+
+## Where the mouse ray meets the flat plane at `height`, for growing land
+## out over the sky.
+func _sky_hit(mouse: Vector2, height: float) -> Variant:
+	var cam := Game.camera_rig.camera
+	var from := cam.project_ray_origin(mouse)
+	var dir := cam.project_ray_normal(mouse)
+	if dir.y > -0.01:
+		return null
+	return from + dir * ((height - from.y) / dir.y)
+
+
+func _ask_expand() -> void:
+	var bigger := Terrain.SIZE + GROW_BY * 2
+	if bigger > Terrain.MAX_SIZE:
+		hud.set_status("The island has reached the edge of the map, and the map is already as big as it can be (%d m)." % Terrain.SIZE)
+		return
+	hud.ask_expand(Terrain.SIZE, bigger)
+
+
+## Rebuilds the editor with the map square grown on every side.
+func _expand() -> void:
+	var data := map_data()
+	data["version"] = MapData.VERSION
+	var bigger := MapData.expand(data, GROW_BY)
+	Game.start("editor", _loaded_path, int(bigger.size), false, bigger)
 
 
 func _place_start(p: Vector3) -> void:
@@ -208,7 +278,7 @@ func _place_cave(p: Vector3) -> void:
 
 func _spot_problem(p: Vector3) -> String:
 	var t := Game.terrain
-	if not t.is_inside(p.x, p.z) or t.get_height(p.x, p.z) < Terrain.WATER_LEVEL + 0.4:
+	if not t.is_dry(p.x, p.z):
 		return "That needs dry land on the island."
 	return ""
 
@@ -301,6 +371,14 @@ func _update_preview() -> void:
 			_ring.clear()
 		Tool.ERASE:
 			_ring.draw(c, [brush_radius], Color(1.0, 0.4, 0.35))
+		Tool.LAND:
+			_ring.draw(c, [brush_radius], Color(0.6, 1.0, 0.5), c.y + 0.3)
+		Tool.WATER:
+			_ring.draw(c, [brush_radius, brush_radius + 2.5], Color(0.45, 0.75, 1.0))
+		Tool.SAND:
+			_ring.draw(c, [brush_radius], Color(1.0, 0.85, 0.5))
+		Tool.GRASS:
+			_ring.draw(c, [brush_radius], Color(0.5, 1.0, 0.4))
 		Tool.ROCKS:
 			_ring.draw(c, [1.5], Color(0.85, 0.85, 0.9))
 		_:
@@ -330,7 +408,7 @@ func map_data() -> Dictionary:
 	var rocks: Array = []
 	for r in get_tree().get_nodes_in_group("rocks"):
 		var n := r as Node3D
-		rocks.append([n.global_position.x, n.global_position.z, n.get_meta("seed", 0)])
+		rocks.append([n.global_position.x, n.global_position.z, n.get_meta("seed", 0), n.scale.x])
 	data["rocks"] = rocks
 	return data
 

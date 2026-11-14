@@ -1,7 +1,8 @@
 class_name Hud
 extends CanvasLayer
 ## On-screen interface while playing.
-##   top centre    resource counter, people, the day and the next birth
+##   top centre    resource counter, people, the day, the next birth and
+##                 the jobs row (workers, warriors and wizards)
 ##   top left      title, hint for the current tool, Build and Menu buttons
 ##   bottom centre the spell bar
 ##   centre        the build menu (B / Backspace) and the start-location prompt
@@ -20,6 +21,7 @@ signal palette_selected(index: int)
 signal grass_requested
 signal setting_changed(key: String, value: float)
 signal resources_requested
+signal jobs_changed(role: String, change: int)
 
 const SCULPT_NAMES := ["Raise", "Lower", "Flatten", "Smooth"]
 const RESOURCE_COLORS := {
@@ -34,13 +36,17 @@ const SETTING_SLIDERS := [
 	["food_rate", "Food rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["birth_seconds", "Birth timer", 5.0, 300.0, 5.0, "s"],
 	["magicko_rate", "Magicko rate", 0.0, 30.0, 0.5, "/villager/min"],
+	["goblin_rate", "Goblin spawn", 0.0, 20.0, 0.5, "/cave/min"],
+	["goblin_rate_growth", "Goblin spawn rise", 0.0, 10.0, 0.5, "/night"],
 ]
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find tortoise\nRight-click move tortoise   1-3 spells   F fireball   B build   Esc cancel   ~ dev menu"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find tortoise\nRight-click move tortoise   1-3 spells   B build   Esc cancel   ~ dev menu"
 
 var _hint: Label
 var _resource_labels := {}
 var _sub_label: Label
 var _clock: Label
+var _jobs := {}
+var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_bars: Array[ProgressBar] = []
 var _build_panel: PanelContainer
@@ -125,11 +131,16 @@ func _build_resource_bar(root: Control) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(row)
 	for key in ["lumber", "stone", "food", "people", "magicko"]:
+		var item := HBoxContainer.new()
+		item.add_theme_constant_override("separation", 6)
+		item.tooltip_text = key.capitalize()
+		row.add_child(item)
+		item.add_child(ResourceIcon.make(key, 24))
 		var label := Label.new()
 		label.add_theme_font_size_override("font_size", 18)
 		label.add_theme_color_override("font_color", RESOURCE_COLORS[key])
-		label.custom_minimum_size.x = 110 if key != "people" else 130
-		row.add_child(label)
+		label.custom_minimum_size.x = 56 if key != "people" else 70
+		item.add_child(label)
 		_resource_labels[key] = label
 	_clock = Label.new()
 	_clock.add_theme_font_size_override("font_size", 16)
@@ -140,6 +151,53 @@ func _build_resource_bar(root: Control) -> void:
 	_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_sub_label.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(_sub_label)
+	box.add_child(_build_jobs_row())
+
+
+## Workers, and the number of warriors and wizards the player wants, with
+## a grey bar filling over the count while recruits train.
+func _build_jobs_row() -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	var title := _heading("Jobs")
+	row.add_child(title)
+	_workers = Label.new()
+	_workers.add_theme_font_size_override("font_size", 15)
+	row.add_child(_workers)
+	for role in ["warrior", "wizard"]:
+		var role_label := Label.new()
+		role_label.text = "Warriors" if role == "warrior" else "Wizards"
+		role_label.add_theme_font_size_override("font_size", 15)
+		row.add_child(role_label)
+		var less := _button("-")
+		less.custom_minimum_size.x = 28
+		less.pressed.connect(func() -> void: jobs_changed.emit(role, -1))
+		row.add_child(less)
+		var count := Label.new()
+		count.add_theme_font_size_override("font_size", 15)
+		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		count.custom_minimum_size = Vector2(56, 26)
+		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row.add_child(count)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.max_value = 1.0
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+		var empty := StyleBoxEmpty.new()
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = Color(0.7, 0.7, 0.72, 0.45)
+		fill.set_corner_radius_all(4)
+		bar.add_theme_stylebox_override("background", empty)
+		bar.add_theme_stylebox_override("fill", fill)
+		count.add_child(bar)
+		var more := _button("+")
+		more.custom_minimum_size.x = 28
+		more.pressed.connect(func() -> void: jobs_changed.emit(role, 1))
+		row.add_child(more)
+		_jobs[role] = {"count": count, "bar": bar, "less": less, "more": more}
+	return row
 
 
 func _build_spell_bar(root: Control) -> void:
@@ -162,10 +220,11 @@ func _build_spell_bar(root: Control) -> void:
 		var slot := VBoxContainer.new()
 		slot.add_theme_constant_override("separation", 2)
 		row.add_child(slot)
-		var b := _button("%d  %s\n%d magicko" % [k + 1, spell.name, spell.cost])
+		var b := _button("")
 		b.toggle_mode = true
 		b.button_group = group
 		b.custom_minimum_size = Vector2(140, 58)
+		b.add_child(_stacked([_text("%d  %s" % [k + 1, spell.name], 16), ResourceIcon.cost_row({"magicko": spell.cost}, 15)]))
 		b.pressed.connect(func() -> void: spell_selected.emit(k))
 		slot.add_child(b)
 		var bar := ProgressBar.new()
@@ -196,9 +255,12 @@ func _build_build_menu(root: Control) -> void:
 	box.add_child(grid)
 	for k in BuildingCatalog.BUILDINGS.size():
 		var info: Dictionary = BuildingCatalog.BUILDINGS[k]
-		var cost := BuildingCatalog.cost_text(info.cost)
-		var b := _button("%d  %s\n%s\n%s" % [k + 1, info.name, info.desc, cost] if cost != "" else "%d  %s\n%s" % [k + 1, info.name, info.desc])
-		b.custom_minimum_size = Vector2(250, 78)
+		var b := _button("")
+		b.custom_minimum_size = Vector2(250, 84)
+		var lines: Array[Control] = [_text("%d  %s" % [k + 1, info.name], 16), _text(info.desc, 13)]
+		if not (info.cost as Dictionary).is_empty():
+			lines.append(ResourceIcon.cost_row(info.cost, 14))
+		b.add_child(_stacked(lines))
 		var kind: String = info.kind
 		b.pressed.connect(func() -> void: build_selected.emit(kind))
 		grid.add_child(b)
@@ -214,7 +276,7 @@ func _build_prompt(root: Control) -> void:
 	_prompt_panel = PanelContainer.new()
 	_prompt_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_prompt_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_prompt_panel.position.y = 92
+	_prompt_panel.position.y = 132
 	_prompt_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_prompt_panel.visible = false
 	root.add_child(_prompt_panel)
@@ -228,7 +290,7 @@ func _build_dev_menu(root: Control) -> void:
 	_dev_panel = PanelContainer.new()
 	_dev_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_dev_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_dev_panel.position = Vector2(-12, 84)
+	_dev_panel.position = Vector2(-12, 132)
 	root.add_child(_dev_panel)
 	var dev := VBoxContainer.new()
 	dev.add_theme_constant_override("separation", 4)
@@ -320,6 +382,27 @@ func _setting_row(s: Array) -> Control:
 	return row
 
 
+## Lines stacked in the middle of a button; clicks pass through to it.
+func _stacked(lines: Array[Control]) -> Control:
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 2)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for line in lines:
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(line)
+	return box
+
+
+func _text(text: String, font_size: int) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", font_size)
+	return label
+
+
 func _heading(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
@@ -352,10 +435,11 @@ func set_prompt(text: String) -> void:
 
 func set_resources(village: PlayerVillage, clock: String) -> void:
 	for res in PlayerVillage.RESOURCES:
-		_resource_labels[res].text = "%s %d" % [res.capitalize(), village.amount(res)]
+		_resource_labels[res].text = str(village.amount(res))
 	var pop := village.population()
 	var cap := village.housing()
-	_resource_labels.people.text = "People %d/%d" % [pop, cap]
+	_resource_labels.people.text = "%d/%d" % [pop, cap]
+	_update_jobs(village)
 	_clock.text = clock
 	_sub_label.visible = village.founded
 	if not village.founded:
@@ -363,16 +447,38 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 	var kids := pop - village.adults()
 	var parts: PackedStringArray = []
 	var next := village.next_birth_in()
-	parts.append("Next villager in %d s" % ceili(next) if next >= 0.0 else "No room for more villagers: build a Home")
-	var soldiers := village.soldiers()
-	if soldiers > 0:
-		parts.append("%d soldier%s" % [soldiers, "" if soldiers == 1 else "s"])
+	if village.amount("food") <= 0:
+		parts.append("Out of food! No births, and people will starve" if village.hungry_for < PlayerVillage.STARVE_AFTER else "Starving!")
+	else:
+		parts.append("Next villager in %d s" % ceili(next) if next >= 0.0 else "No room for more villagers: build a Home")
+	parts.append("Eating %d food/min" % roundi(village.food_upkeep()))
 	if kids > 0:
 		parts.append("%d growing up" % kids)
 	var sites := get_tree().get_nodes_in_group("construction_sites").size()
 	if sites > 0:
 		parts.append("%d building%s under construction" % [sites, "" if sites == 1 else "s"])
 	_sub_label.text = "   ".join(parts)
+
+
+func _update_jobs(village: PlayerVillage) -> void:
+	_workers.text = "Workers %d" % village.workers()
+	for role: String in _jobs:
+		var w: Dictionary = _jobs[role]
+		var top := village.max_count(role)
+		var want: int = village.wanted[role]
+		(w.count as Label).text = "%d/%d" % [village.count(role), want]
+		var building := "Town guard" if role == "warrior" else "Singing rocks"
+		(w.count as Label).tooltip_text = "Trained / wanted. Up to %d with your %s buildings." % [top, building]
+		(w.more as Button).disabled = want >= top
+		(w.less as Button).disabled = want <= 0
+		var progress := village.training_progress(role)
+		var bar := w.bar as ProgressBar
+		bar.visible = not progress.is_empty()
+		if bar.visible:
+			var total := 0.0
+			for t in progress:
+				total += t
+			bar.value = total / progress.size()
 
 
 func set_spell(index: int) -> void:

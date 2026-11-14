@@ -24,7 +24,7 @@ func start_fire(pos: Vector3, generation := 0, size := 1.0) -> void:
 	if not terrain.is_inside(pos.x, pos.z):
 		return
 	var h := terrain.get_height(pos.x, pos.z)
-	if h < Terrain.WATER_LEVEL + 0.25 or is_wet(pos):
+	if terrain.water_depth(pos.x, pos.z) > 0.0 or is_wet(pos):
 		return
 	var ground := Vector3(pos.x, h, pos.z)
 	for f in _fires:
@@ -148,4 +148,4 @@ func _is_burnable_ground(p: Vector3) -> bool:
 	if not terrain.is_inside(p.x, p.z):
 		return false
 	var h := terrain.get_height(p.x, p.z)
-	return h > Terrain.WATER_LEVEL + 0.5 and h < 22.0 and terrain.get_normal(p.x, p.z).y > 0.85
+	return terrain.is_dry(p.x, p.z) and h < 22.0 and terrain.get_normal(p.x, p.z).y > 0.85

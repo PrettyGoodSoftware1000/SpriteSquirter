@@ -14,6 +14,9 @@ static func detonate(pos: Vector3, radius: float) -> void:
 	var ground := terrain.get_height(pos.x, pos.z)
 	if pos.y - ground < 2.5:
 		terrain.apply_brush(Vector3(pos.x, ground, pos.z), radius * 0.45, Terrain.Brush.LOWER, 1.6, 0.0, 0.25)
+		# The crater is bare stone. It only fills up if it breaks into water
+		# nearby (the terrain lets connected water flow in).
+		terrain.add_rock(pos, radius * 0.5, 0.9)
 	terrain.add_scorch(pos, radius * 0.9, 0.85)
 
 	for node in tree.get_nodes_in_group("destructibles"):

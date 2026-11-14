@@ -126,4 +126,4 @@ func _update_camera(_delta: float) -> void:
 func _ground(p: Vector3) -> float:
 	if Game.terrain == null:
 		return 0.0
-	return maxf(Game.terrain.get_height(p.x, p.z), Terrain.WATER_LEVEL)
+	return Game.terrain.surface_height(p.x, p.z)

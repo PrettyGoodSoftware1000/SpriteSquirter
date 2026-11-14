@@ -37,6 +37,15 @@ stage.
 - Stone in boulder fields; Roots spell
 - The tortoise stomps, throws and eats goblins
 
+## Milestone 0.9: Bigger worlds, water and jobs ✅
+- Medium and Large islands 1.5x and 2x wider; half the forest, same density on every size
+- Water as its own layer: it flows into lowered ground and pours off the edge
+- Editor: land, sand, grass and water brushes; growing the map square
+- Rock skirt along the island's edge; stone craters
+- Jobs row: warriors (Town guard) and wizards (Singing rocks) with training times
+- Food upkeep and starvation; goblin caves spawn faster every night
+- Resource icons; UI scales with the window
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)
@@ -52,14 +61,17 @@ stage.
 - [ ] Navigation: `NavigationRegion3D` baked from the terrain, rebaked when it is sculpted
 - [x] Villager jobs and resources (wood from trees, stone from rocks)
 - [x] Building types with a purpose (Home, Storehouse, Town guard)
-- [ ] Jobs for the windmill, crystal tower and singing rocks
+- [x] Singing rocks train wizards
+- [ ] Jobs for the windmill and crystal tower
+- [x] Jobs panel: player-set warriors and wizards; food upkeep and hunger
 - [x] Save / load maps from the editor
 - [ ] Save / load a game in progress (resources, buildings, villagers)
 
 ## Milestone 3: Tower defense / conflict
 - [x] Goblin raids: every goblin leaves the cave at midnight and attacks the village
-- [ ] Raids that grow night by night; goblin types
-- [ ] Health bars and player orders for soldiers
+- [x] Raids that grow night by night (caves spawn faster every night)
+- [ ] Goblin types
+- [ ] Health bars and player orders for warriors and wizards
 - [ ] Defensive buildings that shoot
 - [x] Spell bar (fireball, rain, roots), magicko, cooldowns
 - [ ] More spells

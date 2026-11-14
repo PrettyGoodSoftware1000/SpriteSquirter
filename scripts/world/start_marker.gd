@@ -79,7 +79,7 @@ func _process(delta: float) -> void:
 	# Grow when the camera is far away so the banners are easy to spot and click.
 	var cam := get_viewport().get_camera_3d()
 	if cam:
-		scale = Vector3.ONE * clampf(cam.global_position.distance_to(global_position) / 50.0, 1.0, 4.0)
+		scale = Vector3.ONE * clampf(cam.global_position.distance_to(global_position) / 50.0, 1.0, 14.0)
 	_flag.rotation.y = sin(_time * 2.0) * 0.12
 	var s := 1.0 + (0.25 + 0.1 * sin(_time * 6.0) if _highlight else 0.0)
 	_label.scale = Vector3.ONE * s

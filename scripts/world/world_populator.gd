@@ -8,6 +8,8 @@ extends RefCounted
 ## and rock gets its own seed (the "seed" meta) so a map file can rebuild it.
 
 const START_CLEARING := 7.0
+## Trees per square metre of island: the same on every map size.
+const TREE_DENSITY := 0.0038
 const CAVE_CLEARING := 22.0
 
 
@@ -23,7 +25,8 @@ static func populate(parent: Node3D, terrain: Terrain, world_seed: int) -> Dicti
 		var r: float = site.radius
 		avoid.append(Vector3(site.pos.x, site.pos.y, r + 3.0))
 	var caves: Array = []
-	for k in (1 if Terrain.SCALE <= 1.0 else 2):
+	# One cave on a small island, two on a medium one, three on a large one.
+	for k in clampi(roundi(Terrain.SCALE), 1, 3):
 		var spot := _find_cave_spot(terrain, rng, caves)
 		var facing := atan2(-spot.x, -spot.y)
 		place_cave(parent, terrain, spot, facing, rng, true, true)
@@ -51,7 +54,10 @@ static func populate_from_map(parent: Node3D, terrain: Terrain, data: Dictionary
 	for t in data.trees:
 		spawn_tree(parent, terrain, t[0], t[1], t[2], t[3])
 	for r in data.rocks:
-		spawn_rock(parent, terrain, r[0], r[1], r[2])
+		var rock := spawn_rock(parent, terrain, r[0], r[1], r[2])
+		# Boulders saved since map version 2 remember their size.
+		if r.size() > 3:
+			rock.scale = Vector3(r[3], r[3] * rock.scale.y / rock.scale.x, r[3])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(data.seed) + 77
 	for c in data.caves:
@@ -208,7 +214,7 @@ static func _place_trees(parent: Node3D, terrain: Terrain, rng: RandomNumberGene
 	forest.seed = rng.randi()
 	forest.frequency = 0.02
 	var reach := 118.0 * Terrain.SCALE
-	var wanted := roundi(320 * Terrain.SCALE * Terrain.SCALE)
+	var wanted := roundi(TREE_DENSITY * PI * Terrain.ISLAND_RADIUS * Terrain.ISLAND_RADIUS)
 	var count := 0
 	for attempt in wanted * 16:
 		if count >= wanted:

@@ -16,7 +16,9 @@ var camera_rig: RtsCamera
 func _ready() -> void:
 	var mode: String = Game.session.mode
 	var map := {}
-	if Game.session.map_path != "":
+	if not Game.session.get("map_data", {}).is_empty():
+		map = Game.session.map_data
+	elif Game.session.map_path != "":
 		map = MapData.load_map(Game.session.map_path)
 		if map.is_empty():
 			push_warning("Falling back to a random island")
@@ -49,7 +51,8 @@ func _ready() -> void:
 	if not map.is_empty():
 		terrain.load_map(map)
 		WorldPopulator.populate_from_map(self, terrain, map, mode == "play")
-		info = {"name": map.name, "starts": map.starts, "caves": map.caves, "from_map": true, "path": Game.session.map_path}
+		info = {"name": map.name, "starts": map.starts, "caves": map.caves, "from_map": true, "path": Game.session.map_path,
+			"unsaved": not Game.session.get("map_data", {}).is_empty()}
 	elif mode == "editor":
 		terrain.generate(Game.world_seed, false)
 		WorldPopulator.populate_nature(self, terrain, Game.world_seed)

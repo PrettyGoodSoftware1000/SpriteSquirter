@@ -100,6 +100,8 @@ func _ready() -> void:
 	hud.palette_selected.connect(_set_palette)
 	hud.grass_requested.connect(_cycle_grass)
 	hud.setting_changed.connect(func(key: String, value: float) -> void: Game.settings[key] = value)
+	hud.jobs_changed.connect(func(role: String, change: int) -> void:
+		village.set_wanted(role, village.wanted[role] + change))
 	hud.resources_requested.connect(func() -> void:
 		for res in PlayerVillage.RESOURCES:
 			village.give(res, 100.0))
@@ -197,8 +199,6 @@ func _on_key(key: InputEventKey) -> void:
 	match code:
 		KEY_B, KEY_BACKSPACE:
 			_toggle_build_menu()
-		KEY_F:
-			_cast(SpellBook.index_of("fireball"))
 		KEY_SPACE:
 			if creature:
 				Game.camera_rig.focus_on(creature.global_position)
@@ -454,7 +454,7 @@ func _update_ghost() -> void:
 ## Why a building can't go at `p`, or "" if it can.
 func _placement_problem(p: Vector3, footprint: float) -> String:
 	var terrain := Game.terrain
-	if not terrain.is_inside(p.x, p.z) or terrain.get_height(p.x, p.z) < Terrain.WATER_LEVEL + 0.4:
+	if not terrain.is_dry(p.x, p.z):
 		return "Buildings need dry land."
 	if not village.in_territory(p):
 		return "Too far from your village."
@@ -489,7 +489,7 @@ func _place_building(keep_placing: bool) -> void:
 	var p: Vector3 = _cursor_hit
 	var footprint := _ghost.footprint
 	var terrain := Game.terrain
-	var h := maxf(terrain.average_height(p, footprint), Terrain.WATER_LEVEL + 0.5)
+	var h := terrain.average_height(p, footprint)
 	# Level a pad for the building, blending out into the surrounding ground.
 	terrain.apply_brush(Vector3(p.x, h, p.z), footprint + 3.0, Terrain.Brush.FLATTEN, 1.0, h, footprint / (footprint + 3.0))
 	for node in get_tree().get_nodes_in_group("trees"):
@@ -536,7 +536,7 @@ func _field_problem() -> String:
 	for k in 4:
 		points.append(points[k].lerp(points[(k + 1) % 4], 0.5))
 	for p in points:
-		if not terrain.is_inside(p.x, p.z) or terrain.get_height(p.x, p.z) < Terrain.WATER_LEVEL + 0.4:
+		if not terrain.is_dry(p.x, p.z):
 			return "Fields need dry land."
 	if not village.in_territory(_field_center):
 		return "Too far from your village."

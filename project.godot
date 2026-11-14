@@ -24,6 +24,9 @@ Game="*res://scripts/core/game.gd"
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
+; Menus and text scale with the window: 2.4x at 3840x2160.
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [physics]
 

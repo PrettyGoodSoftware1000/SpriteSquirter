@@ -9,8 +9,9 @@ signal play_requested
 signal menu_requested
 signal new_requested(size: int)
 signal name_changed(text: String)
+signal expand_requested
 
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   1-9 tools   [ ] brush size   R turn cave   Ctrl+S save"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   1-9, 0 tools   [ ] brush size   R turn cave   Ctrl+S save"
 
 var _name_edit: LineEdit
 var _size_label: Label
@@ -19,6 +20,8 @@ var _hint: Label
 var _brush: Label
 var _counts: Label
 var _status: Label
+var _expand_panel: PanelContainer
+var _expand_label: Label
 
 
 func _ready() -> void:
@@ -61,7 +64,7 @@ func _ready() -> void:
 	box.add_child(grid)
 	var group := ButtonGroup.new()
 	for k in EditorMode.TOOL_NAMES.size():
-		var b := _button("%d %s" % [k + 1, EditorMode.TOOL_NAMES[k]])
+		var b := _button(("%d %s" % [(k + 1) % 10, EditorMode.TOOL_NAMES[k]]) if k < 10 else EditorMode.TOOL_NAMES[k])
 		b.toggle_mode = true
 		b.button_group = group
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -104,6 +107,32 @@ func _ready() -> void:
 	_status.custom_minimum_size.x = 380
 	_status.modulate = Color(1.0, 0.9, 0.6)
 	box.add_child(_status)
+
+	# Asked when the land brush reaches the edge of the map square.
+	_expand_panel = PanelContainer.new()
+	_expand_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_expand_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_expand_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_expand_panel.visible = false
+	root.add_child(_expand_panel)
+	var ask := VBoxContainer.new()
+	ask.add_theme_constant_override("separation", 10)
+	_expand_panel.add_child(ask)
+	_expand_label = Label.new()
+	_expand_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ask.add_child(_expand_label)
+	var answers := HBoxContainer.new()
+	answers.alignment = BoxContainer.ALIGNMENT_CENTER
+	answers.add_theme_constant_override("separation", 10)
+	ask.add_child(answers)
+	var yes := _button("Make the map bigger")
+	yes.pressed.connect(func() -> void:
+		_expand_panel.visible = false
+		expand_requested.emit())
+	answers.add_child(yes)
+	var no := _button("Not now")
+	no.pressed.connect(func() -> void: _expand_panel.visible = false)
+	answers.add_child(no)
 
 	var help_panel := PanelContainer.new()
 	help_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -149,6 +178,11 @@ func set_brush(radius: float) -> void:
 
 func set_counts(starts: int, caves: int, trees: int, rocks: int) -> void:
 	_counts.text = "Start locations %d/%d   Caves %d   Trees %d   Rocks %d" % [starts, MapData.MAX_STARTS, caves, trees, rocks]
+
+
+func ask_expand(size: int, bigger: int) -> void:
+	_expand_label.text = "The island has reached the edge of the map (%d m square).\nMake the map %d m square? Nothing on it moves." % [size, bigger]
+	_expand_panel.visible = true
 
 
 func set_status(text: String) -> void:

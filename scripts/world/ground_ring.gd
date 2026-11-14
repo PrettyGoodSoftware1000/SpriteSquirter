@@ -15,7 +15,9 @@ func _ready() -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-func draw(center: Vector3, radii: Array, color: Color) -> void:
+## Circles round `center`. With `at_height` they are drawn flat at that
+## height instead of hugging the ground (the editor's land brush, over the sky).
+func draw(center: Vector3, radii: Array, color: Color, at_height := INF) -> void:
 	_mesh.clear_surfaces()
 	var terrain := Game.terrain
 	for radius in radii:
@@ -27,7 +29,8 @@ func draw(center: Vector3, radii: Array, color: Color) -> void:
 			var a := TAU * k / steps
 			var x := center.x + cos(a) * r
 			var z := center.z + sin(a) * r
-			_mesh.surface_add_vertex(Vector3(x, terrain.get_height(x, z) + 0.25, z))
+			var y := at_height if at_height != INF else terrain.surface_height(x, z) + 0.25
+			_mesh.surface_add_vertex(Vector3(x, y, z))
 		_mesh.surface_end()
 	visible = true
 

@@ -18,8 +18,17 @@ extends Node3D
 ## buildings. Grown-ups fight back; children and strangers run. Soldiers
 ## (group "soldiers") have SOLDIER_HEALTH times the health and
 ## SOLDIER_DAMAGE times the damage, and go looking for raiders.
+##
+## The dead lie where they fell for CORPSE_SECONDS (group "corpses") and
+## leave the village a few bones. A necromancer (a wizard trained on,
+## group "necromancers") raises one body at a time as a skeleton (group
+## "skeletons"): see raise_skeleton().
+##
+## Villagers also climb ladders and cross rope bridges between treehouse
+## Homes when one is on their way (State.CROSS, see RopeBridge), and
+## goblins take the "build" job on their own buildings (see GoblinRaids).
 
-enum State { IDLE, WALK, FLEE, BURNING, DEAD, JOB, FIGHT, HELD }
+enum State { IDLE, WALK, FLEE, BURNING, DEAD, JOB, FIGHT, HELD, RAISE, CROSS }
 
 const LOOKS := 14
 const GROW_SECONDS := 60.0
@@ -54,6 +63,14 @@ static var FIREBOLT_DAMAGE := 11.0
 static var OGRE_HEALTH := 10.0
 static var OGRE_DAMAGE := 3.0
 ## Camera distances at which the detailed meshes switch on and off.
+## Necromancers: how far they look for a body, how near they stand to
+## raise it and how long the raising takes.
+const RAISE_SIGHT := 32.0
+const RAISE_REACH := 7.0
+const RAISE_SECONDS := 2.0
+## How long the dead lie where they fell before they sink away.
+const CORPSE_SECONDS := 40.0
+
 const LOD_NEAR := 58.0
 const LOD_FAR := 66.0
 ## Small black shapes stand in for pen lines on faces and clothes.
@@ -74,6 +91,9 @@ static var _soldier_looks: Array[Dictionary] = []
 static var _wizard_looks: Array[Dictionary] = []
 static var _archer_looks: Array[Dictionary] = []
 static var _ogre_look := {}
+static var _necro_looks: Array[Dictionary] = []
+## [warrior, archer]
+static var _skeleton_looks: Array[Dictionary] = []
 ## Shared meshes: sword, shield, club, staff and the workers' wheelbarrows.
 static var _gear := {}
 
@@ -98,6 +118,12 @@ var raiding := false
 ## Set before adding to the scene, together with `goblin`: a huge goblin
 ## with a club, OGRE_HEALTH times the health and OGRE_DAMAGE times the damage.
 var ogre := false
+## A wizard trained on at a Necromancer tower: it raises the dead.
+var necromancer := false
+## Raised by a necromancer: fights for the village until it crumbles. It is
+## `owned` (the creature and its fireballs spare it) but is not one of the
+## "people": it does not eat, work or count as a villager.
+var skeleton := false
 
 var max_hp := HEALTH
 var hp := HEALTH
@@ -158,6 +184,22 @@ var _base_look := {}
 var _gear_nodes: Array[Node3D] = []
 var _look := {}
 var _near := false
+## Skeletons keep the size of whoever they were, and fall apart at `_expires`.
+var _fixed_scale := 0.0
+var _expires := 0.0
+## Necromancers: the skeleton they have up, and the body they are raising.
+var _minion: Villager
+var _raise_target: Villager
+var _raise_timer := 0.0
+var _raise_walk := 0.0
+var _raise_ready := 0.0
+## Crossing a rope bridge: the way, how far along it, and when the villager
+## may next take one.
+var _route := PackedVector3Array()
+var _route_i := 0
+var _bridge: RopeBridge
+var _cross_time := 0.0
+var _cross_cool := 0.0
 
 
 ## Takes the fighting numbers from balancing.txt (see Balance). The ones
@@ -185,12 +227,15 @@ func _ready() -> void:
 		max_hp = GOBLIN_HEALTH
 		hp = max_hp
 		damage = GOBLIN_DAMAGE
+	if skeleton:
+		hp = max_hp
+		add_to_group("skeletons")
 	add_to_group("villagers")
 	if goblin:
 		add_to_group("goblins")
 	if ogre:
 		add_to_group("ogres")
-	if owned:
+	if owned and not skeleton:
 		add_to_group("people")
 	_build_body()
 	_timer = randf_range(0.0, 3.0)
@@ -201,6 +246,8 @@ func _build_body() -> void:
 		_build_looks()
 	if ogre:
 		_look = _ogre_look
+	elif skeleton:
+		_look = _skeleton_looks[1 if archer else 0]
 	else:
 		var library := _goblin_looks if goblin else _looks
 		_look = library[randi() % library.size()]
@@ -220,6 +267,13 @@ func _build_body() -> void:
 		hp = max_hp
 		damage = GOBLIN_DAMAGE * OGRE_DAMAGE
 		_add_gear("club", _arms[0], Vector3(0.0, -0.85, 0.03))
+	if skeleton:
+		if _fixed_scale > 0.0:
+			_adult_scale = _fixed_scale
+		if archer:
+			_add_gear("bow", _arms[1], Vector3(0.0, -0.55, 0.0))
+		else:
+			_add_gear("rusty_sword", _arms[0], Vector3(0.0, -0.55, 0.0))
 	scale = Vector3.ONE * _adult_scale * (CHILD_SCALE if child else 1.0)
 
 
@@ -735,6 +789,8 @@ static func _build_looks() -> void:
 	bow.add_tube(PackedVector3Array([Vector3(0, 0.03, -0.62), Vector3(0, 0.03, 0.62)]), PackedFloat32Array([0.006, 0.006]), 4)
 	_gear["bow"] = bow.commit()
 
+	_build_undead()
+
 	# Without wheelbarrows a worker carries a small load on its back.
 	var back := _at(0, 1.22, -0.27)
 	var logs := MeshBuilder.new()
@@ -795,6 +851,131 @@ static func _build_looks() -> void:
 		_gear["barrow_" + kind] = mb.commit()
 
 
+## Necromancers, the skeletons they raise, and what both carry.
+static func _build_undead() -> void:
+	var bone := Color(0.9, 0.87, 0.74)
+	var night := Color(0.11, 0.1, 0.14)
+	var rune := Color(0.66, 0.34, 0.95)
+	for skin: Color in [Color(0.8, 0.78, 0.86), Color(0.72, 0.76, 0.74)]:
+		var body := MeshBuilder.new()
+		# A long black robe, ragged at the hem, with glowing runes down the front.
+		body.color = night
+		body.add_lathe(PackedVector2Array([Vector2(0.0, 0.06), Vector2(0.4, 0.06), Vector2(0.3, 0.5), Vector2(0.2, 0.95),
+			Vector2(0.24, 1.3), Vector2(0.13, 1.44), Vector2(0.0, 1.46)]), 14, Transform3D.IDENTITY, 7, 0.07)
+		body.add_lathe(PackedVector2Array([Vector2(0.13, 1.42), Vector2(0.21, 1.62)]), 12)
+		body.color = rune
+		for sx: float in [-1.0, 1.0]:
+			body.add_tube(PackedVector3Array([Vector3(sx * 0.06, 1.3, 0.235), Vector3(sx * 0.06, 0.95, 0.205), Vector3(sx * 0.08, 0.5, 0.305),
+				Vector3(sx * 0.1, 0.1, 0.4)]), PackedFloat32Array([0.022, 0.022, 0.024, 0.026]), 5)
+		# A belt of bone with a skull for a buckle, and bone spikes at the shoulders.
+		body.color = bone
+		_band(body, 0.2, 1.0, 0.04, 0.03, 14)
+		body.add_blob(Vector3(0.07, 0.075, 0.06), _at(0, 0.99, 0.23), null, 0.0, 4, 7)
+		for sx: float in [-1.0, 1.0]:
+			body.add_tube(PackedVector3Array([Vector3(sx * 0.2, 1.38, 0.0), Vector3(sx * 0.33, 1.7, -0.04)]), PackedFloat32Array([0.05, 0.008]), 5)
+			body.add_tube(PackedVector3Array([Vector3(sx * 0.23, 1.34, -0.06), Vector3(sx * 0.4, 1.56, -0.1)]), PackedFloat32Array([0.045, 0.008]), 5)
+		body.color = INK
+		for sx: float in [-1.0, 1.0]:
+			body.add_blob(Vector3(0.018, 0.02, 0.012), _at(sx * 0.028, 1.0, 0.285), null, 0.0, 3, 5)
+		body.color = skin
+		body.add_blob(Vector3(0.155, 0.175, 0.165), _at(0, 1.6, 0), null, 0.0, 8, 12)
+		_face(body, skin, 1.6, 0.165, true)
+		# Wild black hair.
+		body.color = Color(0.07, 0.06, 0.09)
+		body.add_blob(Vector3(0.185, 0.16, 0.19), _at(0, 1.68, -0.05), null, 0.0, 6, 10)
+		for k in 7:
+			var a := -1.9 + 3.8 * k / 6.0
+			var out := Vector3(sin(a), 0.75, -0.25 - 0.3 * cos(a)).normalized()
+			body.add_tube(PackedVector3Array([Vector3(0, 1.68, -0.05) + out * 0.12, Vector3(0, 1.68, -0.05) + out * (0.3 + 0.07 * (k % 2))]),
+				PackedFloat32Array([0.06, 0.008]), 5)
+		var leg := MeshBuilder.new()
+		leg.color = night.darkened(0.3)
+		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.72, 0)]), PackedFloat32Array([0.08, 0.07]), 6)
+		var arm := MeshBuilder.new()
+		# Wide sleeves with a rune cuff.
+		arm.color = night.lightened(0.04)
+		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.3, 0), Vector3(0, -0.5, 0)]), PackedFloat32Array([0.085, 0.1, 0.15]), 8)
+		arm.color = rune
+		_band(arm, 0.15, -0.49, 0.025, 0.012, 8)
+		arm.color = skin
+		arm.add_blob(Vector3(0.055, 0.075, 0.055), _at(0, -0.57, 0), null, 0.0, 4, 8)
+		_necro_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
+	# Ghost fire in one hand, the book of the dead in the other.
+	var soul := MeshBuilder.new()
+	soul.color = rune.lightened(0.15)
+	soul.add_blob(Vector3(0.09, 0.11, 0.09), _at(0, 0.0, 0), null, 0.0, 5, 8)
+	soul.add_tube(PackedVector3Array([Vector3(0, 0.05, 0), Vector3(0.04, 0.2, 0.0), Vector3(-0.02, 0.36, 0.02)]), PackedFloat32Array([0.07, 0.045, 0.005]), 6)
+	_gear["soul"] = soul.commit()
+	var book := MeshBuilder.new()
+	book.color = Color(0.3, 0.2, 0.34)
+	book.add_box(Vector3(0.24, 0.07, 0.3), 0.012, _at(0, 0, 0.1))
+	book.color = Color(0.92, 0.88, 0.76)
+	book.add_box(Vector3(0.21, 0.045, 0.31), 0.006, _at(0.012, 0, 0.1))
+	book.color = bone
+	book.add_blob(Vector3(0.05, 0.02, 0.055), _at(0, 0.04, 0.1), null, 0.0, 4, 6)
+	_gear["book"] = book.commit()
+	var rusty := MeshBuilder.new()
+	rusty.color = Color(0.52, 0.42, 0.36)
+	rusty.add_box(Vector3(0.04, 0.09, 0.62), 0.01, _at(0, 0, 0.42))
+	rusty.color = INK
+	rusty.add_box(Vector3(0.046, 0.016, 0.52), 0.004, _at(0, 0, 0.4))
+	rusty.color = Color(0.36, 0.26, 0.2)
+	rusty.add_box(Vector3(0.22, 0.05, 0.05), 0.01, _at(0, 0, 0.1))
+	_gear["rusty_sword"] = rusty.commit()
+
+	# Skeletons: a warrior in a rusty helmet and an archer with a quiver.
+	for archer_look: bool in [false, true]:
+		var body := MeshBuilder.new()
+		body.color = bone
+		body.add_tube(PackedVector3Array([Vector3(0, 0.8, 0), Vector3(0, 1.1, -0.03), Vector3(0, 1.47, 0)]), PackedFloat32Array([0.04, 0.035, 0.04]), 6)
+		body.add_blob(Vector3(0.17, 0.085, 0.1), _at(0, 0.81, 0), null, 0.0, 5, 8)
+		body.add_tube(PackedVector3Array([Vector3(-0.25, 1.4, 0), Vector3(0.25, 1.4, 0)]), PackedFloat32Array([0.035, 0.035]), 5)
+		# Ribs: hoops of bone round a dark hollow.
+		for k in 4:
+			var y := 1.09 + k * 0.082
+			var r := 0.15 + 0.03 * sin((k + 0.5) * 0.8)
+			body.add_lathe(PackedVector2Array([Vector2(r - 0.02, y - 0.024), Vector2(r, y), Vector2(r - 0.02, y + 0.024)]), 10)
+		body.add_blob(Vector3(0.15, 0.16, 0.165), _at(0, 1.61, 0.0), null, 0.0, 8, 12)
+		body.add_box(Vector3(0.17, 0.08, 0.12), 0.015, _at(0, 1.475, 0.07))
+		body.color = INK
+		body.add_tube(PackedVector3Array([Vector3(0, 1.04, 0), Vector3(0, 1.38, 0)]), PackedFloat32Array([0.1, 0.11]), 8)
+		for sx: float in [-1.0, 1.0]:
+			body.add_blob(Vector3(0.042, 0.05, 0.02), _at(sx * 0.058, 1.625, 0.148), null, 0.0, 4, 6)
+		body.add_blob(Vector3(0.016, 0.026, 0.014), _at(0, 1.56, 0.163), null, 0.0, 3, 5)
+		body.add_box(Vector3(0.12, 0.012, 0.012), 0.003, _at(0, 1.5, 0.133))
+		for k in 3:
+			body.add_box(Vector3(0.012, 0.06, 0.012), 0.003, _at((k - 1) * 0.04, 1.49, 0.133))
+		# Rags round the hips.
+		body.color = Color(0.36, 0.29, 0.2)
+		body.add_lathe(PackedVector2Array([Vector2(0.17, 0.86), Vector2(0.2, 0.74), Vector2(0.22, 0.52)]), 9, Transform3D.IDENTITY, 5, 0.12)
+		if archer_look:
+			body.color = LEATHER.darkened(0.2)
+			body.add_tube(PackedVector3Array([Vector3(0.1, 0.98, -0.2), Vector3(-0.12, 1.5, -0.2)]), PackedFloat32Array([0.065, 0.07]), 7)
+			body.color = bone
+			for k in 3:
+				body.add_tube(PackedVector3Array([Vector3(-0.12 + 0.03 * (k - 1), 1.5, -0.2), Vector3(-0.17 + 0.04 * (k - 1), 1.68, -0.2)]),
+					PackedFloat32Array([0.012, 0.02]), 4)
+		else:
+			body.color = Color(0.46, 0.34, 0.27)
+			body.add_lathe(PackedVector2Array([Vector2(0.175, 1.62), Vector2(0.17, 1.7), Vector2(0.1, 1.775), Vector2(0.0, 1.79)]), 10)
+			body.add_lathe(PackedVector2Array([Vector2(0.175, 1.6), Vector2(0.2, 1.625), Vector2(0.175, 1.65)]), 10)
+			body.add_blob(Vector3(0.1, 0.07, 0.11), _at(0.25, 1.43, 0), null, 0.0, 4, 7)
+		var leg := MeshBuilder.new()
+		leg.color = bone
+		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.36, 0.012)]), PackedFloat32Array([0.036, 0.028]), 5)
+		leg.add_tube(PackedVector3Array([Vector3(0, -0.36, 0.012), Vector3(0, -0.72, 0)]), PackedFloat32Array([0.03, 0.024]), 5)
+		leg.add_blob(Vector3(0.045, 0.045, 0.045), _at(0, -0.36, 0.012), null, 0.0, 4, 6)
+		leg.add_blob(Vector3(0.05, 0.03, 0.11), _at(0, -0.745, 0.05), null, 0.0, 4, 7)
+		var arm := MeshBuilder.new()
+		arm.color = bone
+		arm.add_blob(Vector3(0.045, 0.045, 0.045), _at(0, 0, 0), null, 0.0, 4, 6)
+		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.27, -0.01)]), PackedFloat32Array([0.03, 0.025]), 5)
+		arm.add_tube(PackedVector3Array([Vector3(0, -0.27, -0.01), Vector3(0, -0.5, 0)]), PackedFloat32Array([0.026, 0.02]), 5)
+		arm.add_blob(Vector3(0.036, 0.036, 0.036), _at(0, -0.27, -0.01), null, 0.0, 4, 6)
+		arm.add_blob(Vector3(0.042, 0.055, 0.042), _at(0, -0.55, 0), null, 0.0, 4, 6)
+		_skeleton_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
+
+
 func _process(delta: float) -> void:
 	_moving = false
 	if state == State.DEAD:
@@ -804,6 +985,9 @@ func _process(delta: float) -> void:
 		# Kicking in the tortoise's grip; it moves us about.
 		_moving = true
 		_animate(delta)
+		return
+	if skeleton and Game.now >= _expires:
+		_crumble()
 		return
 	if child:
 		_grow(delta)
@@ -835,6 +1019,10 @@ func _process(delta: float) -> void:
 			_update_job(delta)
 		State.FIGHT:
 			_update_fight(delta)
+		State.RAISE:
+			_update_raise(delta)
+		State.CROSS:
+			_update_cross(delta)
 		State.WALK:
 			var pace := 2.6 if raiding else (1.8 if goblin else 1.3)
 			if ogre:
@@ -864,6 +1052,10 @@ func _process(delta: float) -> void:
 				_die(true)
 	if state == State.DEAD:
 		return
+	if state == State.CROSS and _route_i > 0:
+		# Up a ladder or out on a bridge: not on the ground.
+		_animate(delta)
+		return
 	var ground := Game.terrain.get_height(global_position.x, global_position.z)
 	# Goblins swim across rivers and lakes.
 	global_position.y = maxf(ground, Game.terrain.water_level_at(global_position.x, global_position.z) - 0.95 * scale.y) if goblin else ground
@@ -884,7 +1076,7 @@ func is_adult() -> bool:
 
 ## True if the villager could start a job right now.
 func can_work() -> bool:
-	return owned and not child and not soldier and not wizard and not archer and state != State.DEAD and state != State.BURNING and state != State.HELD
+	return owned and not skeleton and not child and not soldier and not wizard and not archer and state != State.DEAD and state != State.BURNING and state != State.HELD
 
 
 ## Grown-up villagers of the player's village and goblins fight. Children
@@ -900,12 +1092,16 @@ func assign_job(kind: String, pos: Vector3, target: Node) -> void:
 	_working = false
 	if state == State.IDLE or state == State.WALK or state == State.JOB:
 		state = State.JOB
+		if kind != "train" and not goblin:
+			_try_bridge(pos)
 
 
 func clear_job() -> void:
 	job = ""
 	job_target = null
 	_working = false
+	if goblin:
+		carry_pack("")
 	if state == State.JOB and not _delivering:
 		state = State.IDLE
 		_timer = randf_range(0.3, 1.0)
@@ -991,6 +1187,23 @@ func _start_delivery() -> void:
 	_load.visible = true
 	if state == State.IDLE or state == State.WALK:
 		state = State.JOB
+	if state == State.JOB and not _pushing:
+		_try_bridge(_drop_pos)
+
+
+## Shows a load of "lumber", "stone" or "food" on the back, or takes it off
+## with "". (Goblins fetching what they build with from their cave.)
+func carry_pack(kind: String) -> void:
+	if kind == "":
+		if _load:
+			_load.visible = false
+		return
+	if _load == null:
+		_load = MeshInstance3D.new()
+		_load.material_override = Art.cloth()
+		add_child(_load)
+	_load.mesh = _gear["pack_" + kind]
+	_load.visible = true
 
 
 func _unload() -> void:
@@ -1057,6 +1270,190 @@ func become_wizard(post: Vector3) -> void:
 	Game.effects.spawn_dust(global_position, 0.5)
 
 
+## A wizard trained on at a Necromancer tower: black robes, a book of the
+## dead and a handful of ghost fire. It still throws firebolts, and raises
+## one fallen villager or enemy at a time as a skeleton.
+func become_necromancer(post: Vector3) -> void:
+	if necromancer or not wizard or state == State.DEAD:
+		return
+	clear_job()
+	necromancer = true
+	remove_from_group("wizards")
+	add_to_group("necromancers")
+	home = post
+	home_radius = 10.0
+	for g in _gear_nodes:
+		g.queue_free()
+	_gear_nodes.clear()
+	_wear(_necro_looks[randi() % _necro_looks.size()])
+	_add_gear("soul", _arms[0], Vector3(0.0, -0.62, 0.04), Art.glow(3.0))
+	_add_gear("book", _arms[1], Vector3(0.0, -0.6, 0.1))
+	Game.effects.spawn_raise(global_position)
+
+
+## What a blow, arrow or firebolt from this one does.
+func power() -> float:
+	if archer and not skeleton:
+		return ARROW_DAMAGE
+	return FIREBOLT_DAMAGE if wizard else damage
+
+
+## The skeleton a necromancer (`master`) raises from the dead `body`: an
+## archer or a warrior with Balance "skeleton_share" of the health and
+## damage of whoever it was, for "skeleton_seconds".
+static func raise_skeleton(body: Villager, master: Villager) -> Villager:
+	var share := Balance.num("skeleton_share")
+	var s := Villager.new()
+	s.skeleton = true
+	s.owned = true
+	s.archer = body.archer or body.wizard or randf() < 0.35
+	s.max_hp = maxf(1.0, body.max_hp * share)
+	s.damage = body.power() * share
+	s._fixed_scale = body._adult_scale * (CHILD_SCALE if body.child else 1.0)
+	s.home = master.home
+	s.home_radius = 8.0
+	s._expires = Game.now + Balance.num("skeleton_seconds")
+	Game.world_root.add_child(s)
+	var p := body.global_position
+	s.global_position = Vector3(p.x, Game.terrain.get_height(p.x, p.z), p.z)
+	s.rotation.y = body.rotation.y
+	return s
+
+
+## A necromancer looks for a body to raise when it has no skeleton up.
+func _look_for_body() -> bool:
+	if Game.now < _raise_ready or (is_instance_valid(_minion) and _minion.is_alive()):
+		return false
+	if not is_instance_valid(Game.village) or Game.village.amount("bones") < roundi(Balance.num("raise_bones")):
+		return false
+	var best: Villager = null
+	var best_d := RAISE_SIGHT
+	for node in get_tree().get_nodes_in_group("corpses"):
+		var body := node as Villager
+		if body._airborne or body._timer > CORPSE_SECONDS - 10.0 or body.get_meta("claimed", 0.0) > Game.now:
+			continue
+		var d := _flat_to(body.global_position)
+		if d < best_d:
+			best_d = d
+			best = body
+	if best == null:
+		return false
+	best.set_meta("claimed", Game.now + 14.0)
+	_raise_target = best
+	_raise_timer = 0.0
+	_raise_walk = 0.0
+	_foe = null
+	_working = false
+	state = State.RAISE
+	return true
+
+
+func _update_raise(delta: float) -> void:
+	var body := _raise_target
+	if not is_instance_valid(body) or body.is_queued_for_deletion() or not body.is_in_group("corpses"):
+		state = State.IDLE
+		_timer = 0.2
+		return
+	var to := body.global_position - global_position
+	to.y = 0.0
+	if to.length() > RAISE_REACH:
+		_raise_walk += delta
+		if _move_towards(body.global_position, 2.4 * _speed_scale, delta) or _raise_walk > 15.0:
+			# Cannot get to it.
+			_raise_ready = Game.now + 5.0
+			state = State.IDLE
+		return
+	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
+	if _raise_timer == 0.0:
+		Game.effects.spawn_raise(body.global_position)
+	_raise_timer += delta
+	if _raise_timer < RAISE_SECONDS:
+		return
+	if Game.village.spend({"bones": roundi(Balance.num("raise_bones"))}):
+		_minion = Villager.raise_skeleton(body, self)
+		body.queue_free()
+	_raise_ready = Game.now + 3.0
+	state = State.IDLE
+	_timer = 0.3
+
+
+## The skeleton's time is up: it falls into a heap.
+func _crumble() -> void:
+	Game.effects.spawn_dust(global_position, 0.5)
+	_die(false)
+	_body.scale = Vector3(1.0, 0.3, 1.0)
+	_timer = CORPSE_SECONDS - 5.0
+
+
+# --- Rope bridges -------------------------------------------------------------------
+
+## Sets off over a rope bridge if one lies more or less on the way to
+## `goal` (or, on a `stroll`, if one is simply near). True if it did.
+func _try_bridge(goal: Vector3, stroll := false) -> bool:
+	if goblin or skeleton or Game.now < _cross_cool:
+		return false
+	for node in get_tree().get_nodes_in_group("bridges"):
+		var bridge := node as RopeBridge
+		if not bridge.usable():
+			continue
+		for from_a: bool in [true, false]:
+			var foot := RopeBridge.ladder_foot(bridge.a if from_a else bridge.b)
+			var far := RopeBridge.ladder_foot(bridge.b if from_a else bridge.a)
+			var there := _flat_to(foot)
+			if stroll:
+				if there > 24.0:
+					continue
+			elif there + bridge.length + 8.0 + Vector2(far.x - goal.x, far.z - goal.z).length() > _flat_to(goal) * 1.2 + 4.0:
+				continue
+			_route = bridge.route(from_a)
+			_route_i = 0
+			_bridge = bridge
+			_cross_time = 0.0
+			_cross_cool = Game.now + (45.0 if stroll else 20.0)
+			state = State.CROSS
+			return true
+	return false
+
+
+func _update_cross(delta: float) -> void:
+	if not is_instance_valid(_bridge) or not _bridge.usable():
+		_end_cross()
+		return
+	var goal := _route[_route_i]
+	if _route_i == 0:
+		# Walk to the foot of the ladder.
+		_cross_time += delta
+		if _move_towards(goal, 1.7 * _speed_scale, delta):
+			if _flat_to(goal) > 1.0:
+				_end_cross()
+			else:
+				_route_i = 1
+		elif _cross_time > 40.0:
+			_end_cross()
+		return
+	var to := goal - global_position
+	var dist := to.length()
+	var step := 1.6 * _speed_scale * delta
+	if dist <= step:
+		global_position = goal
+		_route_i += 1
+		if _route_i >= _route.size():
+			_end_cross()
+	else:
+		global_position += to / dist * step
+	var flat := Vector2(to.x, to.z)
+	if flat.length() > 0.25:
+		rotation.y = lerp_angle(rotation.y, atan2(flat.x, flat.y), minf(1.0, delta * 8.0))
+	_moving = true
+
+
+func _end_cross() -> void:
+	_bridge = null
+	_route_i = 0
+	state = State.JOB if job != "" or _delivering else State.IDLE
+	_timer = randf_range(0.5, 2.0)
+
+
 ## Sharper swords from the Blacksmith: warriors hit harder.
 func sharpen() -> void:
 	if soldier:
@@ -1092,10 +1489,12 @@ func become_worker() -> void:
 	soldier = false
 	wizard = false
 	archer = false
+	necromancer = false
 	guard = null
 	remove_from_group("soldiers")
 	remove_from_group("wizards")
 	remove_from_group("archers")
+	remove_from_group("necromancers")
 	max_hp = HEALTH
 	hp = minf(hp, max_hp)
 	damage = ATTACK_DAMAGE
@@ -1139,7 +1538,9 @@ func end_raid() -> void:
 
 ## Looks for someone to fight (or to run from), a few times a second.
 func _think() -> void:
-	if state == State.BURNING:
+	if state == State.BURNING or state == State.RAISE or state == State.CROSS:
+		return
+	if necromancer and job != "train" and (state == State.IDLE or state == State.WALK or state == State.FIGHT) and _look_for_body():
 		return
 	if goblin:
 		if not raiding or (state == State.FIGHT and _foe_ok() and (_foe is Villager or _foe is Creature)):
@@ -1164,7 +1565,7 @@ func _think() -> void:
 		return
 	var fighter := can_fight()
 	var best: Villager = null
-	var best_d := SOLDIER_AGGRO if soldier or wizard or archer else (AGGRO if fighter else 8.0)
+	var best_d := SOLDIER_AGGRO if soldier or wizard or archer or skeleton else (AGGRO if fighter else 8.0)
 	for node in raiders:
 		var g := node as Villager
 		var d := _flat_to(g.global_position)
@@ -1199,7 +1600,7 @@ func _nearest_building(reach: float) -> Destructible:
 	for node in get_tree().get_nodes_in_group("player_buildings"):
 		var b := node as Destructible
 		var d := _flat_to(b.global_position)
-		if d < best_d and not b.destroyed:
+		if d < best_d and not b.destroyed and not b is RopeBridge:
 			best_d = d
 			best = b
 	return best
@@ -1283,7 +1684,7 @@ func _shoot_at(foe: Villager, to: Vector3, delta: float) -> void:
 		_attack_timer = ARROW_SECONDS
 		var arrow := Arrow.new()
 		Game.world_root.add_child(arrow)
-		arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to.normalized() * 0.5, foe, self, ARROW_DAMAGE)
+		arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to.normalized() * 0.5, foe, self, damage if skeleton else ARROW_DAMAGE)
 
 
 ## Wizards keep their distance and throw firebolts.
@@ -1311,13 +1712,16 @@ func take_hit(amount: float, from: Node3D) -> void:
 		_die(false)
 		return
 	var attacker := from as Villager
-	if attacker and state != State.FIGHT and state != State.BURNING and can_fight():
+	if attacker and state != State.FIGHT and state != State.BURNING and state != State.CROSS and can_fight():
 		if goblin and not raiding:
 			start_raid(global_position)
 		_engage(attacker)
 
 
 func _choose_wander_target() -> void:
+	# Now and then, a stroll over a rope bridge.
+	if not goblin and randf() < 0.3 and _try_bridge(home, true):
+		return
 	for attempt in 6:
 		var a := randf() * TAU
 		var d := randf() * home_radius
@@ -1379,6 +1783,14 @@ func _animate(delta: float) -> void:
 		return
 	if state == State.FIGHT and _in_reach:
 		_animate_fight(blend)
+		return
+	if state == State.RAISE and _raise_timer > 0.0:
+		# Both arms up, calling the dead.
+		_body.rotation.x = lerpf(_body.rotation.x, -0.15, blend)
+		for k in 2:
+			_legs[k].rotation.x = lerpf(_legs[k].rotation.x, 0.0, blend)
+			_arms[k].rotation.x = lerpf(_arms[k].rotation.x, -2.5 + 0.25 * sin(_raise_timer * 9.0 + k), blend)
+			_arms[k].rotation.z = lerpf(_arms[k].rotation.z, (1.0 if k == 0 else -1.0) * -0.4, blend)
 		return
 	var stride := 0.0
 	if _moving:
@@ -1454,7 +1866,7 @@ func flee(from: Vector3) -> void:
 	if state == State.DEAD or state == State.BURNING or state == State.HELD:
 		return
 	# Raiders, soldiers and anyone in a fight stand their ground.
-	if raiding or soldier or state == State.FIGHT:
+	if raiding or soldier or skeleton or state == State.FIGHT or state == State.CROSS:
 		return
 	_danger = from
 	_working = false
@@ -1573,8 +1985,13 @@ func _die(charred: bool) -> void:
 	if state == State.DEAD:
 		return
 	state = State.DEAD
-	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards", "archers"]:
+	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards", "archers", "necromancers", "skeletons"]:
 		remove_from_group(group)
+	if not skeleton and is_instance_valid(Game.village) and Game.village.founded:
+		# Everyone who dies leaves bones for the village, and a body a
+		# necromancer can raise.
+		Game.village.give("bones", randi_range(roundi(Balance.num("bones_min")), maxi(roundi(Balance.num("bones_min")), roundi(Balance.num("bones_max")))))
+		add_to_group("corpses")
 	raiding = false
 	job = ""
 	job_target = null
@@ -1610,7 +2027,8 @@ func _update_dead(delta: float) -> void:
 			_lie_down()
 		return
 	_timer += delta
-	if _timer > 12.0:
+	if _timer > CORPSE_SECONDS - 3.0:
+		remove_from_group("corpses")
 		global_position.y -= delta * 0.3
-	if _timer > 15.0:
+	if _timer > CORPSE_SECONDS:
 		queue_free()

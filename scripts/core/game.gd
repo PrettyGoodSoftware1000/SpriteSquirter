@@ -53,6 +53,7 @@ var now := 0.0
 func _ready() -> void:
 	Balance.load_file()
 	Villager.apply_balance()
+	BuildingCatalog.apply_balance()
 	world_seed = randi()
 
 

@@ -361,6 +361,47 @@ func spawn_judgement(pos: Vector3, size: float, blessing: bool) -> void:
 	tw.tween_callback(light.queue_free)
 
 
+## A necromancer raising the dead: purple and green wisps wind up out of
+## the ground under a sickly light.
+func spawn_raise(pos: Vector3) -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.1, 1.1)
+	var mat := _glow_material(Color(1, 1, 1))
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = Art.tex("smoke")
+	quad.material = mat
+	var p := CPUParticles3D.new()
+	p.mesh = quad
+	p.amount = 36
+	p.lifetime = 2.0
+	p.one_shot = true
+	p.explosiveness = 0.25
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.9
+	p.direction = Vector3.UP
+	p.spread = 20.0
+	p.gravity = Vector3(0, 1.5, 0)
+	p.initial_velocity_min = 0.6
+	p.initial_velocity_max = 2.2
+	p.orbit_velocity_min = 0.4
+	p.orbit_velocity_max = 0.9
+	p.scale_amount_min = 0.4
+	p.scale_amount_max = 1.2
+	p.color_ramp = _gradient([0.0, 0.2, 0.6, 1.0], [Color(0.6, 0.2, 1.0, 0.0), Color(0.7, 0.3, 1.0, 0.9), Color(0.3, 1.0, 0.4, 0.7), Color(0.2, 0.8, 0.3, 0.0)])
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_spawn_oneshot(p, pos + Vector3.UP * 0.3, 3.2)
+	var light := OmniLight3D.new()
+	light.light_color = Color(0.6, 0.4, 1.0)
+	light.light_energy = 4.0
+	light.omni_range = 9.0
+	add_child(light)
+	light.global_position = pos + Vector3.UP * 1.5
+	var tw := light.create_tween()
+	tw.tween_property(light, "light_energy", 0.0, 2.4)
+	tw.tween_callback(light.queue_free)
+
+
 ## A spray of blood for the Blood Sacrifice spell.
 func spawn_blood(pos: Vector3) -> void:
 	var red := _gradient([0.0, 0.7, 1.0], [Color(0.75, 0.02, 0.04, 1.0), Color(0.6, 0.0, 0.03, 1.0), Color(0.4, 0.0, 0.02, 0.0)])

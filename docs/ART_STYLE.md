@@ -15,9 +15,15 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
   side (under about 35 degrees up), so every shape shows a lit side, a
   shaded side and a cast shadow.
 - **Shapes:** fat, wonky and rounded. Towers lean, roofs sag, hats curl.
-- **Buildings:** modelled on the concept drawings: tall house, crystal
-  tower, moon tower, mushroom house, singing rocks, store-in-a-tree,
-  winged windmill, goblin hut. Their colours are fixed and saturated.
+- **Buildings:** modelled on the concept drawings: treehouse Homes with
+  rope bridges, crystal tower, moon tower, mushroom house, singing rocks,
+  store-in-a-tree, winged windmill, the Necromancer tower with its giant
+  horned skull, goblin hut. Their colours are fixed and saturated.
+- **Goblin buildings:** crooked dark planks under roofs of coloured rags
+  (red, purple, blue, orange, green), held down by crossed bones with a
+  horned skull over the door, and sharpened stakes round the bottom.
+- **The undead:** necromancers wear black with glowing purple runes;
+  skeletons are bone-white with inked eye sockets and ribs.
 - **Nature follows a palette:** grass, trees, rocks, dirt and water take
   their colours from the current palette (Meadow, Candy, Autumn, Alien,
   Frost, Ember), which can be switched while playing from the dev menu.

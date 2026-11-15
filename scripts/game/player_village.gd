@@ -21,6 +21,11 @@ extends Node
 ## Buildings train side by side. A warrior or wizard sent back to work
 ## must train from the start to return.
 ##
+## A Necromancer tower trains wizards on into necromancers
+## ("necromancers_per_tower", "necromancer_training_seconds"), who raise the
+## dead as skeletons. Everyone who dies, villager or goblin, leaves the
+## village a few bones (Villager._die).
+##
 ## A Blacksmith gives the workers wheelbarrows (bigger loads) and lets the
 ## village research one thing at a time from Research.ITEMS: sharper
 ## swords, bows (archers: ARCHERS_PER_GUARD per Town guard), and tools that
@@ -33,8 +38,8 @@ extends Node
 ## are born; after STARVE_AFTER seconds without food, someone starves every
 ## STARVE_EVERY seconds until there is food again.
 
-const RESOURCES := ["lumber", "stone", "food", "magicko"]
-const START_RESOURCES := {"lumber": 80.0, "stone": 50.0, "food": 40.0, "magicko": 30.0}
+const RESOURCES := ["lumber", "stone", "food", "bones", "magicko"]
+const START_RESOURCES := {"lumber": 80.0, "stone": 50.0, "food": 40.0, "bones": 0.0, "magicko": 30.0}
 const START_VILLAGERS := 8
 const HOME_RADIUS := 16.0
 ## Buildings may go up this far from the village centre...
@@ -63,11 +68,14 @@ const FOOD_PER_WIZARD := 2.0
 const FOOD_PER_ARCHER := 2.0
 const STARVE_AFTER := 60.0
 const STARVE_EVERY := 30.0
-## role -> [building role in the catalog, per building, seconds to train]
+## role -> [building role in the catalog, per building, seconds to train].
+## Necromancers are wizards trained on at a Necromancer tower; their two
+## numbers come from balancing.txt (see per_building() and train_seconds()).
 const ARMY := {
 	"warrior": ["guard", WARRIORS_PER_GUARD, WARRIOR_SECONDS],
 	"archer": ["guard", ARCHERS_PER_GUARD, ARCHER_SECONDS],
 	"wizard": ["wizard", WIZARDS_PER_ROCKS, WIZARD_SECONDS],
+	"necromancer": ["necro", 2, 300.0],
 }
 ## Blood Sacrifice: how long the magicko boost lasts, how big it is, and
 ## how near the click a villager must be.
@@ -87,7 +95,7 @@ var resources := {}
 var birth_progress := 0.0
 
 ## How many warriors and wizards the player asked for.
-var wanted := {"warrior": 0, "archer": 0, "wizard": 0}
+var wanted := {"warrior": 0, "archer": 0, "wizard": 0, "necromancer": 0}
 ## Finished research: id -> true.
 var researched := {}
 ## The research under way: {"id": ..., "t": seconds done}, or empty.
@@ -287,7 +295,19 @@ func count(role: String) -> int:
 			return soldiers()
 		"archer":
 			return archers()
+		"necromancer":
+			return get_tree().get_nodes_in_group("necromancers").size()
 	return wizards()
+
+
+## How many of `role` one of its buildings can keep, and how long each
+## takes to train.
+func per_building(role: String) -> int:
+	return roundi(Balance.num("necromancers_per_tower")) if role == "necromancer" else ARMY[role][1]
+
+
+func train_seconds(role: String) -> float:
+	return Balance.num("necromancer_training_seconds") if role == "necromancer" else ARMY[role][2]
 
 
 ## The most warriors (or archers, or wizards) the village's buildings can
@@ -295,7 +315,7 @@ func count(role: String) -> int:
 func max_count(role: String) -> int:
 	if role == "archer" and not has_research("bows"):
 		return 0
-	return _training_buildings(role).size() * ARMY[role][1]
+	return _training_buildings(role).size() * per_building(role)
 
 
 # --- Blacksmith and research ----------------------------------------------------
@@ -388,7 +408,7 @@ func training_progress(role: String) -> Array[float]:
 	for b in _training:
 		var entry: Dictionary = _training[b]
 		if entry.role == role:
-			out.append(clampf(entry.t / ARMY[role][2], 0.0, 1.0))
+			out.append(clampf(entry.t / train_seconds(role), 0.0, 1.0))
 	return out
 
 
@@ -535,7 +555,8 @@ func work(v: Villager, delta: float) -> void:
 	match v.job:
 		"build":
 			var site := v.job_target as ConstructionSite
-			if site:
+			# (Goblin builders go back to their cave for more between spells of work.)
+			if site and Vector2(v.global_position.x - site.global_position.x, v.global_position.z - site.global_position.z).length() < site.footprint + 4.0:
 				site.add_work(delta)
 		"train":
 			var post := v.job_target as Node3D
@@ -544,7 +565,7 @@ func work(v: Villager, delta: float) -> void:
 				v.clear_job()
 				return
 			entry.t += delta
-			if entry.t >= ARMY[entry.role][2]:
+			if entry.t >= train_seconds(entry.role):
 				_training.erase(post)
 				match entry.role:
 					"warrior":
@@ -553,6 +574,8 @@ func work(v: Villager, delta: float) -> void:
 					"archer":
 						v.guard = post
 						v.become_archer(post.global_position)
+					"necromancer":
+						v.become_necromancer(post.global_position)
 					_:
 						v.become_wizard(post.global_position)
 		"food":
@@ -737,7 +760,8 @@ func _manage_army() -> void:
 				training -= 1
 			else:
 				for v in people():
-					if (v.soldier and role == "warrior") or (v.wizard and role == "wizard") or (v.archer and role == "archer"):
+					if (v.soldier and role == "warrior") or (v.wizard and not v.necromancer and role == "wizard") \
+							or (v.archer and role == "archer") or (v.necromancer and role == "necromancer"):
 						v.become_worker()
 						break
 				have -= 1
@@ -749,7 +773,7 @@ func _manage_army() -> void:
 				break
 			if _training.has(b):
 				continue
-			var recruit := _nearest_worker(b.global_position)
+			var recruit := _nearest_wizard(b.global_position) if role == "necromancer" else _nearest_worker(b.global_position)
 			if recruit == null:
 				break
 			var out := recruit.global_position - b.global_position
@@ -765,6 +789,20 @@ func _nearest_worker(to: Vector3) -> Villager:
 	var best_d := INF
 	for v in people():
 		if not v.can_work() or v.job == "train":
+			continue
+		var d := v.global_position.distance_to(to)
+		if d < best_d:
+			best_d = d
+			best = v
+	return best
+
+
+## The nearest wizard that is not already a necromancer or training to be one.
+func _nearest_wizard(to: Vector3) -> Villager:
+	var best: Villager = null
+	var best_d := INF
+	for v in people():
+		if not v.wizard or v.necromancer or v.job == "train" or not v.is_alive():
 			continue
 		var d := v.global_position.distance_to(to)
 		if d < best_d:

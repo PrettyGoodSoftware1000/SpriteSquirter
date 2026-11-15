@@ -37,6 +37,12 @@ static func detonate(pos: Vector3, radius: float, friendly := 1.0) -> void:
 		if not d.destroyed and randf() < 0.5 + 0.5 * falloff:
 			d.ignite()
 
+	# A goblin building that is still going up is knocked flat.
+	for node in tree.get_nodes_in_group("goblin_sites"):
+		var site := node as ConstructionSite
+		if site.global_position.distance_to(pos) < radius + site.footprint * 0.5:
+			site.wreck()
+
 	for node in tree.get_nodes_in_group("villagers"):
 		var v := node as Villager
 		if v == null:

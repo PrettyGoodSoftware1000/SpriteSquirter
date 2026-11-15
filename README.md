@@ -58,12 +58,31 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    take three times as much.
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
    building, and place its outline (**R** rotates it). The cost is paid up
-   front and the villagers come and build it: every grown-up helps, and 10
-   villagers take one minute. The building rises out of the ground as they work.
+   front and the villagers come and build it: every grown-up helps. The
+   more a building costs, the longer it takes: 10 seconds of one
+   villager's work for each unit of resource, so a Home (55) takes 10
+   villagers just under a minute. The building rises out of the ground as
+   they work.
    The buildings have jobs: a **Home** (or Mushroom cottage) adds housing, a
    **Storehouse** is where resources are carried, a **Town guard** trains
-   warriors (and archers), the **Singing rocks** train wizards, and a
+   warriors (and archers), the **Singing rocks** train wizards, a
+   **Necromancer tower** turns wizards into necromancers, and a
    **Blacksmith** makes wheelbarrows and does research.
+   **Treehouses and rope bridges.** A Home is a treehouse: a little house
+   on a deck up a bright-leaved tree, with a ladder. Pick **Rope bridge**
+   in the build menu, click one Home and then another (up to 40 m apart)
+   and the villagers hang a bridge between the two decks. It costs 1
+   lumber a metre. Villagers climb up and walk over a bridge when it is
+   on their way, and idle ones stroll across.
+   **Bones and necromancers.** Whenever a villager, goblin or ogre dies
+   the village gets 2 to 4 **bones** (the bone counter in the top bar).
+   Build a Necromancer tower (it costs bones too) and ask for
+   necromancers in the Jobs row: a wizard trains at the tower for 5
+   minutes and comes out in black robes. A necromancer still throws
+   firebolts, and raises one dead villager or enemy lying nearby as a
+   **skeleton** warrior or archer, for 2 bones. A skeleton fights for you
+   with half the health and damage of whoever it was, and crumbles after
+   3 minutes; then the necromancer can raise another.
    **Research.** With a Blacksmith, press **U** (or the Research button)
    and pick something to research. It is paid for up front and one thing
    is researched at a time: **Sharper swords** (5 minutes; warriors do 50%
@@ -246,7 +265,8 @@ the main menu opens it, so maps can be copied and shared.
 `balancing.txt`, in the game's folder next to `project.godot`, holds the
 numbers you may want to tune: the health and damage of villagers,
 warriors, archers, wizards, goblins, ogres and the creatures, building
-health, fireball damage, how much knowledge the creature needs to learn
+health, what every building costs and how long building takes, bones,
+necromancers and skeletons, how often the goblins build, fireball damage, how much knowledge the creature needs to learn
 each thing, the cooldown of each spell it casts, and the size of a bless
 or curse. Open it in any text editor, change a number, save, and start
 the game again. Each line reads `name = number`, with a note after `#`.
@@ -256,10 +276,15 @@ the game again. Each line reads `name = number`, with a note after `#`.
 - **Floating island:** a noise-based island with hills, lakes and a rocky
   underside, hanging in the sky with smaller islands drifting around it.
   Two rivers rise at a spring and pour over the edge as waterfalls.
-- **Surreal buildings:** the tall house with its striped chimney hat, the
+- **Surreal buildings:** treehouse Homes joined by rope bridges, the
   crystal tower, the moon tower, the mushroom house, the singing rocks,
-  the store-in-a-tree and the winged windmill. Your villagers build more
-  from the build menu.
+  the store-in-a-tree, the winged windmill and the skull-topped
+  Necromancer tower. Your villagers build more from the build menu.
+- **Goblin buildings:** every 5 minutes the goblins start a building of
+  their own near a cave: a tent, war hut, forge, potion hut or
+  watchtower of planks, rags and bones. A few goblins build it, going
+  back to the cave for what they need. They have no use yet; a fireball
+  or the creature's feet knock them down.
 - **Villagers and goblins:** villagers wander their villages; goblins
   loiter around a cave and their huts, far from the villages, until the
   midnight raid. Both catch fire and get flung by explosions; the
@@ -301,10 +326,11 @@ scripts/
   game/play_mode.gd        The game: start choice, spells, building placement, dev tools
   game/player_village.gd   Resources, villager jobs, carrying, births, housing, food,
                            training warriors and wizards
-  game/construction_site.gd  A building the villagers are putting up
+  game/construction_site.gd  A building going up (the villagers', or the goblins')
+  world/rope_bridge.gd       A rope bridge between two treehouse Homes, and the way over it
   game/building_catalog.gd   Build menu: names, costs and what each building is for
   game/crop_field.gd       A wheat field: sowing, growing, reaping
-  game/goblin_raids.gd     Goblins spawning at the caves, and the midnight raid
+  game/goblin_raids.gd     Goblins spawning at the caves, the midnight raid, and what the goblins build
   game/spell_book.gd       Spells: costs and cooldowns
   editor/editor_mode.gd    The map editor's tools and saving
   world/terrain.gd         Island heightmap (any map size), land mask and rock skirt, water

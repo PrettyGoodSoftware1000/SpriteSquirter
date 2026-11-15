@@ -2,9 +2,9 @@ class_name ResourceIcon
 extends Control
 ## A small resource icon drawn with vector shapes, so it stays sharp at any
 ## UI scale: a log (lumber), a stone, an ear of wheat (food), a blue droplet
-## (magicko) or a little person (people).
+## (magicko), a bone (bones) or a little person (people).
 
-const KINDS := ["lumber", "stone", "food", "magicko", "people"]
+const KINDS := ["lumber", "stone", "food", "bones", "magicko", "people"]
 const INK := Color(0.08, 0.06, 0.05)
 
 var kind := "lumber"
@@ -25,7 +25,7 @@ static func cost_row(cost: Dictionary, font_size := 14) -> HBoxContainer:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 3)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for res in ["lumber", "stone", "food", "magicko"]:
+	for res in ["lumber", "stone", "food", "bones", "magicko"]:
 		if not cost.has(res):
 			continue
 		if row.get_child_count() > 0:
@@ -65,6 +65,14 @@ func _draw() -> void:
 				_grain(p.call(0.37, y), -0.6, s)
 				_grain(p.call(0.63, y), 0.6, s)
 			_grain(p.call(0.5, 0.15), 0.0, s)
+		"bones":
+			# A bone lying slantwise, with a pair of knobs at each end.
+			var bone := Color(0.95, 0.92, 0.8)
+			for end: Vector2 in [Vector2(0.24, 0.76), Vector2(0.76, 0.24)]:
+				_disc(p.call(end.x - 0.07, end.y - 0.07), s * 0.12, bone)
+				_disc(p.call(end.x + 0.07, end.y + 0.07), s * 0.12, bone)
+			draw_line(p.call(0.26, 0.74), p.call(0.74, 0.26), INK, s * 0.2 + maxf(2.0, s * 0.06), true)
+			draw_line(p.call(0.24, 0.76), p.call(0.76, 0.24), bone, s * 0.2, true)
 		"magicko":
 			# A drop of water: a round bottom joined to a point by its tangents.
 			var centre := Vector2(0.5, 0.62)

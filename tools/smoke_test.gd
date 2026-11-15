@@ -69,8 +69,10 @@ func _run() -> void:
 	field.setup(Vector2(8, 8))
 	field.position = village.center + Vector3(0, 0, 14)
 	game.world_root.add_child(field)
-	await _wait(120.0)
+	# (Checked after a minute: in two the field can be reaped and under the plough again.)
+	await _wait(60.0)
 	_check(field.stage != CropField.Stage.SOWING or field.progress > 0.3, "villagers sow the field (stage %d, %.2f)" % [field.stage, field.progress])
+	await _wait(60.0)
 	var jobs := {}
 	for v in village.people():
 		jobs[v.job] = jobs.get(v.job, 0) + 1
@@ -83,13 +85,18 @@ func _run() -> void:
 	_check(spot != Vector3.INF, "found a free building spot")
 	if spot != Vector3.INF:
 		var site := ConstructionSite.new()
-		site.setup("tall_house", 1234, {})
+		var home_cost: Dictionary = BuildingCatalog.find("treehouse").cost
+		site.setup("treehouse", 1234, home_cost)
+		_check(home_cost.lumber == roundi(Balance.num("cost_home_lumber")) and home_cost.stone == roundi(Balance.num("cost_home_stone")),
+			"building costs come from balancing.txt")
+		_check(is_equal_approx(site.work_needed, (home_cost.lumber + home_cost.stone) * Balance.num("build_work_per_resource")),
+			"building time is in proportion to the cost (%d villager-seconds for a Home)" % int(site.work_needed))
 		game.world_root.add_child(site)
 		site.global_position = spot
 		var built := [false]
 		site.completed.connect(func(_b: Destructible) -> void: built[0] = true)
 		var adults := village.adults()
-		var expected := ConstructionSite.VILLAGER_SECONDS / maxf(adults, 1.0)
+		var expected := site.work_needed / maxf(adults, 1.0)
 		await _wait(minf(expected * 2.5 + 20.0, 240.0))
 		_check(built[0], "the villagers finish a building (%d adults, ~%d s expected)" % [adults, int(expected)])
 
@@ -190,7 +197,10 @@ func _run() -> void:
 	_check(play.raids.spawn_rate() > rate, "goblins spawn faster every night")
 	var before_goblins := get_tree().get_nodes_in_group("goblins").size()
 	game.settings.goblin_rate = 12.0
+	# (The creature holds still, so it eats none of them meanwhile.)
+	play.creature.process_mode = Node.PROCESS_MODE_DISABLED
 	await _wait(11.0)
+	play.creature.process_mode = Node.PROCESS_MODE_INHERIT
 	game.settings.goblin_rate = Game.DEFAULT_SETTINGS.goblin_rate
 	_check(get_tree().get_nodes_in_group("goblins").size() > before_goblins, "caves keep spawning goblins")
 
@@ -234,12 +244,15 @@ func _run() -> void:
 	if dry != Vector3.INF and terrain.water_depth(dry.x, dry.z) == 0.0:
 		Explosion.detonate(dry, Fireball.BLAST_RADIUS)
 		await _wait(1.0)
+		# (The fires it starts are put out, so they do not creep into the village.)
+		_put_out_fires()
 		var k := roundi(dry.z + Terrain.HALF) * Terrain.N + roundi(dry.x + Terrain.HALF)
 		_check(terrain.water_depth(dry.x, dry.z) == 0.0 and terrain.rock[k] > 0.5, "a crater away from water is dry stone")
 
 	# One ogre joins the raid for every 15 goblins.
 	var cave := get_tree().get_nodes_in_group("caves")[0] as Node3D
-	while get_tree().get_nodes_in_group("goblins").size() < GoblinRaids.GOBLINS_PER_OGRE:
+	# (Counting only the goblins: an ogre may be left from an earlier night.)
+	while get_tree().get_nodes_in_group("goblins").size() - get_tree().get_nodes_in_group("ogres").size() < GoblinRaids.GOBLINS_PER_OGRE:
 		play.raids.spawn_at(cave)
 	play.raids.start_raid()
 	var ogres := get_tree().get_nodes_in_group("ogres")
@@ -308,7 +321,8 @@ func _run() -> void:
 		and is_equal_approx(village.tool_bonus("stone"), 2.0) and is_equal_approx(village.tool_bonus("lumber"), 2.0), "swords and tools researched")
 	village.set_wanted("archer", 1)
 	await _wait(PlayerVillage.ARCHER_SECONDS + 45.0)
-	_check(village.archers() == 1, "an archer is trained (%d)" % village.archers())
+	_check(village.archers() == 1, "an archer is trained (%d; wanted %s, allowed %d, training %s, raiders %d, workers %d)" % [village.archers(),
+		village.wanted, village.max_count("archer"), village.training_progress("archer"), get_tree().get_nodes_in_group("raiders").size(), village.workers()])
 	village.set_wanted("warrior", 1)
 	await _wait(PlayerVillage.WARRIOR_SECONDS + 45.0)
 	var sharp := get_tree().get_nodes_in_group("soldiers")
@@ -320,6 +334,117 @@ func _run() -> void:
 	_check(village.gatherers.stone == miners_before + 1 and village.quota.stone == miners_before + 1,
 		"one more miner is set to work at once (%d -> %d)" % [miners_before, village.gatherers.stone])
 	village.change_quota("stone", -1)
+
+	# Treehouse Homes, and a rope bridge between two of them.
+	var homes: Array[Destructible] = []
+	for k in 2:
+		var home := BuildingFactory.create("treehouse", RandomNumberGenerator.new())
+		game.world_root.add_child(home)
+		var hp := village.center + Vector3(14.0 + 18.0 * k, 0, 14)
+		home.global_position = Vector3(hp.x, terrain.get_height(hp.x, hp.z), hp.z)
+		home.rotation.y = 1.0 + k
+		home.add_to_group("player_buildings")
+		homes.append(home)
+	_check(BuildingCatalog.housing("treehouse") == 6 and homes[0].has_meta("deck_h"), "Homes are treehouses with a deck")
+	village.give("lumber", 100.0)
+	play._start_placing("bridge")
+	play._cursor_hit = homes[0].global_position
+	play._bridge_click()
+	play._cursor_hit = homes[1].global_position
+	var lumber_before := village.amount("lumber")
+	play._bridge_click()
+	var bridge_site: ConstructionSite = null
+	for node in get_tree().get_nodes_in_group("construction_sites"):
+		if (node as ConstructionSite).kind == "bridge":
+			bridge_site = node
+	_check(bridge_site != null and village.amount("lumber") < lumber_before, "the player marks out a rope bridge between two Homes")
+	if bridge_site:
+		_check(is_equal_approx(bridge_site.work_needed, (lumber_before - village.amount("lumber")) * Balance.num("build_work_per_resource")),
+			"a bridge's building time follows its length")
+		bridge_site.add_work(bridge_site.work_needed)
+		await _wait(0.5)
+		var bridges := get_tree().get_nodes_in_group("bridges")
+		_check(bridges.size() == 1 and (bridges[0] as RopeBridge).usable(), "the bridge is built")
+		var walker: Villager = null
+		for v in village.people():
+			if v.can_work():
+				walker = v
+		var far_foot := RopeBridge.ladder_foot(homes[1])
+		walker.global_position = RopeBridge.ladder_foot(homes[0]) + Vector3(1, 0, 1)
+		walker._cross_cool = 0.0
+		walker.state = Villager.State.IDLE
+		var went := walker._try_bridge(far_foot)
+		var highest := 0.0
+		for k in 60:
+			await _wait(1.0)
+			if not is_instance_valid(walker) or walker.state != Villager.State.CROSS:
+				break
+			highest = maxf(highest, walker.global_position.y - terrain.get_height(walker.global_position.x, walker.global_position.z))
+		_check(went and highest > 3.0 and is_instance_valid(walker) and walker.global_position.distance_to(far_foot) < 12.0,
+			"a villager climbs up, walks over the bridge and comes down the other side (%.1f m up)" % highest)
+		_check(play._bridge_problem(homes[0], homes[1]) != "", "two Homes take only one bridge")
+
+	# Bones, necromancers and skeletons.
+	var bones_before := village.amount("bones")
+	var corpse := WorldPopulator.spawn_villager(game.world_root, terrain, village.center + Vector3(-6, 0, 14), 1.0, true)
+	corpse.take_hit(999.0, null)
+	var bones_gained := village.amount("bones") - bones_before
+	_check(bones_gained >= 2 and bones_gained <= 4 and corpse.is_in_group("corpses"), "a dead goblin leaves 2-4 bones (%d)" % bones_gained)
+	var necro_tower := BuildingFactory.create("necro_tower", RandomNumberGenerator.new())
+	game.world_root.add_child(necro_tower)
+	necro_tower.global_position = village.center + Vector3(-10, 0, 20)
+	necro_tower.add_to_group("player_buildings")
+	_check(village.max_count("necromancer") == 2 and is_equal_approx(village.train_seconds("necromancer"), 300.0),
+		"a Necromancer tower trains 2 necromancers, 5 minutes each")
+	Balance.values["necromancer_training_seconds"] = 15.0
+	village.set_wanted("wizard", 1)
+	if village.wizards() == 0:
+		for v in village.people():
+			if v.can_work():
+				v.become_wizard(necro_tower.global_position)
+				break
+	village.set_wanted("necromancer", 1)
+	await _wait(60.0)
+	var necros := get_tree().get_nodes_in_group("necromancers")
+	_check(necros.size() == 1, "a wizard becomes a necromancer (%d)" % necros.size())
+	Balance.values["necromancer_training_seconds"] = 300.0
+	if not necros.is_empty():
+		var necro := necros[0] as Villager
+		var body := WorldPopulator.spawn_villager(game.world_root, terrain, necro.global_position + Vector3(4, 0, 3), 1.0, true)
+		await _wait(0.2)
+		body.take_hit(999.0, null)
+		village.give("bones", 10.0)
+		bones_before = village.amount("bones")
+		await _wait(12.0)
+		var skeletons := get_tree().get_nodes_in_group("skeletons")
+		_check(skeletons.size() == 1 and village.amount("bones") <= bones_before - roundi(Balance.num("raise_bones")) + 4,
+			"the necromancer raises a skeleton from the dead (%d)" % skeletons.size())
+		if not skeletons.is_empty():
+			var bony := skeletons[0] as Villager
+			_check(is_equal_approx(bony.max_hp, Balance.num("goblin_health") * 0.5) and is_equal_approx(bony.damage, Balance.num("goblin_damage") * 0.5),
+				"a skeleton has half the health and damage of who it was")
+			_check(not bony.is_in_group("people") and bony._expires > game.now + 100.0 and bony._expires <= game.now + 180.0, "it lasts 3 minutes and is not a villager")
+			bony._expires = game.now + 0.5
+			await _wait(1.5)
+			_check(not is_instance_valid(bony) or not bony.is_alive(), "and then it crumbles")
+	village.set_wanted("necromancer", 0)
+	village.set_wanted("wizard", 0)
+
+	# The goblins build.
+	_check(is_equal_approx(Balance.num("goblin_build_minutes"), 5.0), "the goblins start a building every 5 minutes")
+	var goblin_site := play.raids.start_building()
+	_check(goblin_site != null and goblin_site.goblin and goblin_site.is_in_group("goblin_sites"), "the goblins mark out a building near their cave")
+	if goblin_site:
+		await _wait(40.0)
+		_check(goblin_site.progress > 0.0, "goblins work on it (%.0f%%)" % (goblin_site.progress * 100.0))
+		goblin_site.add_work(goblin_site.work_needed)
+		await _wait(0.5)
+		_check(get_tree().get_nodes_in_group("goblin_buildings").size() == 1 and get_tree().get_nodes_in_group("player_buildings").filter(
+			func(n: Node) -> bool: return n.is_in_group("goblin_buildings")).is_empty(), "and it becomes a goblin building")
+	for kind: String in BuildingFactory.GOBLIN_KINDS:
+		var shack := BuildingFactory.create(kind, RandomNumberGenerator.new())
+		_check(shack.height > 2.0 and BuildingCatalog.find(kind).name != "", "%s builds" % kind)
+		shack.free()
 
 	# The creature learns by watching, and is blessed and cursed.
 	var mind := beast.mind
@@ -350,6 +475,7 @@ func _run() -> void:
 	var bystander := village.people()[0]
 	bystander.hp = bystander.max_hp
 	Explosion.detonate(bystander.global_position, Fireball.BLAST_RADIUS, Balance.num("creature_friendly_fire"))
+	_put_out_fires()
 	_check(bystander.is_alive() and bystander.hp < bystander.max_hp, "the creature's fireball does a tenth of the harm to villagers (%.0f of %.0f left)" % [bystander.hp, bystander.max_hp])
 	# Fetching a tree once it knows how.
 	await _wait(maxf(0.0, Balance.num("creature_knockout_seconds") - 150.0) + 2.0)
@@ -488,10 +614,16 @@ func _free_spot(play: PlayMode, center: Vector3) -> Vector3:
 			var a := TAU * k / 16.0
 			var p := center + Vector3(cos(a) * ring, 0, sin(a) * ring)
 			p.y = Game.terrain.get_height(p.x, p.z)
-			play._place_kind = "tall_house"
+			play._place_kind = "treehouse"
 			if play._placement_problem(p, 4.0) == "":
 				return p
 	return Vector3.INF
+
+
+func _put_out_fires() -> void:
+	Game.fire.extinguish_in(Vector3.ZERO, 2000.0)
+	for node in get_tree().get_nodes_in_group("destructibles"):
+		(node as Destructible).extinguish()
 
 
 ## A dry sample right beside water, on the island.

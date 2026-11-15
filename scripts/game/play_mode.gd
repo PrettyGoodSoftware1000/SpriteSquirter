@@ -5,13 +5,14 @@ extends Node3D
 ## building orders and tortoise moves, while the PlayerVillage gathers,
 ## builds and grows and the DayCycle turns day into night.
 
-enum Mode { COMMAND, SPELL, PLACE, SCULPT, FIELD }
+enum Mode { COMMAND, SPELL, PLACE, SCULPT, FIELD, BRIDGE }
 
 const BRUSH_MIN := 3.0
 const BRUSH_MAX := 30.0
 const ROTATE_STEP := PI / 8.0
 ## How close the cursor must be to a start banner to pick it.
 const PICK_RADIUS := 9.0
+const BRIDGE_HINT := "Click a Home, then a second Home, to hang a rope bridge between them.  Right-click or Esc to stop."
 const FIELD_HINT := "Hold the left mouse button and drag to draw the field, then let go. Villagers sow and reap it.  Shift keeps drawing,  right-click or Esc to stop."
 
 var mode: Mode = Mode.COMMAND
@@ -55,6 +56,10 @@ var _field_center := Vector3.ZERO
 var _field_size := Vector2.ZERO
 var _field_problem_text := ""
 var _prompt_timer := 0.0
+## Hanging a rope bridge: the Home clicked first, and the one under the cursor.
+var _bridge_from: Destructible
+var _bridge_hover: Destructible
+var _bridge_problem_text := ""
 
 
 ## `info` comes from Main: name, starts, caves and whether it is a saved map.
@@ -177,7 +182,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if button.button_index == MOUSE_BUTTON_LEFT:
 			_on_left_click()
 		elif button.button_index == MOUSE_BUTTON_RIGHT:
-			if mode == Mode.PLACE or mode == Mode.SPELL or mode == Mode.FIELD:
+			if mode == Mode.PLACE or mode == Mode.SPELL or mode == Mode.FIELD or mode == Mode.BRIDGE:
 				_set_mode(Mode.COMMAND)
 			elif _cursor_hit != null and not _choosing:
 				_command_move(_cursor_hit)
@@ -205,7 +210,7 @@ func _on_key(key: InputEventKey) -> void:
 		return
 	var number := code - KEY_1
 	if hud.is_build_menu_open():
-		if number >= 0 and number < BuildingCatalog.BUILDINGS.size():
+		if number >= 0 and number < mini(9, BuildingCatalog.BUILDINGS.size()):
 			_start_placing(BuildingCatalog.BUILDINGS[number].kind)
 			return
 	elif number >= 0 and number < SpellBook.SPELLS.size():
@@ -309,6 +314,7 @@ func _set_mode(m: Mode) -> void:
 	mode = m
 	_painting = false
 	_field_dragging = false
+	_bridge_from = null
 	if m != Mode.SPELL:
 		spell_index = -1
 	if m != Mode.PLACE and _ghost != null:
@@ -328,6 +334,8 @@ func _set_mode(m: Mode) -> void:
 			hud.set_hint("Hold left mouse to %s the ground.  [ ] change brush size." % Hud.SCULPT_NAMES[sculpt_brush].to_lower())
 		Mode.FIELD:
 			hud.set_hint(FIELD_HINT)
+		Mode.BRIDGE:
+			hud.set_hint(BRIDGE_HINT)
 
 
 func _place_hint() -> String:
@@ -408,6 +416,8 @@ func _on_left_click() -> void:
 			_flatten_height = (_cursor_hit as Vector3).y
 		Mode.PLACE:
 			_place_building(Input.is_key_pressed(KEY_SHIFT))
+		Mode.BRIDGE:
+			_bridge_click()
 		Mode.FIELD:
 			_field_dragging = true
 			_field_from = _cursor_hit
@@ -483,6 +493,9 @@ func _start_placing(kind: String) -> void:
 	if kind == "field":
 		_set_mode(Mode.FIELD)
 		return
+	if kind == "bridge":
+		_set_mode(Mode.BRIDGE)
+		return
 	_place_kind = kind
 	_place_seed = _rng.randi()
 	_set_mode(Mode.PLACE)
@@ -522,12 +535,19 @@ func _placement_problem(p: Vector3, footprint: float) -> String:
 		return "Buildings need dry land."
 	if not village.in_territory(p):
 		return "Too far from your village."
-	for group in ["buildings", "construction_sites"]:
+	for group in ["buildings", "construction_sites", "goblin_sites"]:
 		for node in get_tree().get_nodes_in_group(group):
 			var b := node as Node3D
+			if b.get("kind") == "bridge":
+				continue
 			var other: float = b.get("footprint")
 			if Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < other + footprint + 1.0:
 				return "Too close to another building."
+	for node in get_tree().get_nodes_in_group("bridges"):
+		var bridge := node as RopeBridge
+		var along := bridge.global_transform.affine_inverse() * p
+		if absf(along.x) < bridge.length * 0.5 and absf(along.z) < footprint + 1.0:
+			return "There is a rope bridge overhead."
 	for node in get_tree().get_nodes_in_group("caves"):
 		var c := node as Node3D
 		if Vector2(c.global_position.x - p.x, c.global_position.z - p.z).length() < 14.0 + footprint:
@@ -569,6 +589,90 @@ func _place_building(keep_placing: bool) -> void:
 	if keep_placing and village.can_afford(info.cost):
 		_place_seed = _rng.randi()
 		_make_ghost()
+	else:
+		_set_mode(Mode.COMMAND)
+
+
+# --- Rope bridges -----------------------------------------------------------------
+
+## The treehouse Home of the village under the cursor, if any.
+func _home_at(p: Vector3) -> Destructible:
+	var best: Destructible = null
+	var best_d := INF
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if not b.has_meta("deck_h") or b.destroyed:
+			continue
+		var d := Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length()
+		if d < b.footprint + 2.5 and d < best_d:
+			best_d = d
+			best = b
+	return best
+
+
+## How long a bridge between two Homes would be.
+func _bridge_length(a: Destructible, b: Destructible) -> float:
+	var ea := RopeBridge.deck_edge(a, b.global_position)
+	var eb := RopeBridge.deck_edge(b, a.global_position)
+	return Vector2(eb.x - ea.x, eb.z - ea.z).length()
+
+
+## Why a bridge can't join these two Homes, or "" if it can.
+func _bridge_problem(a: Destructible, b: Destructible) -> String:
+	if a == b:
+		return "Pick a different Home for the other end."
+	var centres := Vector2(b.global_position.x - a.global_position.x, b.global_position.z - a.global_position.z).length()
+	var length := _bridge_length(a, b)
+	if centres < 9.5:
+		return "Those two Homes are too close together for a bridge."
+	if length > Balance.num("bridge_max_length"):
+		return "Too far: a rope bridge reaches %d m and that is %d m." % [roundi(Balance.num("bridge_max_length")), roundi(length)]
+	for node in get_tree().get_nodes_in_group("bridges"):
+		if (node as RopeBridge).joins(a, b):
+			return "Those two Homes already have a bridge."
+	for node in get_tree().get_nodes_in_group("construction_sites"):
+		var site := node as ConstructionSite
+		if site.kind == "bridge" and ((site.ends[0] == a and site.ends[1] == b) or (site.ends[0] == b and site.ends[1] == a)):
+			return "Those two Homes already have a bridge."
+	var short := village.shortfall(BuildingCatalog.bridge_cost(length))
+	if short != "":
+		return "Need %s more." % short
+	return ""
+
+
+func _bridge_click() -> void:
+	var home := _home_at(_cursor_hit)
+	if home == null:
+		hud.set_hint("Click one of your treehouse Homes (a finished one).")
+		return
+	if _bridge_from == null or not is_instance_valid(_bridge_from):
+		_bridge_from = home
+		hud.set_hint("Now click the Home at the other end.")
+		return
+	var problem := _bridge_problem(_bridge_from, home)
+	if problem != "":
+		hud.set_hint(problem)
+		return
+	var a := _bridge_from
+	var ea := RopeBridge.deck_edge(a, home.global_position)
+	var eb := RopeBridge.deck_edge(home, a.global_position)
+	var length := Vector2(eb.x - ea.x, eb.z - ea.z).length()
+	var cost := BuildingCatalog.bridge_cost(length)
+	if not village.spend(cost):
+		return
+	var base := minf(a.global_position.y, home.global_position.y)
+	var site := ConstructionSite.new()
+	site.spec = {"length": length, "ya": ea.y - base, "yb": eb.y - base}
+	site.ends = [a, home]
+	site.setup("bridge", 0, cost)
+	Game.world_root.add_child(site)
+	site.global_position = Vector3((ea.x + eb.x) * 0.5, base, (ea.z + eb.z) * 0.5)
+	# The bridge is modelled along its own X axis, from the first Home.
+	site.rotation.y = atan2(-(eb.z - ea.z), eb.x - ea.x)
+	if Input.is_key_pressed(KEY_SHIFT):
+		# Carry on from the second Home.
+		_bridge_from = home
+		hud.set_hint("Bridge marked out. Click the next Home to carry on from here.")
 	else:
 		_set_mode(Mode.COMMAND)
 
@@ -701,6 +805,23 @@ func _update_ring() -> void:
 			Color(0.4, 1.0, 0.5) if _field_problem_text == "" else Color(1.0, 0.35, 0.3))
 	elif mode == Mode.FIELD:
 		_ring.draw(c, [0.6], Color(0.4, 1.0, 0.5))
+	elif mode == Mode.BRIDGE:
+		_bridge_hover = _home_at(c)
+		var from_ok := _bridge_from != null and is_instance_valid(_bridge_from)
+		if from_ok and _bridge_hover != null and _bridge_hover != _bridge_from:
+			# A strip on the ground under where the bridge would hang.
+			_bridge_problem_text = _bridge_problem(_bridge_from, _bridge_hover)
+			var ea := RopeBridge.deck_edge(_bridge_from, _bridge_hover.global_position)
+			var eb := RopeBridge.deck_edge(_bridge_hover, _bridge_from.global_position)
+			var side := (eb - ea).cross(Vector3.UP).normalized() * 0.7
+			_ring.draw_loop(PackedVector3Array([ea - side, eb - side, eb + side, ea + side]),
+				Color(0.4, 1.0, 0.5) if _bridge_problem_text == "" else Color(1.0, 0.35, 0.3))
+		elif _bridge_hover != null:
+			_ring.draw(_bridge_hover.global_position, [_bridge_hover.footprint + 0.5], Color(0.4, 1.0, 0.5))
+		elif from_ok:
+			_ring.draw(_bridge_from.global_position, [_bridge_from.footprint + 0.5], Color(1.0, 0.9, 0.3))
+		else:
+			_ring.draw(c, [0.6], Color(0.4, 1.0, 0.5))
 	else:
 		_ring.clear()
 
@@ -717,6 +838,10 @@ func _update_ui() -> void:
 		var cost: int = CropField.cost_for(_field_size).lumber
 		hud.set_hint("Field %d x %d m: %d lumber.  %s" % [roundi(_field_size.x), roundi(_field_size.y), cost,
 			_field_problem_text if _field_problem_text != "" else "Let go to plant it."])
+	if mode == Mode.BRIDGE and _bridge_from != null and is_instance_valid(_bridge_from) and _bridge_hover != null and _bridge_hover != _bridge_from:
+		var length := _bridge_length(_bridge_from, _bridge_hover)
+		hud.set_hint("Rope bridge %d m: %d lumber.  %s" % [roundi(length), BuildingCatalog.bridge_cost(length).lumber,
+			_bridge_problem_text if _bridge_problem_text != "" else "Click to hang it.  Shift+click carries on from there."])
 	if mode == Mode.PLACE and _ghost != null and _cursor_hit != null:
 		hud.set_hint(_place_hint() if _ghost_valid else _ghost_problem + "  R rotate,  T another look,  Esc cancel.")
 	if Game.dev_menu:

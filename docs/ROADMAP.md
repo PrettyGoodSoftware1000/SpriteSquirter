@@ -66,6 +66,12 @@ stage.
 - balancing.txt for health, damage, knowledge and cooldowns
 - Free first Storehouse; gatherer counts the player can set; Esc pauses; version number on the menu
 
+## Version 0.11: Treehouses, bones and goblin builders ✅
+- Homes are treehouses; the player hangs rope bridges between them and villagers walk over
+- Bones from the dead; Necromancer tower; necromancers raise skeleton warriors and archers
+- Building costs in balancing.txt; building time in proportion to the cost
+- Goblins put up their own buildings near the caves every 5 minutes
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

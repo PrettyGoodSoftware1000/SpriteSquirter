@@ -29,7 +29,7 @@ signal research_selected(id: String)
 const SCULPT_NAMES := ["Raise", "Lower", "Flatten", "Smooth"]
 const RESOURCE_COLORS := {
 	"lumber": Color(0.95, 0.7, 0.42), "stone": Color(0.8, 0.82, 0.86), "food": Color(0.7, 0.92, 0.4),
-	"people": Color(1.0, 0.95, 0.85), "magicko": Color(0.8, 0.6, 1.0),
+	"people": Color(1.0, 0.95, 0.85), "magicko": Color(0.8, 0.6, 1.0), "bones": Color(0.95, 0.92, 0.8),
 }
 ## key, label, min, max, step, unit
 const SETTING_SLIDERS := [
@@ -50,6 +50,7 @@ const ROLES := {
 	"warrior": ["Warriors", "Town guard"],
 	"archer": ["Archers", "Town guard"],
 	"wizard": ["Wizards", "Singing rocks"],
+	"necromancer": ["Necromancers", "Necromancer tower"],
 }
 
 var _hint: Label
@@ -156,7 +157,7 @@ func _build_resource_bar(root: Control) -> void:
 	row.add_theme_constant_override("separation", 22)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(row)
-	for key in ["lumber", "stone", "food", "people", "magicko"]:
+	for key in ["lumber", "stone", "food", "bones", "people", "magicko"]:
 		var item := HBoxContainer.new()
 		item.add_theme_constant_override("separation", 6)
 		item.tooltip_text = key.capitalize()
@@ -315,7 +316,8 @@ func _build_build_menu(root: Control) -> void:
 		var info: Dictionary = BuildingCatalog.BUILDINGS[k]
 		var b := _button("")
 		b.custom_minimum_size = Vector2(250, 84)
-		var lines: Array[Control] = [_text("%d  %s" % [k + 1, info.name], 16), _text(info.desc, 13)]
+		var title: String = "%d  %s" % [k + 1, info.name] if k < 9 else info.name
+		var lines: Array[Control] = [_text(title, 16), _text(info.desc, 13)]
 		if not (info.cost as Dictionary).is_empty():
 			lines.append(ResourceIcon.cost_row(info.cost, 14))
 		b.add_child(_stacked(lines))
@@ -324,7 +326,7 @@ func _build_build_menu(root: Control) -> void:
 		grid.add_child(b)
 		_build_buttons[kind] = b
 	var note := Label.new()
-	note.text = "Villagers build it: all your workers help, and 10 villagers take one minute.\nWith no Storehouse, villagers carry what they gather to the middle of the village."
+	note.text = "Villagers build it: all your workers help. The more a building costs, the longer it takes (a Home: under a minute for 10 villagers).\nWith no Storehouse, villagers carry what they gather to the middle of the village."
 	note.add_theme_font_size_override("font_size", 13)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
@@ -614,8 +616,11 @@ func _update_jobs(village: PlayerVillage) -> void:
 		var want: int = village.wanted[role]
 		(w.count as Label).text = "%d/%d" % [village.count(role), want]
 		(w.count as Label).tooltip_text = "Trained / wanted. Up to %d with your %s buildings." % [top, ROLES[role][1]]
-		# Archers appear once bows have been researched.
+		# Archers appear once bows have been researched, and necromancers
+		# once there is a tower for them.
 		var known := role != "archer" or village.has_research("bows")
+		if role == "necromancer":
+			known = top > 0 or village.count(role) > 0
 		for part: String in ["count", "less", "more", "label"]:
 			(w[part] as Control).visible = known
 		(w.more as Button).disabled = want >= top

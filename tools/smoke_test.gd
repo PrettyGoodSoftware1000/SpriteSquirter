@@ -27,6 +27,10 @@ func _run() -> void:
 	# checks see the full-grown creature and the food they expect.
 	game.settings.creature_grow_minutes = 0.1
 	game.settings.creature_food = 0.0
+	# The creature learns nothing until its own checks, so it does not start
+	# fetching food or casting spells in the middle of the others.
+	for id: String in CreatureMind.SPELLS + CreatureMind.HARVESTS:
+		Balance.values["knowledge_" + id] = 1.0e9
 
 	# 1. The menu.
 	await _open(game, "menu", "", 384)
@@ -46,6 +50,17 @@ func _run() -> void:
 	var first_people := village.population()
 	_check(first_people > 5, "village site villagers join the player (%d)" % first_people)
 	_check(not get_tree().get_nodes_in_group("player_buildings").is_empty(), "village site buildings join the player")
+	var free_store := false
+	for b in get_tree().get_nodes_in_group("player_buildings"):
+		if b.get_meta("kind", "") == "store" and (b as Node3D).global_position.distance_to(village.center) < 45.0:
+			free_store = true
+	_check(free_store, "a free Storehouse stands at the start location")
+	_check(Balance.values.size() == Balance.DEFAULTS.size() and FileAccess.file_exists(Balance.PATH), "balancing.txt is read")
+	_check(str(ProjectSettings.get_setting("application/config/version", "")) != "", "the game has a version number")
+	play.pause_menu.open()
+	_check(get_tree().paused, "Esc's pause menu stops the game")
+	play.pause_menu.close()
+	_check(not get_tree().paused, "and lets it go again")
 	var before: Dictionary = village.resources.duplicate()
 	_check(not get_tree().get_nodes_in_group("rocks").is_empty(), "boulder fields placed (%d boulders)" % get_tree().get_nodes_in_group("rocks").size())
 	_check(is_equal_approx(1.0 - DayCycle.NIGHT_START, DayCycle.NIGHT_START * 0.5), "night is half as long as day")
@@ -99,7 +114,7 @@ func _run() -> void:
 	_check(soldiers.size() == 1, "the first warrior is trained (%d)" % soldiers.size())
 	if not soldiers.is_empty():
 		var s := soldiers[0] as Villager
-		_check(is_equal_approx(s.max_hp, Villager.HEALTH * 4.0) and is_equal_approx(s.damage, Villager.ATTACK_DAMAGE * 2.0), "soldiers have 4x health and 2x damage")
+		_check(is_equal_approx(s.max_hp, Balance.num("warrior_health")) and is_equal_approx(s.damage, Balance.num("warrior_damage")), "soldiers have 4x health and 2x damage")
 	var eating := village.food_upkeep()
 	_check(eating >= village.population() + 2.0, "a warrior eats 3 food a minute (village eats %.0f/min)" % eating)
 	village.set_wanted("warrior", 0)
@@ -128,7 +143,7 @@ func _run() -> void:
 	var goblins := get_tree().get_nodes_in_group("goblins")
 	_check(not goblins.is_empty(), "goblins live at the cave (%d)" % goblins.size())
 	var first := goblins[0] as Villager
-	_check(is_equal_approx(first.max_hp, Villager.HEALTH) and is_equal_approx(first.damage, Villager.ATTACK_DAMAGE), "goblins match grown-up villagers")
+	_check(is_equal_approx(first.max_hp, Balance.num("goblin_health")) and is_equal_approx(first.damage, Balance.num("goblin_damage")), "goblins match grown-up villagers")
 	var roots := RootPatch.new()
 	game.world_root.add_child(roots)
 	var person: Villager = village.people()[0]
@@ -233,7 +248,7 @@ func _run() -> void:
 	_check(ogres.size() == expected_ogres and ogres.size() >= 1, "an ogre joins the raid for every 15 goblins (%d)" % ogres.size())
 	if not ogres.is_empty():
 		var ogre := ogres[0] as Villager
-		_check(is_equal_approx(ogre.max_hp, Villager.HEALTH * 10.0) and is_equal_approx(ogre.damage, Villager.ATTACK_DAMAGE * 3.0),
+		_check(is_equal_approx(ogre.max_hp, Balance.num("ogre_health")) and is_equal_approx(ogre.damage, Balance.num("ogre_damage")),
 			"the ogre has 10x health and 3x damage")
 	await _wait(15.0)
 	play.raids.end_raid()
@@ -260,7 +275,7 @@ func _run() -> void:
 	_check(is_equal_approx(village.creature_upkeep(), 20.0), "a full-grown creature eats 20 food a minute")
 	game.settings.creature_food = 0.0
 	_check(is_equal_approx(Creature.SPECIES.tiger.speed, Creature.SPECIES.tortoise.speed * 1.3)
-		and is_equal_approx(Creature.SPECIES.tortoise.hp, Creature.SPECIES.tiger.hp * 2.0), "the tiger is 30% faster, the tortoise has twice the health")
+		and is_equal_approx(Balance.num("tortoise_health"), Balance.num("tiger_health") * 2.0), "the tiger is 30% faster, the tortoise has twice the health")
 	beast.take_hit(beast.max_hp * 2.0, null)
 	_check(beast.knocked_out, "the creature is knocked out at no health")
 
@@ -297,8 +312,59 @@ func _run() -> void:
 	village.set_wanted("warrior", 1)
 	await _wait(PlayerVillage.WARRIOR_SECONDS + 45.0)
 	var sharp := get_tree().get_nodes_in_group("soldiers")
-	_check(not sharp.is_empty() and is_equal_approx((sharp[0] as Villager).damage, Villager.ATTACK_DAMAGE * 2.0 * Research.SWORD_BONUS),
+	_check(not sharp.is_empty() and is_equal_approx((sharp[0] as Villager).damage, Balance.num("warrior_damage") * Balance.num("sharper_swords_bonus")),
 		"warriors hit harder with sharper swords")
+	# The player sets one more miner: it switches at once.
+	var miners_before: int = village.gatherers.stone
+	village.change_quota("stone", 1)
+	_check(village.gatherers.stone == miners_before + 1 and village.quota.stone == miners_before + 1,
+		"one more miner is set to work at once (%d -> %d)" % [miners_before, village.gatherers.stone])
+	village.change_quota("stone", -1)
+
+	# The creature learns by watching, and is blessed and cursed.
+	var mind := beast.mind
+	for id: String in CreatureMind.SPELLS + CreatureMind.HARVESTS:
+		Balance.values["knowledge_" + id] = Balance.DEFAULTS["knowledge_" + id]
+		mind.knowledge[id] = 0.0
+	mind.watch_spell("rain")
+	_check(is_equal_approx(mind.knowledge.rain, Balance.num("knowledge_per_watch")) and not mind.learned("rain"), "watching a spell adds knowledge")
+	for k in 3:
+		mind.watch_spell("rain")
+	_check(mind.learned("rain"), "four casts teach the creature rain")
+	var lumber_known: float = mind.knowledge.lumber
+	village.store("lumber", Balance.num("stored_per_lesson"))
+	_check(is_equal_approx(mind.knowledge.lumber, lumber_known + Balance.num("knowledge_per_lesson")), "storing 100 lumber teaches it a little about lumber")
+	mind.did("eat")
+	mind.judge(1)
+	_check(is_equal_approx(mind.behavior.eat, Balance.num("behavior_start") + Balance.num("bless_points")), "bless makes it keener on what it just did")
+	mind.judge(-1)
+	_check(is_equal_approx(mind.behavior.eat, Balance.num("behavior_start")), "curse makes it less keen")
+	# Rain when the village burns.
+	game.fire.start_fire(village.center + Vector3(5, 0, -5))
+	var rain_at: Variant = mind._spell_target("rain")
+	_check(rain_at != null, "the creature sees a fire to rain on")
+	if rain_at != null:
+		mind._cast("rain", rain_at)
+		_check(mind.last_action == "rain", "the creature casts rain")
+	# Its fireball only singes the player's own people.
+	var bystander := village.people()[0]
+	bystander.hp = bystander.max_hp
+	Explosion.detonate(bystander.global_position, Fireball.BLAST_RADIUS, Balance.num("creature_friendly_fire"))
+	_check(bystander.is_alive() and bystander.hp < bystander.max_hp, "the creature's fireball does a tenth of the harm to villagers (%.0f of %.0f left)" % [bystander.hp, bystander.max_hp])
+	# Fetching a tree once it knows how.
+	await _wait(maxf(0.0, Balance.num("creature_knockout_seconds") - 150.0) + 2.0)
+	mind.knowledge.lumber = Balance.num("knowledge_lumber")
+	mind.behavior.explore = 0.0
+	mind._idle_timer = 0.0
+	mind._away = false
+	mind.home = beast.global_position
+	var fetched := false
+	for k in 30:
+		await _wait(5.0)
+		if mind.last_action == "lumber":
+			fetched = true
+			break
+	_check(fetched, "the creature fetches a tree for the storehouse")
 	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT
 
 	# Rain puts out fires.

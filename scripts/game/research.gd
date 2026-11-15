@@ -20,7 +20,6 @@ const ITEMS := [
 ## Which research speeds up which resource.
 const TOOLS := {"food": "pitchforks", "stone": "picks", "lumber": "axes"}
 const TOOL_BONUS := 2.0
-const SWORD_BONUS := 1.5
 
 
 static func find(id: String) -> Dictionary:

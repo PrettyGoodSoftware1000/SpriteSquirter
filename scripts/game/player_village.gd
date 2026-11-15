@@ -76,6 +76,9 @@ const BLOOD_BOOST := 2.0
 const BLOOD_REACH := 9.0
 
 signal research_done(id: String)
+## Another Balance "stored_per_lesson" of `kind` has been carried in: the
+## creature learns a little about harvesting it.
+signal lesson(kind: String)
 
 var founded := false
 var center := Vector3.ZERO
@@ -91,6 +94,13 @@ var researched := {}
 var research := {}
 ## True while the village has a Blacksmith: loads go home in wheelbarrows.
 var barrows := false
+## Workers the player has set to each gathering job. The rest are shared
+## out by JOB_SHARE.
+var quota := {"lumber": 0, "stone": 0, "food": 0}
+## How many workers are on each gathering job (food includes the farmers).
+var gatherers := {"lumber": 0, "stone": 0, "food": 0}
+
+var _stored := {}
 ## Seconds with no food, and towards the next death from hunger.
 var hungry_for := 0.0
 ## Magicko comes in BLOOD_BOOST times as fast until Game.now passes this.
@@ -126,12 +136,86 @@ func found(pos: Vector3, site := -1) -> void:
 				v.add_to_group("people")
 				v.home = center
 				v.home_radius = HOME_RADIUS
+	_raise_first_storehouse()
 	if people().is_empty():
 		Game.terrain.add_bare(center, 9.0, 0.7)
 		for k in START_VILLAGERS:
 			WorldPopulator.spawn_villager(Game.world_root, Game.terrain, center, 6.0, false, true)
 		for v in people():
 			v.home_radius = HOME_RADIUS
+
+
+## The village's first Storehouse is free and stands on the start location
+## (or as close to it as the buildings already there allow).
+func _raise_first_storehouse() -> void:
+	var terrain := Game.terrain
+	var rng := RandomNumberGenerator.new()
+	rng.seed = Game.world_seed + 7
+	var store := BuildingFactory.create("store", rng)
+	var spot := center
+	var found_spot := false
+	for ring in 16:
+		for k in maxi(1, ring * 6):
+			var a := TAU * k / maxf(ring * 6.0, 1.0)
+			var p := center + Vector3(cos(a), 0.0, sin(a)) * ring * 2.5
+			if not terrain.is_inside(p.x, p.z) or not terrain.is_dry(p.x, p.z):
+				continue
+			var clear := true
+			for node in get_tree().get_nodes_in_group("buildings"):
+				var b := node as Destructible
+				if Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < b.footprint + store.footprint + 1.0:
+					clear = false
+					break
+			if clear:
+				spot = p
+				found_spot = true
+				break
+		if found_spot:
+			break
+	var h := maxf(terrain.average_height(spot, store.footprint), Terrain.WATER_LEVEL + 0.5)
+	terrain.apply_brush(Vector3(spot.x, h, spot.z), store.footprint + 3.0, Terrain.Brush.FLATTEN, 1.0, h, store.footprint / (store.footprint + 3.0))
+	for node in get_tree().get_nodes_in_group("trees"):
+		var t := node as Destructible
+		if Vector2(t.global_position.x - spot.x, t.global_position.z - spot.z).length() < store.footprint + 1.5:
+			t.fell()
+	Game.world_root.add_child(store)
+	store.global_position = Vector3(spot.x, h, spot.z)
+	store.rotation.y = rng.randf() * TAU
+	store.add_to_group("player_buildings")
+	terrain.add_bare(store.global_position, store.footprint + 1.5, 0.9)
+
+
+## A worker carries `amount` of `kind` into the store. Every so much stored
+## is a lesson for the creature.
+func store(kind: String, amount: float) -> void:
+	give(kind, amount)
+	var per := maxf(Balance.num("stored_per_lesson"), 1.0)
+	var before: float = _stored.get(kind, 0.0)
+	_stored[kind] = before + amount
+	if quota.has(kind) and floorf(_stored[kind] / per) > floorf(before / per):
+		lesson.emit(kind)
+
+
+## Sets one more (or one fewer) worker to a gathering job, at once. Never
+## takes warriors, archers or wizards.
+func change_quota(kind: String, change: int) -> void:
+	var total := workers()
+	var others := 0
+	for k: String in quota:
+		if k != kind:
+			others += quota[k]
+	# Start from how many are doing it now, so + always adds one.
+	var base: int = maxi(quota[kind], gatherers[kind]) if change > 0 else mini(quota[kind], gatherers[kind])
+	quota[kind] = clampi(base + change, 0, maxi(total - others, 0))
+	_assign_jobs()
+
+
+## Blood Sacrifice cast by the creature: any one of the workers.
+func sacrifice_someone() -> bool:
+	var all := people()
+	if all.is_empty():
+		return false
+	return sacrifice(all[randi() % all.size()].global_position)
 
 
 func people() -> Array[Villager]:
@@ -538,21 +622,35 @@ func _assign_jobs() -> void:
 				per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
 	# Fields that want sowing or reaping come first: foragers move to them.
 	var farmers := {}
+	var farming := 0
 	for v in workers:
 		if v.job == "farm" and is_instance_valid(v.job_target):
 			farmers[v.job_target] = farmers.get(v.job_target, 0) + 1
+			farming += 1
+	# The numbers the player set come before everything else: move workers
+	# over from the jobs with the most to spare.
+	for kind: String in quota:
+		var want := mini(quota[kind], workers.size())
+		while counts[kind] + (farming if kind == "food" else 0) < want:
+			var donor: Variant = _quota_donor(workers, kind, counts, farming)
+			if donor == null or not _give_job(donor[0], kind, per_target):
+				break
+			if counts.has(donor[1]):
+				counts[donor[1]] -= 1
+			counts[kind] += 1
 	for node in get_tree().get_nodes_in_group("fields"):
 		var field := node as CropField
 		if not field.needs_work():
 			continue
 		var have: int = farmers.get(field, 0)
 		while have < field.wanted_workers():
-			var v := _spare_worker(workers)
+			var v := _spare_worker(workers, counts)
 			if v == null:
 				break
 			if counts.has(v.job):
 				counts[v.job] -= 1
 			v.assign_job("farm", field.work_spot(), field)
+			farming += 1
 			have += 1
 	for v in workers:
 		if v.job != "":
@@ -565,12 +663,38 @@ func _assign_jobs() -> void:
 			if _give_job(v, kind, per_target):
 				counts[kind] += 1
 				break
+	gatherers = {"lumber": counts.lumber, "stone": counts.stone, "food": counts.food + farming}
+
+
+## A worker to move to the gathering job `kind` to meet the player's
+## number: [the worker, the job it leaves]. Idle workers first, then one
+## from the job with the most workers beyond its own number.
+func _quota_donor(workers: Array[Villager], kind: String, counts: Dictionary, farming: int) -> Variant:
+	for v in workers:
+		if v.job == "":
+			return [v, ""]
+	var from := ""
+	var spare := 0
+	for k: String in quota:
+		var have: int = counts[k] + (farming if k == "food" else 0)
+		if k != kind and have - quota[k] > spare and counts[k] > 0:
+			spare = have - quota[k]
+			from = k
+	if from == "":
+		return null
+	for v in workers:
+		if v.job == from:
+			return [v, from]
+	return null
 
 
 ## A worker that can be moved to a field: idle first, then foragers, then
 ## whoever else is not farming already.
-func _spare_worker(workers: Array[Villager]) -> Villager:
+func _spare_worker(workers: Array[Villager], counts: Dictionary) -> Villager:
 	for wanted: String in ["", "food", "lumber", "stone"]:
+		# Leave alone the lumberjacks and miners the player asked for.
+		if (wanted == "lumber" or wanted == "stone") and counts[wanted] <= quota[wanted]:
+			continue
 		for v in workers:
 			if v.job == wanted:
 				return v

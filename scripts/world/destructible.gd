@@ -101,6 +101,21 @@ func extinguish() -> void:
 	Game.effects.spawn_steam(global_position + Vector3.UP * height * 0.5, clampf(footprint * 0.5, 0.6, 2.0))
 
 
+## Pulled out of the ground whole by the creature, which carries it off.
+## It keeps its shape but no longer counts as a tree or a building.
+func uproot() -> void:
+	if destroyed:
+		return
+	extinguish()
+	destroyed = true
+	set_process(false)
+	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings"]:
+		remove_from_group(group)
+	for child in get_children():
+		if child is StaticBody3D:
+			child.queue_free()
+
+
 ## Chopped down for lumber: falls apart quietly, without scaring anyone.
 func fell() -> void:
 	shatter(global_position + Vector3(randf_range(-1, 1), height * 0.3, randf_range(-1, 1)), 2.5, true)

@@ -16,6 +16,16 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 	root.theme = UiTheme.get_theme()
+	# The version, in the corner. It goes up with every update (see README).
+	var version := Label.new()
+	version.text = "Version %s" % ProjectSettings.get_setting("application/config/version", "?")
+	version.add_theme_font_size_override("font_size", 16)
+	version.modulate = Color(1, 1, 1, 0.8)
+	version.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	version.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	version.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	version.position = Vector2(-14, -10)
+	root.add_child(version)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH

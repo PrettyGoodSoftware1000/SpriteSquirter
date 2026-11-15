@@ -152,6 +152,21 @@ func water(seconds: float) -> void:
 	_wet = maxf(_wet, seconds)
 
 
+## The creature reaps up to `amount` food from ripe wheat in one go.
+## Returns what it got.
+func take(amount: float) -> float:
+	if stage != Stage.RIPE:
+		return 0.0
+	var per_field: float = area() * FOOD_PER_M2 * Game.settings.food_rate / Game.DEFAULT_SETTINGS.food_rate
+	var done := minf(amount / maxf(per_field, 0.01), 1.0 - progress)
+	progress += done
+	if progress >= 0.999:
+		stage = Stage.SOWING
+		progress = 0.0
+	_refresh()
+	return done * per_field
+
+
 func _process(delta: float) -> void:
 	_wet = maxf(0.0, _wet - delta)
 	if stage != Stage.GROWING:

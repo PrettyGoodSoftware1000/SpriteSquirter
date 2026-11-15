@@ -9,7 +9,8 @@ extends Node3D
 ## has no food). Its speed, reach, strength and health grow with it. It
 ## eats Game.settings.creature_food a minute when full grown, less while
 ## small. Goblins can hurt it: at no health it is knocked out for
-## KO_SECONDS, then gets up with half its health.
+## a while, then gets up with half its health. Health, stomp damage and the
+## knock-out time come from balancing.txt (see Balance).
 ##
 ## Each model (assets/creature/*.glb) is a single skinned mesh on a
 ## skeleton, sculpted by tools/bake_creature.py. All animation is procedural:
@@ -23,8 +24,9 @@ extends Node3D
 ## when a villager or one of the village's buildings would be caught) or
 ## are scooped up, up to five at a time, and thrown or eaten. During a
 ## raid it walks over to raiders by itself unless the player sent it
-## somewhere. Its ordinary footsteps squash goblins and strangers, but
-## never the player's own villagers. With goblins about it is "alert": it
+## somewhere. Its ordinary footsteps squash goblins and strangers and
+## flatten trees and goblin huts, but never harm the player's own villagers
+## or buildings. With goblins about it is "alert": it
 ## walks ALERT_SPEED times as fast, scowls, bares its mouth and its eyes
 ## dart around.
 ##
@@ -35,13 +37,12 @@ extends Node3D
 signal footfall(pos: Vector3)
 
 const START_SIZE := 0.15
-const KO_SECONDS := 45.0
 ## What differs between the creatures. Positions are in the head bone's
 ## space. Pairs are [calm, alert]: how high the lids sit over the eyes, how
 ## they slant, how big the pupils are, how deep the mouth turns down.
 const SPECIES := {
 	"tortoise": {
-		"name": "Tortoise", "model": "res://assets/creature/creature.glb", "speed": 3.6, "hp": 1200.0,
+		"name": "Tortoise", "model": "res://assets/creature/creature.glb", "speed": 3.6,
 		"nervous": 0.0,
 		"eye": Vector3(0.74, 0.5, 1.22), "eye_size": 0.34, "eye_color": Color(0.96, 0.94, 0.84),
 		"lid_color": Color(0.36, 0.38, 0.2), "lid_y": [0.2, 0.14], "lid_tilt": [-0.38, 0.5], "pupil": [1.0, 0.72],
@@ -50,13 +51,14 @@ const SPECIES := {
 		"arm": Vector3(0.3, -1.0, 0.12), "elbow": -0.25,
 	},
 	"tiger": {
-		"name": "Tiger", "model": "res://assets/creature/tiger.glb", "speed": 3.6 * 1.3, "hp": 600.0,
+		"name": "Tiger", "model": "res://assets/creature/tiger.glb", "speed": 3.6 * 1.3,
 		"nervous": 1.0,
 		"eye": Vector3(0.66, 0.85, 1.27), "eye_size": 0.42, "eye_color": Color(1.0, 0.98, 0.8),
 		"lid_color": Color(0.95, 0.5, 0.1), "lid_y": [0.5, 0.62], "lid_tilt": [-0.3, -0.5], "pupil": [0.62, 0.42],
 		"mouth": [0.55, -0.02, 1.8, 0.2], "frown": [0.1, 0.18],
-		# Paws held up in front of the chest, elbows bent.
-		"arm": Vector3(0.12, -0.5, 0.85), "elbow": -1.1,
+		# Upper arms hang a little forward; `fore` points the forearms up
+		# and in, so the paws are held in front of the chest.
+		"arm": Vector3(0.25, -0.85, 0.4), "elbow": -0.4, "fore": Vector3(-0.35, 0.5, 0.8),
 	},
 }
 
@@ -72,8 +74,12 @@ const STOMP_TIME := 1.1
 const STOMP_STRIDE := 2.6
 const GRAB_RADIUS := 5.5
 ## During a raid, raiders this close are walked to.
-const HUNT_RANGE := 55.0
+const HUNT_RANGE := 150.0
 const ALERT_SPEED := 1.2
+## How much faster it turns to keep enemies in front of it.
+const COMBAT_TURN := 1.3
+## Arms held out in front, for carrying a tree or a boulder.
+const CARRY_POSE := Vector3(0.25, 0.15, 1.0)
 
 enum Action { NONE, STOMP, GRAB }
 
@@ -92,6 +98,10 @@ var age := 0.0
 var max_hp := 0.0
 var hp := 0.0
 var knocked_out := false
+## Knowledge, likes and dislikes, and what it does when left alone.
+var mind: CreatureMind
+## A tree, boulder or sheaf the creature is carrying in its arms.
+var carrying: Node3D
 
 var has_target := false
 var target := Vector3.ZERO
@@ -166,6 +176,8 @@ var _hurt_timer := 0.0
 var _twitch := 0.0
 var _twitch_timer := 0.0
 var _glance_timer := 0.0
+var _fore_blend := 1.0
+var _say_free_at := 0.0
 
 
 func _ready() -> void:
@@ -175,6 +187,9 @@ func _ready() -> void:
 	_arm_want = _spec.arm
 	_build()
 	_grow(0.0)
+	mind = CreatureMind.new()
+	mind.name = "Mind"
+	add_child(mind)
 
 
 func species_name() -> String:
@@ -197,7 +212,7 @@ func _grow(delta: float) -> void:
 	var t := clampf(age / (minutes * 60.0), 0.0, 1.0)
 	size = lerpf(START_SIZE, 1.0, t)
 	scale = Vector3.ONE * size
-	var new_max: float = _spec.hp * lerpf(0.3, 1.0, t)
+	var new_max: float = Balance.num(kind + "_health") * lerpf(0.3, 1.0, t)
 	hp += new_max - max_hp
 	max_hp = new_max
 	_hurt_timer = maxf(0.0, _hurt_timer - delta)
@@ -223,7 +238,7 @@ func take_hit(amount: float, _from: Node3D) -> void:
 		return
 	hp = 0.0
 	knocked_out = true
-	_ko_timer = KO_SECONDS
+	_ko_timer = Balance.num("creature_knockout_seconds")
 	if _action == Action.GRAB:
 		_end_grab()
 	has_target = false
@@ -248,15 +263,84 @@ func place(pos: Vector3, facing: float) -> void:
 		_plant[k] = _foot_home(_side(k), fwd, right)
 		_stepping[k] = false
 	_look_at = global_position + fwd * 20.0
+	mind.home = global_position
 	_update_body(1.0)
 	_update_legs()
 
 
+## The player sends the creature somewhere. It will stay around there.
 func move_to(pos: Vector3) -> void:
 	target = pos
 	has_target = true
 	_auto = false
 	_look_at = pos
+	mind.player_moved(pos)
+
+
+## The creature goes somewhere of its own accord. (Chasing enemies and the
+## player's orders come first.)
+func auto_move(pos: Vector3) -> void:
+	target = pos
+	has_target = true
+	_auto = true
+	_look_at = pos
+
+
+func is_auto() -> bool:
+	return _auto
+
+
+## True while there are enemies to deal with.
+func is_fighting() -> bool:
+	return _alert or _action != Action.NONE
+
+
+## Takes `node` (already somewhere in the world) into its arms.
+func carry(node: Node3D) -> void:
+	drop_load()
+	carrying = node
+
+
+func drop_load() -> void:
+	if is_instance_valid(carrying):
+		carrying.queue_free()
+	carrying = null
+
+
+func head_position() -> Vector3:
+	return _skel.global_transform * _skel.get_bone_global_pose(_bone["head"]).origin
+
+
+func mouth_position() -> Vector3:
+	return _mouth_pos()
+
+
+## Floats a line of text up from the creature's head. Lines that come
+## close together wait their turn, so they can be read.
+func say(text: String, color := Color.WHITE) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.fixed_size = true
+	label.pixel_size = 0.0011
+	label.font_size = 34
+	label.outline_size = 10
+	label.modulate = color
+	label.visible = false
+	Game.effects.add_child(label)
+	var wait := maxf(0.0, _say_free_at - Game.now)
+	_say_free_at = Game.now + wait + 1.3
+	var rise := 2.5 + 4.0 * size
+	var tw := label.create_tween()
+	tw.tween_interval(wait + 0.01)
+	tw.tween_callback(func() -> void:
+		label.global_position = head_position() + Vector3.UP * (3.4 * size + 0.6)
+		label.visible = true)
+	tw.tween_property(label, "position:y", rise, 5.0).as_relative()
+	tw.parallel().tween_property(label, "modulate:a", 0.0, 1.5).set_delay(3.5)
+	tw.parallel().tween_property(label, "outline_modulate:a", 0.0, 1.5).set_delay(3.5)
+	tw.tween_callback(label.queue_free)
 
 
 ## Makes the creature look at something startling (such as a fireball
@@ -277,6 +361,11 @@ func _process(delta: float) -> void:
 	_update_body(delta)
 	_update_legs()
 	_update_face(delta)
+	if _action == Action.NONE:
+		_arm_want = CARRY_POSE if is_instance_valid(carrying) else _spec.arm
+	if is_instance_valid(carrying):
+		carrying.global_position = (_hand_pos(0) + _hand_pos(1)) * 0.5 + Vector3.UP * 0.4 * size
+		carrying.rotation.y = heading
 
 
 # --- Locomotion -------------------------------------------------------------
@@ -292,7 +381,7 @@ func _update_locomotion(delta: float) -> void:
 			_auto = false
 		else:
 			var want := atan2(to.x, to.z)
-			heading = rotate_toward(heading, want, turn_speed * delta)
+			heading = rotate_toward(heading, want, turn_speed * (COMBAT_TURN if _alert else 1.0) * delta)
 			var facing := cos(angle_difference(heading, want))
 			var top := max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0)
 			desired_speed = top * clampf(facing, 0.0, 1.0) * clampf(dist / 5.0, 0.25, 1.0)
@@ -300,7 +389,7 @@ func _update_locomotion(delta: float) -> void:
 		# Stand still and face the goblins.
 		desired_speed = 0.0
 		var facing_to := _action_point - global_position
-		heading = rotate_toward(heading, atan2(facing_to.x, facing_to.z), turn_speed * 1.6 * delta)
+		heading = rotate_toward(heading, atan2(facing_to.x, facing_to.z), turn_speed * 1.6 * COMBAT_TURN * delta)
 	if Game.now < snared_until or knocked_out:
 		desired_speed = 0.0
 		speed = 0.0
@@ -395,7 +484,11 @@ func _on_footfall(pos: Vector3) -> void:
 	for node in get_tree().get_nodes_in_group("destructibles"):
 		var d := node as Destructible
 		var flat := Vector2(d.global_position.x - pos.x, d.global_position.z - pos.z).length()
-		# A small creature is too light to flatten buildings and trees.
+		# A small creature is too light to flatten buildings and trees, and
+		# a big one treads carefully round its own village (it goes in and
+		# out by itself now, fetching things).
+		if d.is_in_group("player_buildings"):
+			continue
 		if size > 0.45 and flat < d.footprint * 0.7 + 1.4 * size:
 			d.stomp(pos)
 	for node in get_tree().get_nodes_in_group("villagers"):
@@ -437,7 +530,7 @@ func _update_attacks(delta: float) -> void:
 			if d < nearest_d:
 				nearest_d = d
 				nearest = g
-		elif g.raiding and d < hunt_d:
+		elif d < hunt_d and (g.raiding or _threatens_village(g)):
 			hunt_d = d
 			hunt = g
 	_alert = nearest != null or hunt != null
@@ -469,12 +562,18 @@ func _update_attacks(delta: float) -> void:
 	for g in near:
 		if _flat(g.global_position, point) < STOMP_RADIUS * size:
 			in_blast += 1
-	# Until it is big enough to pick goblins up, all it can do is stamp on them.
+	# Until it is big enough to pick goblins up, all it can do is stamp on
+	# them. Otherwise it does what it is keenest on (see CreatureMind).
 	var can_grab := size >= 0.4
-	if _stomp_is_safe(point) and in_blast > 0 and (in_blast >= 3 or randf() < 0.5 or not can_grab):
+	var stomp_ok := _stomp_is_safe(point) and in_blast > 0
+	var keen_stomp := mind.weight("stomp") * (2.0 if in_blast >= 3 else 1.0)
+	var keen_grab := maxf(mind.weight("throw"), mind.weight("eat")) if can_grab else 0.0
+	if stomp_ok and keen_stomp > 0.0 and randf() * (keen_stomp + keen_grab) < keen_stomp:
 		_start_stomp(point)
-	elif can_grab:
+	elif keen_grab > 0.0:
 		_start_grab(near)
+	elif stomp_ok and keen_stomp > 0.0:
+		_start_stomp(point)
 	else:
 		_action_cooldown = 0.8
 
@@ -509,6 +608,7 @@ func _on_stomp(pos: Vector3) -> void:
 	Game.effects.spawn_dust(pos, 3.2 * size)
 	Game.shake(size, pos)
 	var radius := STOMP_RADIUS * size
+	var hit: Array[Villager] = []
 	for node in get_tree().get_nodes_in_group("villagers"):
 		var v := node as Villager
 		var d := _flat(v.global_position, pos)
@@ -516,14 +616,39 @@ func _on_stomp(pos: Vector3) -> void:
 			continue
 		if v.owned:
 			continue
+		hit.append(v)
 		# Enough to kill a goblin at the centre; less towards the edge.
 		# (At full size. A small creature's stomp is weaker.)
-		v.take_hit(Villager.HEALTH * (2.0 - d / radius) * lerpf(0.3, 1.0, size), self)
+		v.take_hit(Balance.num("creature_stomp_damage") * (1.0 - 0.5 * d / radius) * lerpf(0.3, 1.0, size), self)
 		if not v.is_alive():
 			v.fling(pos, 8.0 * lerpf(0.4, 1.0, size), false)
 	_stomp_leg = -1
 	_action = Action.NONE
 	_action_cooldown = 1.4
+	if not hit.is_empty():
+		mind.did("stomp", "The creature stomped %s" % _name_them(hit))
+
+
+## "a goblin", "3 goblins and an ogre", ...
+func _name_them(list: Array[Villager]) -> String:
+	var counts := {"goblin": 0, "ogre": 0, "villager": 0}
+	for v in list:
+		if is_instance_valid(v):
+			counts["ogre" if v.ogre else ("goblin" if v.goblin else "villager")] += 1
+	var parts: PackedStringArray = []
+	for word: String in counts:
+		var n: int = counts[word]
+		if n == 1:
+			parts.append(("an " if word == "ogre" else "a ") + word)
+		elif n > 1:
+			parts.append("%d %ss" % [n, word])
+	return " and ".join(parts) if not parts.is_empty() else "nothing"
+
+
+## Goblins hanging about near the village are enemies even between raids.
+func _threatens_village(g: Villager) -> bool:
+	var village := Game.village
+	return is_instance_valid(village) and village.founded and g.global_position.distance_to(village.center) < 50.0
 
 
 ## Scoops up the nearest goblins, at most three to five of them.
@@ -544,7 +669,7 @@ func _start_grab(near: Array[Villager]) -> void:
 	_action = Action.GRAB
 	_action_t = 0.0
 	_released = 0
-	_eating = randf() < 0.5
+	_eating = randf() * (mind.weight("eat") + mind.weight("throw")) < mind.weight("eat")
 
 
 ## Reach down, pick the goblins up, then eat them one by one or hurl them.
@@ -576,6 +701,7 @@ func _update_grab(delta: float) -> void:
 				g.eaten()
 			_released += 1
 		if t > 1.9 + 0.25 * _held.size():
+			mind.did("eat", "The creature ate %s" % _name_them(_held))
 			_end_grab()
 			return
 	else:
@@ -588,6 +714,7 @@ func _update_grab(delta: float) -> void:
 				if is_instance_valid(g) and g.state == Villager.State.HELD:
 					g.toss((fwd * randf_range(15.0, 22.0) + Vector3.UP * randf_range(9.0, 13.0) + right * randf_range(-5.0, 5.0)) * lerpf(0.5, 1.0, size))
 			_released = _held.size()
+			mind.did("throw", "The creature threw %s" % _name_them(_held))
 		if t > 2.5:
 			_end_grab()
 			return
@@ -683,6 +810,7 @@ func _update_body(delta: float) -> void:
 	var swing_targets: Array[float] = [stride * 0.16 / size + sin(_time * 7.0) * 0.08 * nervous,
 		-stride * 0.16 / size + sin(_time * 7.0 + 2.1) * 0.08 * nervous]
 	_arm_pose = _arm_pose.lerp(_arm_want, 1.0 - exp(-9.0 * delta))
+	_fore_blend = lerpf(_fore_blend, 1.0 if _arm_want == _spec.arm else 0.0, blend)
 	for k in 2:
 		var side := "l" if k == 0 else "r"
 		_arm_swing[k] = lerpf(_arm_swing[k], swing_targets[k], blend)
@@ -691,7 +819,15 @@ func _update_body(delta: float) -> void:
 		var upper := Quaternion(Vector3.RIGHT, _arm_swing[k]) * Quaternion(rest_dir, hang)
 		_skel.set_bone_pose_rotation(_bone["arm_upper_" + side], upper)
 		var bend: float = _spec.elbow - 0.3 * maxf(-_arm_swing[k], 0.0) - 0.1 * pace
-		_skel.set_bone_pose_rotation(_bone["arm_lower_" + side], Quaternion(Vector3.RIGHT, bend) * Quaternion(Vector3.BACK, _side(k) * 0.2))
+		var lower := Quaternion(Vector3.RIGHT, bend) * Quaternion(Vector3.BACK, _side(k) * 0.2)
+		if _spec.has("fore"):
+			# Point the forearm where the species holds it at rest, whatever
+			# way the upper arm has turned.
+			var fore: Vector3 = _spec.fore
+			var want := upper.inverse() * Vector3(_side(k) * fore.x, fore.y, fore.z).normalized()
+			var rest_lower: Vector3 = (_rest["hand_" + side] - _rest["arm_lower_" + side]).normalized()
+			lower = lower.slerp(Quaternion(rest_lower, want), _fore_blend)
+		_skel.set_bone_pose_rotation(_bone["arm_lower_" + side], lower)
 
 	# Tail: a lazy wave that trails behind turns and bounces with each step.
 	for i in 4:

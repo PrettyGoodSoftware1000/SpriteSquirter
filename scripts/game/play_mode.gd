@@ -22,6 +22,7 @@ var brush_radius := 8.0
 var village: PlayerVillage
 var day_cycle: DayCycle
 var raids: GoblinRaids
+var pause_menu: PauseMenu
 var hud: Hud
 var creature: Creature
 
@@ -91,6 +92,10 @@ func _ready() -> void:
 
 	hud = Hud.new()
 	add_child(hud)
+	pause_menu = PauseMenu.new()
+	add_child(pause_menu)
+	pause_menu.menu_requested.connect(func() -> void: Game.start("menu", "", Terrain.SIZE))
+	hud.quota_changed.connect(func(kind: String, change: int) -> void: village.change_quota(kind, change))
 	hud.sculpt_selected.connect(_on_sculpt_selected)
 	hud.spell_selected.connect(_select_spell)
 	hud.build_selected.connect(_start_placing)
@@ -184,11 +189,15 @@ func _on_key(key: InputEventKey) -> void:
 		_toggle_dev_menu()
 		return
 	if code == KEY_ESCAPE:
+		# Esc backs out of a menu or a tool first; with nothing to back
+		# out of, it pauses the game.
 		if hud.is_build_menu_open() or hud.is_research_menu_open():
 			hud.show_build_menu(false)
 			hud.show_research_menu(false)
-		else:
+		elif mode != Mode.COMMAND:
 			_set_mode(Mode.COMMAND)
+		else:
+			pause_menu.open()
 		return
 	if Game.dev_menu and _dev_key(code):
 		return
@@ -283,7 +292,7 @@ func _found(pos: Vector3, start_index: int) -> void:
 	creature.kind = Game.creature_kind
 	Game.world_root.add_child(creature)
 	creature.knocked_down.connect(func() -> void:
-		_announce("The %s is knocked out! It will get up in %d seconds." % [creature.species_name().to_lower(), int(Creature.KO_SECONDS)]))
+		_announce("The %s is knocked out! It will get up in %d seconds." % [creature.species_name().to_lower(), int(Balance.num("creature_knockout_seconds"))]))
 	creature.got_up.connect(func() -> void: _announce("The %s is back on its feet." % creature.species_name().to_lower()))
 	var out := Vector2(pos.x, pos.z)
 	var dir := (-out).normalized() if out.length() > 1.0 else Vector2.RIGHT
@@ -427,8 +436,21 @@ func _cast(index: int) -> void:
 	if spell.id == "blood" and not village.sacrifice(target):
 		hud.set_hint("Blood Sacrifice needs one of your villagers within %d m of the click." % int(PlayerVillage.BLOOD_REACH))
 		return
+	if spell.id == "bless" or spell.id == "curse":
+		# These are cast on the creature itself.
+		if creature == null or Vector2(target.x - creature.global_position.x, target.z - creature.global_position.z).length() > _judge_reach():
+			hud.set_hint("%s is cast on your creature: click it." % spell.name)
+			return
+		village.give("magicko", -spell.cost)
+		_cooldowns[index] = spell.cooldown
+		var blessing: bool = spell.id == "bless"
+		Game.effects.spawn_judgement(creature.global_position + Vector3.UP * 4.0 * creature.size, creature.size, blessing)
+		hud.set_hint(creature.mind.judge(1 if blessing else -1))
+		return
 	village.give("magicko", -spell.cost)
 	_cooldowns[index] = spell.cooldown
+	if creature:
+		creature.mind.watch_spell(spell.id)
 	match spell.id:
 		"fireball":
 			var mouse := get_viewport().get_mouse_position()
@@ -447,6 +469,11 @@ func _cast(index: int) -> void:
 			patch.cast(target)
 	if creature:
 		creature.watch(target)
+
+
+## How near the creature a click must be to bless or curse it.
+func _judge_reach() -> float:
+	return 4.0 + 6.0 * creature.size if creature else 0.0
 
 
 # --- Building placement -------------------------------------------------------
@@ -664,6 +691,9 @@ func _update_ring() -> void:
 		_ring.draw(c, [RainCloud.RADIUS], Color(0.55, 0.75, 1.0))
 	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "roots":
 		_ring.draw(c, [RootPatch.RADIUS], Color(0.45, 1.0, 0.5))
+	elif mode == Mode.SPELL and creature and (SpellBook.SPELLS[spell_index].id == "bless" or SpellBook.SPELLS[spell_index].id == "curse"):
+		var p := creature.global_position
+		_ring.draw(Vector3(p.x, 0.0, p.z), [_judge_reach()], Color(1.0, 0.9, 0.3) if SpellBook.SPELLS[spell_index].id == "bless" else Color(1.0, 0.15, 0.15))
 	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "blood":
 		_ring.draw(c, [PlayerVillage.BLOOD_REACH], Color(0.9, 0.1, 0.1))
 	elif mode == Mode.FIELD and _field_dragging:

@@ -81,9 +81,11 @@ TIGER_BONES = {
     "tail4": ("tail3", (0.0, 4.95, -3.1)),
 }
 for side, sx in (("l", -1.0), ("r", 1.0)):
-    TIGER_BONES[f"arm_upper_{side}"] = ("chest", (sx * 1.75, 7.6, 0.3))
-    TIGER_BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 2.15, 6.2, 0.6))
-    TIGER_BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 2.2, 4.9, 1.0))
+    # The arms are sculpted held well out from the body. Shapes that touch
+    # melt together, so an arm resting against a thigh would be glued to it.
+    TIGER_BONES[f"arm_upper_{side}"] = ("chest", (sx * 1.85, 7.7, 0.3))
+    TIGER_BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 3.0, 6.7, 0.5))
+    TIGER_BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 4.0, 5.85, 0.75))
     TIGER_BONES[f"thigh_{side}"] = ("pelvis", (sx * 1.05, 4.3, 0.05))
     TIGER_BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.15, 2.4, 0.55))
     TIGER_BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.15, 0.7, 0.0))
@@ -184,13 +186,13 @@ def build_tiger():
         hole((sx * 0.66, 10.15, 2.05), 0.44)
 
         # Thin arms ending in pale paws.
-        ellipsoid((sx * 1.75, 7.6, 0.3), (0.6, 0.6, 0.6), f"arm_upper_{side}", ORANGE)
-        cone((sx * 1.75, 7.6, 0.3), (sx * 2.15, 6.2, 0.6), 0.5, 0.42, f"arm_upper_{side}", ORANGE, 0.35)
-        cone((sx * 2.15, 6.2, 0.6), (sx * 2.2, 4.9, 1.0), 0.42, 0.36, f"arm_lower_{side}", ORANGE, 0.3)
-        ellipsoid((sx * 2.2, 4.65, 1.1), (0.5, 0.45, 0.55), f"hand_{side}", CREAM, 0.25)
-        for dx in (-0.28, 0.0, 0.28):
-            base = np.array((sx * 2.2 + dx, 4.4, 1.4))
-            cone(base, base + np.array((dx * 0.2, -0.4, 0.25)), 0.14, 0.02, f"hand_{side}", HORN, 0.06)
+        ellipsoid((sx * 1.85, 7.7, 0.3), (0.6, 0.6, 0.6), f"arm_upper_{side}", ORANGE)
+        cone((sx * 1.85, 7.7, 0.3), (sx * 3.0, 6.7, 0.5), 0.5, 0.42, f"arm_upper_{side}", ORANGE, 0.3)
+        cone((sx * 3.0, 6.7, 0.5), (sx * 4.0, 5.85, 0.75), 0.42, 0.36, f"arm_lower_{side}", ORANGE, 0.25)
+        ellipsoid((sx * 4.2, 5.65, 0.85), (0.5, 0.45, 0.55), f"hand_{side}", CREAM, 0.2)
+        for dz in (-0.28, 0.0, 0.28):
+            base = np.array((sx * 4.5, 5.4, 0.95 + dz))
+            cone(base, base + np.array((sx * 0.3, -0.3, dz * 0.2)), 0.14, 0.02, f"hand_{side}", HORN, 0.06)
 
         # Long legs on big soft paws.
         cone((sx * 1.05, 4.3, 0.05), (sx * 1.15, 2.4, 0.55), 0.95, 0.62, f"thigh_{side}", ORANGE, 0.45)

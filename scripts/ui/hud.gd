@@ -22,6 +22,7 @@ signal grass_requested
 signal setting_changed(key: String, value: float)
 signal resources_requested
 signal jobs_changed(role: String, change: int)
+signal quota_changed(kind: String, change: int)
 signal research_menu_requested
 signal research_selected(id: String)
 
@@ -43,7 +44,7 @@ const SETTING_SLIDERS := [
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 ]
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find %s\nRight-click move %s   1-4 spells   B build   U research   Esc cancel   ~ dev menu"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find %s\nRight-click move %s   1-6 spells   B build   U research   Esc cancel / pause   ~ dev menu"
 ## role -> [name in the jobs row, the building that trains it]
 const ROLES := {
 	"warrior": ["Warriors", "Town guard"],
@@ -56,6 +57,7 @@ var _resource_labels := {}
 var _sub_label: Label
 var _clock: Label
 var _jobs := {}
+var _gather := {}
 var _research_panel: PanelContainer
 var _research_rows := {}
 var _workers: Label
@@ -94,9 +96,10 @@ func _ready() -> void:
 	_build_dev_menu(root)
 
 	var help_panel := PanelContainer.new()
-	help_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	help_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	help_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	help_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	help_panel.position = Vector2(12, -12)
+	help_panel.position = Vector2(-12, -12)
 	help_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	help_panel.modulate = Color(1, 1, 1, 0.75)
 	root.add_child(help_panel)
@@ -123,17 +126,19 @@ func _build_player_panel(root: Control) -> void:
 	title.add_theme_font_size_override("font_size", 20)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(title)
+	var buttons := HBoxContainer.new()
+	box.add_child(buttons)
 	var build := _button("Build (B)")
 	build.pressed.connect(func() -> void: build_menu_requested.emit())
-	top.add_child(build)
+	buttons.add_child(build)
 	var research := _button("Research (U)")
 	research.pressed.connect(func() -> void: research_menu_requested.emit())
-	top.add_child(research)
+	buttons.add_child(research)
 	var menu := _button("Menu")
 	menu.pressed.connect(func() -> void: menu_requested.emit())
-	top.add_child(menu)
+	buttons.add_child(menu)
 	_hint = Label.new()
-	_hint.custom_minimum_size = Vector2(340, 0)
+	_hint.custom_minimum_size = Vector2(320, 0)
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_hint)
 
@@ -173,6 +178,7 @@ func _build_resource_bar(root: Control) -> void:
 	_sub_label.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(_sub_label)
 	box.add_child(_build_jobs_row())
+	box.add_child(_build_gather_row())
 
 
 ## Workers, and the number of warriors and wizards the player wants, with
@@ -218,6 +224,36 @@ func _build_jobs_row() -> Control:
 		more.pressed.connect(func() -> void: jobs_changed.emit(role, 1))
 		row.add_child(more)
 		_jobs[role] = {"count": count, "bar": bar, "less": less, "more": more, "label": role_label}
+	return row
+
+
+## How many workers are felling, mining and getting food, with + and - to
+## set workers to a job yourself.
+func _build_gather_row() -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(_heading("Gather"))
+	var names := {"lumber": "Lumberjacks", "stone": "Miners", "food": "Farmers"}
+	for kind: String in names:
+		row.add_child(ResourceIcon.make(kind, 18))
+		var label := _text(names[kind], 15)
+		row.add_child(label)
+		var less := _button("-")
+		less.custom_minimum_size.x = 28
+		less.pressed.connect(func() -> void: quota_changed.emit(kind, -1))
+		row.add_child(less)
+		var count := _text("0", 15)
+		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		count.custom_minimum_size.x = 64
+		count.mouse_filter = Control.MOUSE_FILTER_STOP
+		count.tooltip_text = "Workers on this job (the number you set). The rest of your workers are shared out by themselves."
+		row.add_child(count)
+		var more := _button("+")
+		more.custom_minimum_size.x = 28
+		more.pressed.connect(func() -> void: quota_changed.emit(kind, 1))
+		row.add_child(more)
+		_gather[kind] = {"count": count, "less": less}
 	return row
 
 
@@ -568,6 +604,10 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 
 func _update_jobs(village: PlayerVillage) -> void:
 	_workers.text = "Workers %d" % village.workers()
+	for kind: String in _gather:
+		var set_by_player: int = village.quota[kind]
+		(_gather[kind].count as Label).text = str(village.gatherers[kind]) if set_by_player == 0 else "%d (%d set)" % [village.gatherers[kind], set_by_player]
+		(_gather[kind].less as Button).disabled = set_by_player <= 0
 	for role: String in _jobs:
 		var w: Dictionary = _jobs[role]
 		var top := village.max_count(role)

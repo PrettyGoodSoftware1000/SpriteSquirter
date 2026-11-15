@@ -25,11 +25,11 @@ const LOOKS := 14
 const GROW_SECONDS := 60.0
 const CHILD_SCALE := 0.45
 ## The same for grown-up villagers and goblins.
-const HEALTH := 30.0
-const ATTACK_DAMAGE := 6.0
-const ATTACK_SECONDS := 1.0
-const SOLDIER_HEALTH := 4.0
-const SOLDIER_DAMAGE := 2.0
+static var HEALTH := 30.0
+static var ATTACK_DAMAGE := 6.0
+static var ATTACK_SECONDS := 1.0
+static var SOLDIER_HEALTH := 4.0
+static var SOLDIER_DAMAGE := 2.0
 ## How close an enemy must be before a fighter goes for it.
 const AGGRO := 13.0
 const SOLDIER_AGGRO := 60.0
@@ -39,20 +39,20 @@ const CARRY_CAPACITY := 2.0
 const BARROW_CAPACITY := 6.0
 ## Archers shoot an arrow every ARROW_SECONDS at goblins within ARCHER_RANGE.
 const ARCHER_RANGE := 22.0
-const ARROW_SECONDS := 1.5
-const ARROW_DAMAGE := 12.0
-const ARCHER_HEALTH := 1.5
+static var ARROW_SECONDS := 1.5
+static var ARROW_DAMAGE := 12.0
+static var ARCHER_HEALTH := 1.5
 ## Speed while wading through roots.
 const SLOWED_SPEED := 0.25
 ## Wizards throw a firebolt every FIREBOLT_SECONDS at goblins within
 ## WIZARD_RANGE. That beats a soldier's sword (12 damage a second), and a
 ## bolt may set the goblin alight.
 const WIZARD_RANGE := 16.0
-const FIREBOLT_SECONDS := 0.7
-const FIREBOLT_DAMAGE := 11.0
+static var FIREBOLT_SECONDS := 0.7
+static var FIREBOLT_DAMAGE := 11.0
 ## An ogre against a goblin.
-const OGRE_HEALTH := 10.0
-const OGRE_DAMAGE := 3.0
+static var OGRE_HEALTH := 10.0
+static var OGRE_DAMAGE := 3.0
 ## Camera distances at which the detailed meshes switch on and off.
 const LOD_NEAR := 58.0
 const LOD_FAR := 66.0
@@ -63,6 +63,10 @@ const STEEL := Color(0.72, 0.75, 0.8)
 const STRAW := Color(0.86, 0.72, 0.36)
 const SHOE := Color(0.2, 0.14, 0.1)
 const GOBLIN_EYE := Color(0.98, 0.9, 0.3)
+
+static var GOBLIN_HEALTH := 30.0
+static var GOBLIN_DAMAGE := 6.0
+static var GOBLIN_ATTACK_SECONDS := 1.0
 
 static var _looks: Array[Dictionary] = []
 static var _goblin_looks: Array[Dictionary] = []
@@ -156,7 +160,31 @@ var _look := {}
 var _near := false
 
 
+## Takes the fighting numbers from balancing.txt (see Balance). The ones
+## above that are multipliers are worked out from the file's plain numbers.
+static func apply_balance() -> void:
+	HEALTH = Balance.num("villager_health")
+	ATTACK_DAMAGE = Balance.num("villager_damage")
+	ATTACK_SECONDS = Balance.num("villager_attack_seconds")
+	SOLDIER_HEALTH = Balance.num("warrior_health") / HEALTH
+	SOLDIER_DAMAGE = Balance.num("warrior_damage") / ATTACK_DAMAGE
+	ARCHER_HEALTH = Balance.num("archer_health") / HEALTH
+	ARROW_DAMAGE = Balance.num("archer_arrow_damage")
+	ARROW_SECONDS = Balance.num("archer_arrow_seconds")
+	FIREBOLT_DAMAGE = Balance.num("wizard_firebolt_damage")
+	FIREBOLT_SECONDS = Balance.num("wizard_firebolt_seconds")
+	GOBLIN_HEALTH = Balance.num("goblin_health")
+	GOBLIN_DAMAGE = Balance.num("goblin_damage")
+	GOBLIN_ATTACK_SECONDS = Balance.num("goblin_attack_seconds")
+	OGRE_HEALTH = Balance.num("ogre_health") / GOBLIN_HEALTH
+	OGRE_DAMAGE = Balance.num("ogre_damage") / GOBLIN_DAMAGE
+
+
 func _ready() -> void:
+	if goblin:
+		max_hp = GOBLIN_HEALTH
+		hp = max_hp
+		damage = GOBLIN_DAMAGE
 	add_to_group("villagers")
 	if goblin:
 		add_to_group("goblins")
@@ -188,9 +216,9 @@ func _build_body() -> void:
 	_adult_scale = randf_range(0.72, 0.86) if goblin else randf_range(0.92, 1.08)
 	if ogre:
 		_adult_scale = randf_range(2.2, 2.5)
-		max_hp = HEALTH * OGRE_HEALTH
+		max_hp = GOBLIN_HEALTH * OGRE_HEALTH
 		hp = max_hp
-		damage = ATTACK_DAMAGE * OGRE_DAMAGE
+		damage = GOBLIN_DAMAGE * OGRE_DAMAGE
 		_add_gear("club", _arms[0], Vector3(0.0, -0.85, 0.03))
 	scale = Vector3.ONE * _adult_scale * (CHILD_SCALE if child else 1.0)
 
@@ -967,7 +995,7 @@ func _start_delivery() -> void:
 
 func _unload() -> void:
 	if carry > 0.0 and is_instance_valid(Game.village):
-		Game.village.give(carry_kind, carry)
+		Game.village.store(carry_kind, carry)
 	carry = 0.0
 	_delivering = false
 	if _load:
@@ -1032,7 +1060,7 @@ func become_wizard(post: Vector3) -> void:
 ## Sharper swords from the Blacksmith: warriors hit harder.
 func sharpen() -> void:
 	if soldier:
-		damage = ATTACK_DAMAGE * SOLDIER_DAMAGE * Research.SWORD_BONUS
+		damage = ATTACK_DAMAGE * SOLDIER_DAMAGE * Balance.num("sharper_swords_bonus")
 
 
 ## Trained at a Town guard once the village has bows: a green hood, a
@@ -1234,7 +1262,7 @@ func _update_fight(delta: float) -> void:
 		return
 	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
 	if _attack_timer <= 0.0:
-		_attack_timer = ATTACK_SECONDS
+		_attack_timer = GOBLIN_ATTACK_SECONDS if goblin else ATTACK_SECONDS
 		if building:
 			# Buildings are tough: goblins only chip at them.
 			building.damage(damage * 0.5, global_position, 3.0)
@@ -1468,7 +1496,7 @@ func douse() -> void:
 func fling(from: Vector3, force: float, charred := true) -> void:
 	if ogre and state != State.DEAD:
 		# A blast hurts an ogre badly but does not throw it.
-		take_hit(HEALTH * 5.0, null)
+		take_hit(Balance.num("fireball_damage"), null)
 		if state != State.DEAD:
 			return
 	var away := global_position - from
@@ -1484,7 +1512,7 @@ func squish() -> void:
 	if state == State.DEAD:
 		return
 	if ogre:
-		take_hit(HEALTH * 2.0, null)
+		take_hit(Balance.num("creature_stomp_damage"), null)
 		return
 	_die(false)
 	_body.rotation = Vector3.ZERO

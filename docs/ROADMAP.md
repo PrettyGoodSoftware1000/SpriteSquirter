@@ -60,6 +60,12 @@ stage.
 - Blacksmith: wheelbarrows, and research (sharper swords, bows, pitchforks, picks, axes)
 - Archers, two per Town guard, once bows are researched
 
+## Version 0.10: A creature with a mind ✅
+- The creature explores near where it was left, defends the village, learns spells and harvesting by watching
+- Bless and Curse spells shape what it likes to do; floating text says what it did
+- balancing.txt for health, damage, knowledge and cooldowns
+- Free first Storehouse; gatherer counts the player can set; Esc pauses; version number on the menu
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

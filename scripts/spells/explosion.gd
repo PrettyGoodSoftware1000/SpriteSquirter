@@ -4,7 +4,9 @@ extends RefCounted
 ## The visuals live in Effects.spawn_explosion().
 
 
-static func detonate(pos: Vector3, radius: float) -> void:
+## `friendly` is the share of the damage the player's own villagers and
+## buildings take: 1 for the player's fireball, less for the creature's.
+static func detonate(pos: Vector3, radius: float, friendly := 1.0) -> void:
 	var tree := Game.get_tree()
 	var terrain := Game.terrain
 	Game.effects.spawn_explosion(pos, radius)
@@ -28,7 +30,10 @@ static func detonate(pos: Vector3, radius: float) -> void:
 		if dist >= radius:
 			continue
 		var falloff := 1.0 - dist / radius
-		d.damage(160.0 * falloff, pos, 16.0 * falloff + 4.0)
+		if friendly < 1.0 and d.is_in_group("player_buildings"):
+			d.hp = maxf(1.0, d.hp - Balance.num("fireball_building_damage") * falloff * friendly)
+			continue
+		d.damage(Balance.num("fireball_building_damage") * falloff, pos, 16.0 * falloff + 4.0)
 		if not d.destroyed and randf() < 0.5 + 0.5 * falloff:
 			d.ignite()
 
@@ -37,14 +42,22 @@ static func detonate(pos: Vector3, radius: float) -> void:
 		if v == null:
 			continue
 		var dist := v.global_position.distance_to(pos)
-		if dist < radius * 0.75:
-			v.fling(pos, 14.0 * (1.0 - dist / radius) + 6.0)
+		var harm := Balance.num("fireball_damage")
+		if friendly < 1.0 and v.owned:
+			# The creature's fireball only singes the player's own people.
+			if dist < radius * 0.75:
+				v.take_hit(harm * friendly, null)
+		elif dist < radius * 0.75:
+			if v.hp > harm:
+				v.take_hit(harm, null)
+			else:
+				v.fling(pos, 14.0 * (1.0 - dist / radius) + 6.0)
 		elif dist < radius * 1.3 and randf() < 0.3:
 			v.catch_fire()
 
 	Game.alarm(pos, radius * 4.0)
 	Game.effects.push_debris(pos, radius * 1.5, 14.0)
-	for k in randi_range(4, 7):
+	for k in (randi_range(4, 7) if friendly >= 1.0 else 2):
 		var a := randf() * TAU
 		var r := randf_range(1.0, radius * 0.8)
 		Game.fire.start_fire(pos + Vector3(cos(a) * r, 0.0, sin(a) * r), 0)

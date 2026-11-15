@@ -5,6 +5,10 @@ extends Node3D
 
 const BLAST_RADIUS := 9.0
 
+## Share of the blast's damage the player's own villagers and buildings
+## take (1 = all of it; the creature's fireballs use less).
+var friendly := 1.0
+
 var _from := Vector3.ZERO
 var _to := Vector3.ZERO
 var _duration := 1.0
@@ -89,5 +93,5 @@ func _explode(pos: Vector3) -> void:
 	_trail.emitting = false
 	_trail.reparent(Game.effects, true)
 	get_tree().create_timer(1.0).timeout.connect(_trail.queue_free)
-	Explosion.detonate(pos, BLAST_RADIUS)
+	Explosion.detonate(pos, BLAST_RADIUS, friendly)
 	queue_free()

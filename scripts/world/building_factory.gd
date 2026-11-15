@@ -126,7 +126,7 @@ static func create(kind: String, rng: RandomNumberGenerator) -> Destructible:
 		_:
 			top = _build_goblin_hut(b, rng)
 	b.height = top
-	b.max_hp = 70.0 + top * 5.0
+	b.max_hp = Balance.num("building_health") + top * Balance.num("building_health_per_metre")
 	b.hp = b.max_hp
 	b.flammability = 0.35
 	b.burn_duration = rng.randf_range(16.0, 26.0)

@@ -302,6 +302,65 @@ func _spawn_dirt(pos: Vector3, radius: float) -> void:
 	_spawn_oneshot(dirt, pos, 3.0)
 
 
+## Bless: a fountain of golden sparkles and a warm flash round the creature.
+## Curse: a sinking swirl of dark red wisps under a blood-red light.
+func spawn_judgement(pos: Vector3, size: float, blessing: bool) -> void:
+	var colors := [Color(1.0, 0.85, 0.2, 0.0), Color(1.0, 0.8, 0.1, 1.0), Color(1.0, 0.6, 0.05, 0.0)]
+	if not blessing:
+		colors = [Color(0.5, 0.0, 0.05, 0.0), Color(0.8, 0.02, 0.08, 1.0), Color(0.12, 0.0, 0.02, 0.0)]
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.9, 0.9) if blessing else Vector2(1.6, 1.6)
+	var mat := _glow_material(Color(1, 1, 1))
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	if blessing:
+		# Each sparkle is a soft round glint, bright in the middle.
+		var glint := GradientTexture2D.new()
+		glint.fill = GradientTexture2D.FILL_RADIAL
+		glint.fill_from = Vector2(0.5, 0.5)
+		glint.fill_to = Vector2(0.5, 0.0)
+		glint.gradient = _gradient([0.0, 0.25, 1.0], [Color(1, 1, 1, 1), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0)])
+		glint.width = 32
+		glint.height = 32
+		mat.albedo_texture = glint
+	else:
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+		mat.albedo_texture = Art.tex("smoke")
+	quad.material = mat
+	var p := CPUParticles3D.new()
+	p.mesh = quad
+	p.amount = 90 if blessing else 40
+	p.lifetime = 2.2
+	p.one_shot = true
+	p.explosiveness = 0.6
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 4.0 * size
+	p.direction = Vector3.UP if blessing else Vector3.DOWN
+	p.spread = 25.0 if blessing else 60.0
+	p.gravity = Vector3(0, 2.0, 0) if blessing else Vector3(0, -1.0, 0)
+	p.initial_velocity_min = 1.0 * size
+	p.initial_velocity_max = 5.0 * size
+	p.orbit_velocity_min = 0.0 if blessing else 0.3
+	p.orbit_velocity_max = 0.0 if blessing else 0.6
+	p.scale_amount_min = 0.5 * maxf(size, 0.4)
+	p.scale_amount_max = 1.6 * maxf(size, 0.4)
+	p.color_ramp = _gradient([0.0, 0.25, 1.0], colors)
+	if blessing:
+		# Twinkle: swell and shrink away.
+		p.scale_amount_curve = _grow_shrink
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_spawn_oneshot(p, pos, 3.5)
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.9, 0.4) if blessing else Color(1.0, 0.05, 0.05)
+	light.light_energy = 6.0
+	light.omni_range = 16.0 * maxf(size, 0.4)
+	add_child(light)
+	light.global_position = pos + Vector3.UP * 2.0
+	var tw := light.create_tween()
+	tw.tween_property(light, "light_energy", 0.0, 1.8 if blessing else 2.8)
+	tw.tween_callback(light.queue_free)
+
+
 ## A spray of blood for the Blood Sacrifice spell.
 func spawn_blood(pos: Vector3) -> void:
 	var red := _gradient([0.0, 0.7, 1.0], [Color(0.75, 0.02, 0.04, 1.0), Color(0.6, 0.0, 0.03, 1.0), Color(0.4, 0.0, 0.02, 0.0)])

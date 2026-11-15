@@ -54,6 +54,12 @@ stage.
 - Ogres join raids of 15 goblins
 - Blood Sacrifice spell; rain speeds up wheat
 
+## Milestone 0.97: Creatures and research ✅
+- A second creature: the nervous tiger (30% faster, half the tortoise's health)
+- Creatures start at 15% size and grow for 30 minutes; they eat, can be hurt and knocked out
+- Blacksmith: wheelbarrows, and research (sharper swords, bows, pitchforks, picks, axes)
+- Archers, two per Town guard, once bows are researched
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

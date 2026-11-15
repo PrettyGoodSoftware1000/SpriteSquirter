@@ -95,6 +95,10 @@ func _ready() -> void:
 	hud.spell_selected.connect(_select_spell)
 	hud.build_selected.connect(_start_placing)
 	hud.build_menu_requested.connect(_toggle_build_menu)
+	hud.research_menu_requested.connect(_toggle_research_menu)
+	hud.research_selected.connect(_on_research_selected)
+	village.research_done.connect(func(id: String) -> void:
+		_announce("The Blacksmith has finished: %s." % (Research.find(id).name as String).to_lower()))
 	hud.menu_requested.connect(func() -> void: Game.start("menu", "", Terrain.SIZE))
 	hud.regenerate_requested.connect(_regenerate)
 	hud.mood_selected.connect(_set_mood)
@@ -180,8 +184,9 @@ func _on_key(key: InputEventKey) -> void:
 		_toggle_dev_menu()
 		return
 	if code == KEY_ESCAPE:
-		if hud.is_build_menu_open():
+		if hud.is_build_menu_open() or hud.is_research_menu_open():
 			hud.show_build_menu(false)
+			hud.show_research_menu(false)
 		else:
 			_set_mode(Mode.COMMAND)
 		return
@@ -200,6 +205,8 @@ func _on_key(key: InputEventKey) -> void:
 	match code:
 		KEY_B, KEY_BACKSPACE:
 			_toggle_build_menu()
+		KEY_U:
+			_toggle_research_menu()
 		KEY_SPACE:
 			if creature:
 				Game.camera_rig.focus_on(creature.global_position)
@@ -273,7 +280,11 @@ func _found(pos: Vector3, start_index: int) -> void:
 
 	creature = Creature.new()
 	creature.name = "Creature"
+	creature.kind = Game.creature_kind
 	Game.world_root.add_child(creature)
+	creature.knocked_down.connect(func() -> void:
+		_announce("The %s is knocked out! It will get up in %d seconds." % [creature.species_name().to_lower(), int(Creature.KO_SECONDS)]))
+	creature.got_up.connect(func() -> void: _announce("The %s is back on its feet." % creature.species_name().to_lower()))
 	var out := Vector2(pos.x, pos.z)
 	var dir := (-out).normalized() if out.length() > 1.0 else Vector2.RIGHT
 	var spot := out + dir * (PlayerVillage.HOME_RADIUS + 12.0)
@@ -298,7 +309,8 @@ func _set_mode(m: Mode) -> void:
 	hud.set_sculpt(sculpt_brush if m == Mode.SCULPT else -1)
 	match m:
 		Mode.COMMAND:
-			hud.set_hint("Click or right-click the ground to walk the tortoise there. B or Backspace opens the build menu.")
+			hud.set_hint("Click or right-click the ground to walk the %s there. B or Backspace opens the build menu." \
+				% (Creature.SPECIES[Game.creature_kind].name as String).to_lower())
 		Mode.SPELL:
 			hud.set_hint(SpellBook.SPELLS[spell_index].hint + "  Right-click or Esc to stop.")
 		Mode.PLACE:
@@ -344,9 +356,30 @@ func _toggle_build_menu() -> void:
 	if _choosing:
 		return
 	var open := not hud.is_build_menu_open()
+	hud.show_research_menu(false)
 	hud.show_build_menu(open)
 	if open:
 		hud.update_build_menu(village)
+
+
+func _toggle_research_menu() -> void:
+	if _choosing:
+		return
+	var open := not hud.is_research_menu_open()
+	hud.show_build_menu(false)
+	hud.show_research_menu(open)
+	if open:
+		hud.update_research(village)
+
+
+func _on_research_selected(id: String) -> void:
+	var problem := village.start_research(id)
+	if problem != "":
+		hud.set_hint(problem)
+	else:
+		var item := Research.find(id)
+		hud.set_hint("Researching %s: %s minutes." % [(item.name as String).to_lower(), Hud._number(item.seconds / 60.0)])
+	hud.update_research(village)
 
 
 func _on_left_click() -> void:
@@ -648,6 +681,8 @@ func _update_ui() -> void:
 	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():
 		hud.update_build_menu(village)
+	if hud.is_research_menu_open():
+		hud.update_research(village)
 	if mode == Mode.FIELD and _field_dragging:
 		var cost: int = CropField.cost_for(_field_size).lumber
 		hud.set_hint("Field %d x %d m: %d lumber.  %s" % [roundi(_field_size.x), roundi(_field_size.y), cost,

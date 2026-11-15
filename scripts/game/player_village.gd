@@ -21,8 +21,15 @@ extends Node
 ## Buildings train side by side. A warrior or wizard sent back to work
 ## must train from the start to return.
 ##
+## A Blacksmith gives the workers wheelbarrows (bigger loads) and lets the
+## village research one thing at a time from Research.ITEMS: sharper
+## swords, bows (archers: ARCHERS_PER_GUARD per Town guard), and tools that
+## double the gathering of food, stone or lumber.
+##
 ## Everyone eats: villagers FOOD_PER_VILLAGER a minute, warriors
-## FOOD_PER_WARRIOR and wizards FOOD_PER_WIZARD. With no food, no children
+## FOOD_PER_WARRIOR, archers FOOD_PER_ARCHER and wizards FOOD_PER_WIZARD.
+## The creature eats too: Game.settings.creature_food a minute when full
+## grown, and in proportion to its size before that. With no food, no children
 ## are born; after STARVE_AFTER seconds without food, someone starves every
 ## STARVE_EVERY seconds until there is food again.
 
@@ -43,6 +50,8 @@ const BUSH_WOOD := 10.0
 const ROCK_STONE := 35.0
 const WARRIORS_PER_GUARD := 4
 const WARRIOR_SECONDS := 60.0
+const ARCHERS_PER_GUARD := 2
+const ARCHER_SECONDS := 90.0
 const WIZARDS_PER_ROCKS := 2
 const WIZARD_SECONDS := 180.0
 ## Magicko each wizard makes per minute.
@@ -51,11 +60,13 @@ const WIZARD_MAGICKO := 5.0
 const FOOD_PER_VILLAGER := 1.0
 const FOOD_PER_WARRIOR := 3.0
 const FOOD_PER_WIZARD := 2.0
+const FOOD_PER_ARCHER := 2.0
 const STARVE_AFTER := 60.0
 const STARVE_EVERY := 30.0
 ## role -> [building role in the catalog, per building, seconds to train]
 const ARMY := {
 	"warrior": ["guard", WARRIORS_PER_GUARD, WARRIOR_SECONDS],
+	"archer": ["guard", ARCHERS_PER_GUARD, ARCHER_SECONDS],
 	"wizard": ["wizard", WIZARDS_PER_ROCKS, WIZARD_SECONDS],
 }
 ## Blood Sacrifice: how long the magicko boost lasts, how big it is, and
@@ -64,6 +75,8 @@ const BLOOD_SECONDS := 30.0
 const BLOOD_BOOST := 2.0
 const BLOOD_REACH := 9.0
 
+signal research_done(id: String)
+
 var founded := false
 var center := Vector3.ZERO
 var resources := {}
@@ -71,7 +84,13 @@ var resources := {}
 var birth_progress := 0.0
 
 ## How many warriors and wizards the player asked for.
-var wanted := {"warrior": 0, "wizard": 0}
+var wanted := {"warrior": 0, "archer": 0, "wizard": 0}
+## Finished research: id -> true.
+var researched := {}
+## The research under way: {"id": ..., "t": seconds done}, or empty.
+var research := {}
+## True while the village has a Blacksmith: loads go home in wheelbarrows.
+var barrows := false
 ## Seconds with no food, and towards the next death from hunger.
 var hungry_for := 0.0
 ## Magicko comes in BLOOD_BOOST times as fast until Game.now passes this.
@@ -174,13 +193,93 @@ func wizards() -> int:
 	return get_tree().get_nodes_in_group("wizards").size()
 
 
+func archers() -> int:
+	return get_tree().get_nodes_in_group("archers").size()
+
+
 func count(role: String) -> int:
-	return soldiers() if role == "warrior" else wizards()
+	match role:
+		"warrior":
+			return soldiers()
+		"archer":
+			return archers()
+	return wizards()
 
 
-## The most warriors (or wizards) the village's buildings can train.
+## The most warriors (or archers, or wizards) the village's buildings can
+## train. Archers need bows first.
 func max_count(role: String) -> int:
+	if role == "archer" and not has_research("bows"):
+		return 0
 	return _training_buildings(role).size() * ARMY[role][1]
+
+
+# --- Blacksmith and research ----------------------------------------------------
+
+func has_blacksmith() -> bool:
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		if BuildingCatalog.role(node.get_meta("kind", "")) == "smith":
+			return true
+	return false
+
+
+func has_research(id: String) -> bool:
+	return researched.has(id)
+
+
+## How many times faster `kind` ("food", "stone" or "lumber") is gathered
+## thanks to researched tools.
+func tool_bonus(kind: String) -> float:
+	return Research.TOOL_BONUS if has_research(Research.TOOLS[kind]) else 1.0
+
+
+## Starts researching. Returns why it can't, or "" if it began.
+func start_research(id: String) -> String:
+	var item := Research.find(id)
+	if item.is_empty() or has_research(id):
+		return "That is already researched."
+	if not has_blacksmith():
+		return "Research needs a Blacksmith: build one first."
+	if not research.is_empty():
+		return "The Blacksmith is busy with %s." % (Research.find(research.id).name as String).to_lower()
+	var short := shortfall(item.cost)
+	if short != "":
+		return "Need %s more." % short
+	spend(item.cost)
+	research = {"id": id, "t": 0.0}
+	return ""
+
+
+## 0..1 for the research under way, 1 for finished research, else 0.
+func research_progress(id: String) -> float:
+	if has_research(id):
+		return 1.0
+	if research.get("id", "") == id:
+		return clampf(research.t / Research.find(id).seconds, 0.0, 1.0)
+	return 0.0
+
+
+func _update_research(delta: float) -> void:
+	if research.is_empty() or not barrows:
+		return
+	research.t += delta
+	var id: String = research.id
+	if research.t < Research.find(id).seconds:
+		return
+	research = {}
+	researched[id] = true
+	if id == "swords":
+		for v in people():
+			v.sharpen()
+	research_done.emit(id)
+
+
+## Food the creature eats per minute: its full appetite once grown.
+func creature_upkeep() -> float:
+	var c := Game.creature
+	if not is_instance_valid(c):
+		return 0.0
+	return Game.settings.creature_food * c.size
 
 
 ## Grown-ups that are not warriors, wizards or in training.
@@ -213,8 +312,15 @@ func training_progress(role: String) -> Array[float]:
 func food_upkeep() -> float:
 	var total := 0.0
 	for v in people():
-		total += FOOD_PER_WARRIOR if v.soldier else (FOOD_PER_WIZARD if v.wizard else FOOD_PER_VILLAGER)
-	return total
+		if v.soldier:
+			total += FOOD_PER_WARRIOR
+		elif v.wizard:
+			total += FOOD_PER_WIZARD
+		elif v.archer:
+			total += FOOD_PER_ARCHER
+		else:
+			total += FOOD_PER_VILLAGER
+	return total + creature_upkeep()
 
 
 ## Where a worker standing at `from` takes what it gathered: the door of
@@ -302,7 +408,9 @@ func _process(delta: float) -> void:
 	_army_timer -= delta
 	if _army_timer <= 0.0:
 		_army_timer = 0.5
+		barrows = has_blacksmith()
 		_manage_army()
+	_update_research(delta)
 
 
 func _eat(delta: float) -> void:
@@ -354,23 +462,27 @@ func work(v: Villager, delta: float) -> void:
 			entry.t += delta
 			if entry.t >= ARMY[entry.role][2]:
 				_training.erase(post)
-				if entry.role == "warrior":
-					v.guard = post
-					v.become_soldier(post.global_position)
-				else:
-					v.become_wizard(post.global_position)
+				match entry.role:
+					"warrior":
+						v.guard = post
+						v.become_soldier(post.global_position)
+					"archer":
+						v.guard = post
+						v.become_archer(post.global_position)
+					_:
+						v.become_wizard(post.global_position)
 		"food":
-			v.gather("food", Game.settings.food_rate / 60.0 * delta)
+			v.gather("food", Game.settings.food_rate / 60.0 * delta * tool_bonus("food"))
 		"farm":
 			var field := v.job_target as CropField
 			if field == null or not field.needs_work():
 				v.clear_job()
 			else:
-				var reaped := field.add_work(delta)
+				var reaped := field.add_work(delta * tool_bonus("food"))
 				if reaped > 0.0:
 					v.gather("food", reaped)
 		"lumber":
-			var gained: float = Game.settings.lumber_rate / 60.0 * delta
+			var gained: float = Game.settings.lumber_rate / 60.0 * delta * tool_bonus("lumber")
 			v.gather("lumber", gained)
 			var tree := v.job_target as Destructible
 			if tree and not tree.destroyed:
@@ -379,7 +491,7 @@ func work(v: Villager, delta: float) -> void:
 				if left <= 0.0:
 					tree.fell()
 		"stone":
-			var gained: float = Game.settings.stone_rate / 60.0 * delta
+			var gained: float = Game.settings.stone_rate / 60.0 * delta * tool_bonus("stone")
 			v.gather("stone", gained)
 			var rock := v.job_target as Node3D
 			if rock and rock.is_in_group("rocks"):
@@ -501,7 +613,7 @@ func _manage_army() -> void:
 				training -= 1
 			else:
 				for v in people():
-					if (v.soldier and role == "warrior") or (v.wizard and role == "wizard"):
+					if (v.soldier and role == "warrior") or (v.wizard and role == "wizard") or (v.archer and role == "archer"):
 						v.become_worker()
 						break
 				have -= 1

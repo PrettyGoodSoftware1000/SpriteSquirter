@@ -121,6 +121,8 @@ static func create(kind: String, rng: RandomNumberGenerator) -> Destructible:
 			top = _build_store(b, rng)
 		"windmill":
 			top = _build_windmill(b, rng)
+		"blacksmith":
+			top = _build_blacksmith(b, rng)
 		_:
 			top = _build_goblin_hut(b, rng)
 	b.height = top
@@ -691,6 +693,42 @@ static func _build_windmill(b: Destructible, rng: RandomNumberGenerator) -> floa
 
 ## A drooping tent of moss and roots with crooked smoking chimneys, a bird
 ## skull on its peak and glowing charms hung from the eaves.
+## The Blacksmith: a squat stone smithy with a fat chimney, a hearth of
+## glowing coals beside the door and an anvil on a stump out front.
+static func _build_blacksmith(b: Destructible, rng: RandomNumberGenerator) -> float:
+	b.footprint = 3.7
+	var top := _mini_house(b, rng, Vector3(0, 0, -0.4), 0.0, Vector3(4.4, 2.7, 3.6), Color(0.56, 0.54, 0.62), Color(0.26, 0.22, 0.32), SINK)
+	var stone := MeshBuilder.new()
+	stone.color = Color(0.5, 0.48, 0.56)
+	stone.add_box(Vector3(1.4, 6.4 + SINK, 1.4), 0.12, Transform3D(Basis(), Vector3(1.75, (6.4 - SINK) * 0.5, -1.3)), Vector2(0.72, 0.72))
+	stone.add_box(Vector3(1.3, 0.4, 1.3), 0.08, Transform3D(Basis(), Vector3(1.75, 6.4, -1.3)))
+	stone.color = Color(0.44, 0.42, 0.5)
+	stone.add_box(Vector3(1.6, 0.9 + SINK, 1.1), 0.1, Transform3D(Basis(), Vector3(-1.35, (0.9 - SINK) * 0.5, 2.0)))
+	_part(b, stone.commit(), Art.paint("stone"))
+	var fire := MeshBuilder.new()
+	fire.color = Color(1.0, 0.45, 0.1)
+	fire.add_blob(Vector3(0.6, 0.2, 0.38), Transform3D(Basis(), Vector3(-1.35, 0.95, 2.0)), null, 0.0, 5, 8)
+	fire.add_blob(Vector3(0.38, 0.2, 0.38), Transform3D(Basis(), Vector3(1.75, 6.62, -1.3)), null, 0.0, 5, 8)
+	_part(b, fire.commit(), Art.glow(2.6))
+	var anvil := MeshBuilder.new()
+	anvil.color = Art.WOOD_DARK
+	anvil.add_tube(PackedVector3Array([Vector3(1.0, -0.3, 2.3), Vector3(1.0, 0.6, 2.3)]), PackedFloat32Array([0.4, 0.36]), 10)
+	anvil.color = Color(0.2, 0.2, 0.24)
+	anvil.add_box(Vector3(0.42, 0.22, 0.3), 0.03, Transform3D(Basis(), Vector3(1.0, 0.71, 2.3)))
+	anvil.add_box(Vector3(0.85, 0.2, 0.34), 0.04, Transform3D(Basis(), Vector3(1.0, 0.92, 2.3)))
+	anvil.add_tube(PackedVector3Array([Vector3(1.4, 0.94, 2.3), Vector3(1.75, 0.98, 2.3)]), PackedFloat32Array([0.09, 0.02]), 6)
+	# A hammer leaning on the stump, and a barrel of water to quench in.
+	anvil.color = Art.WOOD
+	anvil.add_tube(PackedVector3Array([Vector3(0.45, 0.0, 2.55), Vector3(0.6, 0.75, 2.45)]), PackedFloat32Array([0.035, 0.035]), 5)
+	anvil.add_tube(PackedVector3Array([Vector3(2.3, -0.2, 1.7), Vector3(2.3, 0.85, 1.7)]), PackedFloat32Array([0.42, 0.46]), 10)
+	anvil.color = Color(0.2, 0.2, 0.24)
+	anvil.add_box(Vector3(0.3, 0.16, 0.16), 0.03, Transform3D(Basis(Vector3.BACK, 0.2), Vector3(0.62, 0.82, 2.44)))
+	anvil.color = Color(0.3, 0.6, 0.8)
+	anvil.add_tube(PackedVector3Array([Vector3(2.3, 0.8, 1.7), Vector3(2.3, 0.88, 1.7)]), PackedFloat32Array([0.4, 0.4]), 10)
+	_part(b, anvil.commit(), Art.paint("planks", 0.6))
+	return maxf(top, 6.8)
+
+
 static func _build_goblin_hut(b: Destructible, rng: RandomNumberGenerator) -> float:
 	var r := rng.randf_range(3.6, 4.4)
 	var h := rng.randf_range(7.0, 8.5)

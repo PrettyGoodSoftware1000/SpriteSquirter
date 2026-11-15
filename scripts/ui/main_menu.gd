@@ -36,7 +36,7 @@ func _ready() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var tagline := Label.new()
-	tagline.text = "Grow a village on a floating island. Mind the tortoise."
+	tagline.text = "Grow a village on a floating island. Mind your creature."
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tagline.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(tagline)
@@ -55,6 +55,20 @@ func _ready() -> void:
 		b.button_pressed = size == _size
 		b.pressed.connect(func() -> void: _size = size)
 		sizes.add_child(b)
+	box.add_child(_heading("Your creature"))
+	var beasts := HBoxContainer.new()
+	beasts.add_theme_constant_override("separation", 6)
+	box.add_child(beasts)
+	var beast_group := ButtonGroup.new()
+	var blurbs := {"tortoise": "gloomy, slow, twice as tough", "tiger": "nervous, 30% faster, half as tough"}
+	for kind: String in Creature.SPECIES:
+		var b := _button("%s\n%s" % [Creature.SPECIES[kind].name, blurbs.get(kind, "")])
+		b.toggle_mode = true
+		b.button_group = beast_group
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.button_pressed = kind == Game.creature_kind
+		b.pressed.connect(func() -> void: Game.creature_kind = kind)
+		beasts.add_child(b)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	box.add_child(row)

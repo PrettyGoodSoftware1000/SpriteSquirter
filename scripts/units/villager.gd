@@ -35,6 +35,13 @@ const AGGRO := 13.0
 const SOLDIER_AGGRO := 60.0
 ## Units of a resource a worker gathers before walking it to the storehouse.
 const CARRY_CAPACITY := 2.0
+## The load a wheelbarrow takes, once the village has a Blacksmith.
+const BARROW_CAPACITY := 6.0
+## Archers shoot an arrow every ARROW_SECONDS at goblins within ARCHER_RANGE.
+const ARCHER_RANGE := 22.0
+const ARROW_SECONDS := 1.5
+const ARROW_DAMAGE := 12.0
+const ARCHER_HEALTH := 1.5
 ## Speed while wading through roots.
 const SLOWED_SPEED := 0.25
 ## Wizards throw a firebolt every FIREBOLT_SECONDS at goblins within
@@ -61,6 +68,7 @@ static var _looks: Array[Dictionary] = []
 static var _goblin_looks: Array[Dictionary] = []
 static var _soldier_looks: Array[Dictionary] = []
 static var _wizard_looks: Array[Dictionary] = []
+static var _archer_looks: Array[Dictionary] = []
 static var _ogre_look := {}
 ## Shared meshes: sword, shield, club, staff and the workers' wheelbarrows.
 static var _gear := {}
@@ -79,6 +87,8 @@ var soldier := false
 var guard: Node
 ## Trained at the Singing rocks: robed, makes magicko and throws firebolts.
 var wizard := false
+## Trained at a Town guard once bows are researched: shoots from a distance.
+var archer := false
 ## A goblin on a night raid.
 var raiding := false
 ## Set before adding to the scene, together with `goblin`: a huge goblin
@@ -138,6 +148,8 @@ var _delivering := false
 var _drop_pos := Vector3.ZERO
 var _farm_timer := 0.0
 var _load: MeshInstance3D
+## Wheeling the load home in a barrow (rather than carrying it).
+var _pushing := false
 var _base_look := {}
 var _gear_nodes: Array[Node3D] = []
 var _look := {}
@@ -651,6 +663,67 @@ static func _build_looks() -> void:
 		arm.color = skin
 		arm.add_blob(Vector3(0.06, 0.07, 0.06), Transform3D(Basis(), Vector3(0, -0.55, 0)), null, 0.0, 4, 8)
 		_wizard_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
+	# Archers: a hooded green jerkin, a quiver on the back and a longbow.
+	var green := Color(0.2, 0.42, 0.2)
+	for skin: Color in Art.SKIN_COLORS:
+		var body := MeshBuilder.new()
+		body.color = green
+		body.add_lathe(PackedVector2Array([Vector2(0.0, 0.62), Vector2(0.29, 0.62), Vector2(0.21, 1.0), Vector2(0.25, 1.28),
+			Vector2(0.13, 1.44), Vector2(0.0, 1.46)]), 14)
+		body.color = Color(0.2, 0.13, 0.09)
+		_band(body, 0.215, 1.02, 0.04, 0.02, 14)
+		body.color = skin
+		body.add_blob(Vector3(0.155, 0.175, 0.165), _at(0, 1.6, 0), null, 0.0, 8, 12)
+		_face(body, skin, 1.6, 0.165)
+		body.color = green.darkened(0.25)
+		body.add_blob(Vector3(0.195, 0.2, 0.2), _at(0, 1.62, -0.05), null, 0.0, 8, 12)
+		body.add_tube(PackedVector3Array([Vector3(0, 1.74, -0.18), Vector3(0, 1.66, -0.32)]), PackedFloat32Array([0.07, 0.015]), 6)
+		body.color = LEATHER
+		body.add_tube(PackedVector3Array([Vector3(0.1, 0.95, -0.24), Vector3(-0.12, 1.5, -0.24)]), PackedFloat32Array([0.07, 0.075]), 8)
+		body.color = Color(0.95, 0.9, 0.75)
+		for k in 3:
+			body.add_tube(PackedVector3Array([Vector3(-0.12 + 0.03 * (k - 1), 1.5, -0.24), Vector3(-0.17 + 0.04 * (k - 1), 1.68, -0.24)]),
+				PackedFloat32Array([0.012, 0.02]), 4)
+		var leg := MeshBuilder.new()
+		leg.color = Color(0.32, 0.24, 0.16)
+		leg.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.36, 0.02), Vector3(0, -0.7, 0)]), PackedFloat32Array([0.1, 0.085, 0.07]), 8)
+		leg.color = LEATHER.darkened(0.3)
+		leg.add_blob(Vector3(0.085, 0.065, 0.15), _at(0, -0.735, 0.055), null, 0.0, 5, 8)
+		var arm := MeshBuilder.new()
+		arm.color = green.lightened(0.08)
+		arm.add_tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.26, -0.015), Vector3(0, -0.36, -0.01)]), PackedFloat32Array([0.08, 0.068, 0.066]), 8)
+		arm.color = LEATHER
+		arm.add_tube(PackedVector3Array([Vector3(0, -0.34, -0.01), Vector3(0, -0.47, 0)]), PackedFloat32Array([0.068, 0.062]), 8)
+		arm.color = skin
+		arm.add_blob(Vector3(0.058, 0.07, 0.058), _at(0, -0.54, 0), null, 0.0, 5, 8)
+		_archer_looks.append({"body": body.commit(), "leg": leg.commit(), "arm": arm.commit()})
+	# The bow lies along the forearm's Z axis, so it stands upright when the
+	# arm is held out to shoot, and bulges away from the hand.
+	var bow := MeshBuilder.new()
+	bow.color = Art.WOOD
+	bow.add_tube(PackedVector3Array([Vector3(0, 0.03, -0.62), Vector3(0, -0.13, -0.34), Vector3(0, -0.2, 0.0), Vector3(0, -0.13, 0.34),
+		Vector3(0, 0.03, 0.62)]), PackedFloat32Array([0.012, 0.022, 0.028, 0.022, 0.012]), 5)
+	bow.color = INK
+	bow.add_tube(PackedVector3Array([Vector3(0, 0.03, -0.62), Vector3(0, 0.03, 0.62)]), PackedFloat32Array([0.006, 0.006]), 4)
+	_gear["bow"] = bow.commit()
+
+	# Without wheelbarrows a worker carries a small load on its back.
+	var back := _at(0, 1.22, -0.27)
+	var logs := MeshBuilder.new()
+	logs.color = Art.WOOD
+	for z: float in [-0.07, 0.07]:
+		logs.add_tube(PackedVector3Array([Vector3(-0.3, 0, z), Vector3(0.3, 0, z)]), PackedFloat32Array([0.065, 0.065]), 6, back)
+	logs.add_tube(PackedVector3Array([Vector3(-0.3, 0.11, 0), Vector3(0.3, 0.11, 0)]), PackedFloat32Array([0.065, 0.065]), 6, back)
+	_gear["pack_lumber"] = logs.commit()
+	var lump := MeshBuilder.new()
+	lump.color = Color(0.62, 0.64, 0.68)
+	lump.add_blob(Vector3(0.18, 0.15, 0.16), back, null, 0.0, 5, 8)
+	_gear["pack_stone"] = lump.commit()
+	var sack := MeshBuilder.new()
+	sack.color = Color(0.88, 0.74, 0.36)
+	sack.add_blob(Vector3(0.16, 0.2, 0.14), back, null, 0.0, 5, 8)
+	_gear["pack_food"] = sack.commit()
+
 	var staff := MeshBuilder.new()
 	staff.color = Art.WOOD_DARK
 	staff.add_tube(PackedVector3Array([Vector3(0, -0.7, 0), Vector3(0, 0.75, 0)]), PackedFloat32Array([0.035, 0.03]), 6)
@@ -783,7 +856,7 @@ func is_adult() -> bool:
 
 ## True if the villager could start a job right now.
 func can_work() -> bool:
-	return owned and not child and not soldier and not wizard and state != State.DEAD and state != State.BURNING and state != State.HELD
+	return owned and not child and not soldier and not wizard and not archer and state != State.DEAD and state != State.BURNING and state != State.HELD
 
 
 ## Grown-up villagers of the player's village and goblins fight. Children
@@ -868,7 +941,8 @@ func gather(kind: String, amount: float) -> void:
 		_unload()
 		carry_kind = kind
 	carry += amount
-	if carry >= CARRY_CAPACITY:
+	var barrows := is_instance_valid(Game.village) and Game.village.barrows
+	if carry >= (BARROW_CAPACITY if barrows else CARRY_CAPACITY):
 		_start_delivery()
 
 
@@ -878,12 +952,14 @@ func _start_delivery() -> void:
 	_delivering = true
 	_working = false
 	_drop_pos = Game.village.drop_point(global_position)
-	# The load goes home in a wheelbarrow.
+	# The load goes home in a wheelbarrow if the village has a Blacksmith to
+	# make them, and on the worker's back if not.
 	if _load == null:
 		_load = MeshInstance3D.new()
 		_load.material_override = Art.cloth()
 		add_child(_load)
-	_load.mesh = _gear["barrow_" + carry_kind]
+	_pushing = Game.village.barrows
+	_load.mesh = _gear[("barrow_" if _pushing else "pack_") + carry_kind]
 	_load.visible = true
 	if state == State.IDLE or state == State.WALK:
 		state = State.JOB
@@ -914,6 +990,8 @@ func become_soldier(post: Vector3) -> void:
 	max_hp = HEALTH * SOLDIER_HEALTH
 	hp = max_hp
 	damage = ATTACK_DAMAGE * SOLDIER_DAMAGE
+	if is_instance_valid(Game.village) and Game.village.has_research("swords"):
+		sharpen()
 	_look = _soldier_looks[randi() % _soldier_looks.size()]
 	_apply_lod(_near)
 	_add_gear("sword", _arms[0], Vector3(0.0, -0.55, 0.0))
@@ -951,19 +1029,45 @@ func become_wizard(post: Vector3) -> void:
 	Game.effects.spawn_dust(global_position, 0.5)
 
 
-## A soldier or wizard goes back to ordinary work (and would have to train
-## again to return).
+## Sharper swords from the Blacksmith: warriors hit harder.
+func sharpen() -> void:
+	if soldier:
+		damage = ATTACK_DAMAGE * SOLDIER_DAMAGE * Research.SWORD_BONUS
+
+
+## Trained at a Town guard once the village has bows: a green hood, a
+## quiver and a longbow.
+func become_archer(post: Vector3) -> void:
+	if archer or soldier or wizard or goblin or state == State.DEAD:
+		return
+	_unload()
+	clear_job()
+	archer = true
+	add_to_group("archers")
+	home = post
+	home_radius = 10.0
+	max_hp = HEALTH * ARCHER_HEALTH
+	hp = max_hp
+	_wear(_archer_looks[randi() % _archer_looks.size()])
+	_add_gear("bow", _arms[1], Vector3(0.0, -0.55, 0.0))
+	Game.effects.spawn_dust(global_position, 0.5)
+
+
+## A soldier, archer or wizard goes back to ordinary work (and would have
+## to train again to return).
 func become_worker() -> void:
-	if not (soldier or wizard) or state == State.DEAD:
+	if not (soldier or wizard or archer) or state == State.DEAD:
 		return
 	for g in _gear_nodes:
 		g.queue_free()
 	_gear_nodes.clear()
 	soldier = false
 	wizard = false
+	archer = false
 	guard = null
 	remove_from_group("soldiers")
 	remove_from_group("wizards")
+	remove_from_group("archers")
 	max_hp = HEALTH
 	hp = minf(hp, max_hp)
 	damage = ATTACK_DAMAGE
@@ -1010,9 +1114,16 @@ func _think() -> void:
 	if state == State.BURNING:
 		return
 	if goblin:
-		if not raiding or (state == State.FIGHT and _foe_ok() and _foe is Villager):
+		if not raiding or (state == State.FIGHT and _foe_ok() and (_foe is Villager or _foe is Creature)):
 			return
 		var victim := _nearest_villager(AGGRO)
+		# The creature is fair game when it is close, unless a villager is closer.
+		var beast := Game.creature
+		if is_instance_valid(beast) and not beast.knocked_out:
+			var d := _flat_to(beast.global_position)
+			if d < 4.0 + 5.0 * beast.size and (victim == null or d < _flat_to(victim.global_position)):
+				_engage(beast)
+				return
 		if victim:
 			_engage(victim)
 		elif state != State.FIGHT and _flat_to(_raid_goal) < 22.0:
@@ -1025,7 +1136,7 @@ func _think() -> void:
 		return
 	var fighter := can_fight()
 	var best: Villager = null
-	var best_d := SOLDIER_AGGRO if soldier or wizard else (AGGRO if fighter else 8.0)
+	var best_d := SOLDIER_AGGRO if soldier or wizard or archer else (AGGRO if fighter else 8.0)
 	for node in raiders:
 		var g := node as Villager
 		var d := _flat_to(g.global_position)
@@ -1087,6 +1198,9 @@ func _foe_ok() -> bool:
 	var v := _foe as Villager
 	if v:
 		return v.state != State.DEAD and v.state != State.HELD and (goblin or v.raiding)
+	var beast := _foe as Creature
+	if beast:
+		return raiding and not beast.knocked_out
 	var b := _foe as Destructible
 	return b != null and not b.destroyed
 
@@ -1104,10 +1218,16 @@ func _update_fight(delta: float) -> void:
 	if wizard and _foe is Villager:
 		_cast_at(_foe as Villager, to, delta)
 		return
+	if archer and _foe is Villager:
+		_shoot_at(_foe as Villager, to, delta)
+		return
 	var reach := 2.6 if ogre else 1.2
 	var building := _foe as Destructible
+	var beast := _foe as Creature
 	if building:
 		reach += building.footprint * 0.8 - 0.4
+	elif beast:
+		reach += 2.2 * beast.size
 	_in_reach = to.length() <= reach
 	if not _in_reach:
 		_move_towards(_foe.global_position, (3.0 if soldier else (2.1 if ogre else 2.6)) * _speed_scale, delta)
@@ -1118,8 +1238,24 @@ func _update_fight(delta: float) -> void:
 		if building:
 			# Buildings are tough: goblins only chip at them.
 			building.damage(damage * 0.5, global_position, 3.0)
+		elif beast:
+			beast.take_hit(damage, self)
 		else:
 			(_foe as Villager).take_hit(damage, self)
+
+
+## Archers stand off and shoot.
+func _shoot_at(foe: Villager, to: Vector3, delta: float) -> void:
+	_in_reach = to.length() <= ARCHER_RANGE
+	if not _in_reach:
+		_move_towards(foe.global_position, 2.6 * _speed_scale, delta)
+		return
+	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
+	if _attack_timer <= 0.0:
+		_attack_timer = ARROW_SECONDS
+		var arrow := Arrow.new()
+		Game.world_root.add_child(arrow)
+		arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to.normalized() * 0.5, foe, self, ARROW_DAMAGE)
 
 
 ## Wizards keep their distance and throw firebolts.
@@ -1229,7 +1365,7 @@ func _animate(delta: float) -> void:
 		_legs[k].rotation.x = lerpf(_legs[k].rotation.x, stride * s, blend)
 		# Panicking villagers throw their arms in the air.
 		var arm := -2.7 + sin(_phase * 1.3 + k) * 0.35 if panicking else -stride * s * 0.8
-		if _delivering and state == State.JOB:
+		if _delivering and _pushing and state == State.JOB:
 			# Both hands on the wheelbarrow.
 			arm = -0.55
 		_arms[k].rotation.x = lerpf(_arms[k].rotation.x, arm, blend)
@@ -1272,6 +1408,9 @@ func _animate_fight(blend: float) -> void:
 		if wizard:
 			# The staff is raised to throw; the other hand points.
 			arm = -2.4 + 0.6 * wind if k == 0 else -1.5
+		elif archer:
+			# The bow arm is held out; the other draws the string.
+			arm = -1.5 if k == 1 else -1.4 + 0.4 * wind
 		elif k == 1:
 			# Soldiers keep the shield up; everyone else flails with both arms.
 			arm = -1.1 if soldier else -0.4 - 2.3 * (1.0 - wind)
@@ -1406,7 +1545,7 @@ func _die(charred: bool) -> void:
 	if state == State.DEAD:
 		return
 	state = State.DEAD
-	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards"]:
+	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards", "archers"]:
 		remove_from_group(group)
 	raiding = false
 	job = ""

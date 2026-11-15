@@ -23,6 +23,10 @@ func _run() -> void:
 	var game := Game
 	Engine.time_scale = 8.0
 	game.settings.birth_seconds = 5.0
+	# The creature grows up in a few seconds and eats nothing, so the older
+	# checks see the full-grown creature and the food they expect.
+	game.settings.creature_grow_minutes = 0.1
+	game.settings.creature_food = 0.0
 
 	# 1. The menu.
 	await _open(game, "menu", "", 384)
@@ -249,6 +253,54 @@ func _run() -> void:
 	await _wait(10.0)
 	_check(field.stage != CropField.Stage.GROWING or field.progress > 10.0 / CropField.GROW_SECONDS * 1.8, "rain speeds up the wheat (%.2f)" % field.progress)
 
+	# The creature: full grown by now; it eats, and can be knocked out.
+	var beast := play.creature
+	_check(beast.kind == "tortoise" and is_equal_approx(beast.size, 1.0), "the tortoise is full grown after its growing time")
+	game.settings.creature_food = 20.0
+	_check(is_equal_approx(village.creature_upkeep(), 20.0), "a full-grown creature eats 20 food a minute")
+	game.settings.creature_food = 0.0
+	_check(is_equal_approx(Creature.SPECIES.tiger.speed, Creature.SPECIES.tortoise.speed * 1.3)
+		and is_equal_approx(Creature.SPECIES.tortoise.hp, Creature.SPECIES.tiger.hp * 2.0), "the tiger is 30% faster, the tortoise has twice the health")
+	beast.take_hit(beast.max_hp * 2.0, null)
+	_check(beast.knocked_out, "the creature is knocked out at no health")
+
+	# Blacksmith: wheelbarrows, research, archers.
+	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
+	play.raids.end_raid()
+	_check(not village.barrows, "no wheelbarrows without a Blacksmith")
+	_check(village.start_research("bows") != "", "research needs a Blacksmith")
+	var smithy := BuildingFactory.create("blacksmith", RandomNumberGenerator.new())
+	game.world_root.add_child(smithy)
+	smithy.global_position = village.center + Vector3(-12, 0, -8)
+	smithy.add_to_group("player_buildings")
+	await _wait(1.5)
+	_check(village.barrows, "a Blacksmith brings wheelbarrows")
+	for res in ["lumber", "stone", "food"]:
+		village.give(res, 600.0)
+	_check(village.max_count("archer") == 0, "no archers before bows")
+	_check(village.start_research("bows") == "", "bows can be researched")
+	_check(village.start_research("axes") != "", "one research at a time")
+	village.research.t = Research.find("bows").seconds - 2.0
+	await _wait(4.0)
+	_check(village.has_research("bows") and village.max_count("archer") >= PlayerVillage.ARCHERS_PER_GUARD,
+		"bows allow 2 archers per Town guard (%d allowed)" % village.max_count("archer"))
+	_check(is_equal_approx(Research.find("swords").seconds, 300.0), "sharper swords take 5 minutes")
+	for id: String in ["swords", "pitchforks", "picks", "axes"]:
+		village.start_research(id)
+		village.research.t = Research.find(id).seconds - 0.5
+		await _wait(1.5)
+	_check(village.has_research("swords") and is_equal_approx(village.tool_bonus("food"), 2.0)
+		and is_equal_approx(village.tool_bonus("stone"), 2.0) and is_equal_approx(village.tool_bonus("lumber"), 2.0), "swords and tools researched")
+	village.set_wanted("archer", 1)
+	await _wait(PlayerVillage.ARCHER_SECONDS + 45.0)
+	_check(village.archers() == 1, "an archer is trained (%d)" % village.archers())
+	village.set_wanted("warrior", 1)
+	await _wait(PlayerVillage.WARRIOR_SECONDS + 45.0)
+	var sharp := get_tree().get_nodes_in_group("soldiers")
+	_check(not sharp.is_empty() and is_equal_approx((sharp[0] as Villager).damage, Villager.ATTACK_DAMAGE * 2.0 * Research.SWORD_BONUS),
+		"warriors hit harder with sharper swords")
+	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT
+
 	# Rain puts out fires.
 	var fire_at := village.center + Vector3(6, 0, 6)
 	game.fire.start_fire(fire_at)
@@ -322,9 +374,21 @@ func _run() -> void:
 	await _wait(3.0)
 	_check(get_tree().get_nodes_in_group("start_markers").is_empty(), "banners removed after choosing")
 
-	# 5. A large random island builds.
+	# 5. A large random island builds. This time with the tiger, growing
+	# at the normal rate: it starts at 15% of its size.
+	game.creature_kind = "tiger"
+	game.settings.creature_grow_minutes = 30.0
 	await _open(game, "play", "", 768)
 	_check(Terrain.SIZE == 768 and Terrain.CHUNKS == 24 and is_equal_approx(Terrain.ISLAND_RADIUS, 348.0), "large map: twice the old island radius")
+	play = get_tree().current_scene.get_node("Controller") as PlayMode
+	var t0: Vector2 = play._info.starts[0]
+	play._found(Vector3(t0.x, game.terrain.get_height(t0.x, t0.y), t0.y), 0)
+	var tiger := play.creature
+	_check(tiger.kind == "tiger" and tiger.size < 0.16 and is_equal_approx(tiger.scale.x, tiger.size), "the tiger starts at 15%% of its size (%.2f)" % tiger.size)
+	tiger.move_to(tiger.global_position + Vector3(6, 0, 6))
+	await _wait(60.0)
+	_check(tiger.size > 0.17 and tiger.size < 0.2, "the tiger grows towards full size over 30 minutes (%.3f after 1 minute)" % tiger.size)
+	game.creature_kind = "tortoise"
 
 	DirAccess.remove_absolute(path)
 	Engine.time_scale = 1.0

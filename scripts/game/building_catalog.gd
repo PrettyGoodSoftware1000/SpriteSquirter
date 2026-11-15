@@ -7,7 +7,8 @@ extends RefCounted
 ## Roles:
 ##   home   adds housing, so more villagers can be born
 ##   store  the Storehouse: villagers carry what they gather to it
-##   guard  the Town guard: trains warriors (soldiers in the code)
+##   guard  the Town guard: trains warriors (soldiers in the code) and archers
+##   smith  the Blacksmith: wheelbarrows for the workers, and research
 ##   wizard the Singing rocks: trains wizards
 ##   field  a wheat field, drawn on the ground instead of placed (CropField)
 
@@ -21,6 +22,8 @@ const BUILDINGS := [
 		"cost": {"lumber": 35, "stone": 10}, "desc": "Villagers carry resources here"},
 	{"kind": "moon_tower", "name": "Town guard", "role": "guard",
 		"cost": {"lumber": 30, "stone": 40, "food": 20}, "desc": "Trains 4 warriors, 1 min each"},
+	{"kind": "blacksmith", "name": "Blacksmith", "role": "smith",
+		"cost": {"lumber": 50, "stone": 40}, "desc": "Wheelbarrows, and research (U)"},
 	{"kind": "field", "name": "Wheat field", "role": "field",
 		"cost": {}, "desc": "Drag out a square. 1 lumber per 10 m2"},
 	{"kind": "mushroom_house", "name": "Mushroom cottage", "role": "home", "housing": 3,

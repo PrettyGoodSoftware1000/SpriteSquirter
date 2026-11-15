@@ -22,6 +22,8 @@ signal grass_requested
 signal setting_changed(key: String, value: float)
 signal resources_requested
 signal jobs_changed(role: String, change: int)
+signal research_menu_requested
+signal research_selected(id: String)
 
 const SCULPT_NAMES := ["Raise", "Lower", "Flatten", "Smooth"]
 const RESOURCE_COLORS := {
@@ -38,14 +40,24 @@ const SETTING_SLIDERS := [
 	["magicko_rate", "Magicko rate", 0.0, 30.0, 0.5, "/villager/min"],
 	["goblin_rate", "Goblin spawn", 0.0, 20.0, 0.5, "/cave/min"],
 	["goblin_rate_growth", "Goblin spawn rise", 0.0, 10.0, 0.5, "/night"],
+	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
+	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 ]
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find tortoise\nRight-click move tortoise   1-4 spells   B build   Esc cancel   ~ dev menu"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find %s\nRight-click move %s   1-4 spells   B build   U research   Esc cancel   ~ dev menu"
+## role -> [name in the jobs row, the building that trains it]
+const ROLES := {
+	"warrior": ["Warriors", "Town guard"],
+	"archer": ["Archers", "Town guard"],
+	"wizard": ["Wizards", "Singing rocks"],
+}
 
 var _hint: Label
 var _resource_labels := {}
 var _sub_label: Label
 var _clock: Label
 var _jobs := {}
+var _research_panel: PanelContainer
+var _research_rows := {}
 var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_bars: Array[ProgressBar] = []
@@ -77,6 +89,7 @@ func _ready() -> void:
 	_build_resource_bar(root)
 	_build_spell_bar(root)
 	_build_build_menu(root)
+	_build_research_menu(root)
 	_build_prompt(root)
 	_build_dev_menu(root)
 
@@ -88,7 +101,8 @@ func _ready() -> void:
 	help_panel.modulate = Color(1, 1, 1, 0.75)
 	root.add_child(help_panel)
 	var help := Label.new()
-	help.text = HELP
+	var beast: String = (Creature.SPECIES[Game.creature_kind].name as String).to_lower()
+	help.text = HELP % [beast, beast]
 	help.add_theme_font_size_override("font_size", 12)
 	help_panel.add_child(help)
 
@@ -112,6 +126,9 @@ func _build_player_panel(root: Control) -> void:
 	var build := _button("Build (B)")
 	build.pressed.connect(func() -> void: build_menu_requested.emit())
 	top.add_child(build)
+	var research := _button("Research (U)")
+	research.pressed.connect(func() -> void: research_menu_requested.emit())
+	top.add_child(research)
 	var menu := _button("Menu")
 	menu.pressed.connect(func() -> void: menu_requested.emit())
 	top.add_child(menu)
@@ -169,9 +186,9 @@ func _build_jobs_row() -> Control:
 	_workers = Label.new()
 	_workers.add_theme_font_size_override("font_size", 15)
 	row.add_child(_workers)
-	for role in ["warrior", "wizard"]:
+	for role: String in ROLES:
 		var role_label := Label.new()
-		role_label.text = "Warriors" if role == "warrior" else "Wizards"
+		role_label.text = ROLES[role][0]
 		role_label.add_theme_font_size_override("font_size", 15)
 		row.add_child(role_label)
 		var less := _button("-")
@@ -200,7 +217,7 @@ func _build_jobs_row() -> Control:
 		more.custom_minimum_size.x = 28
 		more.pressed.connect(func() -> void: jobs_changed.emit(role, 1))
 		row.add_child(more)
-		_jobs[role] = {"count": count, "bar": bar, "less": less, "more": more}
+		_jobs[role] = {"count": count, "bar": bar, "less": less, "more": more, "label": role_label}
 	return row
 
 
@@ -275,6 +292,83 @@ func _build_build_menu(root: Control) -> void:
 	note.add_theme_font_size_override("font_size", 13)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
+
+
+## The Blacksmith's research: one button for each thing to learn, with what
+## it costs, how long it takes and how far along it is.
+func _build_research_menu(root: Control) -> void:
+	_research_panel = PanelContainer.new()
+	_research_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_research_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_research_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_research_panel.visible = false
+	root.add_child(_research_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	_research_panel.add_child(box)
+	box.add_child(_heading("Research  (needs a Blacksmith; one thing at a time;  U / Esc to close)"))
+	for item in Research.ITEMS:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		box.add_child(row)
+		var b := _button("")
+		b.custom_minimum_size = Vector2(430, 78)
+		var minutes: float = item.seconds / 60.0
+		var lines: Array[Control] = [_text(item.name, 16), _text("%s.  Takes %s min" % [item.desc, _number(minutes)], 13),
+			ResourceIcon.cost_row(item.cost, 14)]
+		b.add_child(_stacked(lines))
+		var id: String = item.id
+		b.pressed.connect(func() -> void: research_selected.emit(id))
+		row.add_child(b)
+		var state := VBoxContainer.new()
+		state.alignment = BoxContainer.ALIGNMENT_CENTER
+		state.custom_minimum_size.x = 130
+		row.add_child(state)
+		var status := _text("", 15)
+		status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		state.add_child(status)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.max_value = 1.0
+		bar.custom_minimum_size = Vector2(130, 8)
+		state.add_child(bar)
+		_research_rows[id] = {"button": b, "status": status, "bar": bar}
+	var note := Label.new()
+	note.text = "The Blacksmith also gives your workers wheelbarrows, which carry three times as much."
+	note.add_theme_font_size_override("font_size", 13)
+	note.modulate = Color(1, 1, 1, 0.75)
+	box.add_child(note)
+
+
+func show_research_menu(shown: bool) -> void:
+	_research_panel.visible = shown
+
+
+func is_research_menu_open() -> bool:
+	return _research_panel.visible
+
+
+func update_research(village: PlayerVillage) -> void:
+	var smith := village.has_blacksmith()
+	for item in Research.ITEMS:
+		var row: Dictionary = _research_rows[item.id]
+		var b := row.button as Button
+		var done := village.has_research(item.id)
+		var running: bool = village.research.get("id", "") == item.id
+		var progress := village.research_progress(item.id)
+		(row.bar as ProgressBar).value = progress
+		(row.bar as ProgressBar).visible = running
+		var status := row.status as Label
+		if done:
+			status.text = "Done"
+		elif running:
+			status.text = "%d%%" % floori(progress * 100.0)
+		elif not smith:
+			status.text = "No Blacksmith"
+		else:
+			status.text = ""
+		b.disabled = done or running
+		b.modulate = Color.WHITE if done or running or village.can_afford(item.cost) else Color(1.0, 0.6, 0.6, 0.8)
 
 
 func _build_prompt(root: Control) -> void:
@@ -459,6 +553,11 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 	else:
 		parts.append("Next villager in %d s" % ceili(next) if next >= 0.0 else "No room for more villagers: build a Home")
 	parts.append("Eating %d food/min" % roundi(village.food_upkeep()))
+	var beast := Game.creature
+	if is_instance_valid(beast):
+		var state := "%s %d%% grown" % [beast.species_name(), roundi(beast.grown() * 100.0)] if beast.grown() < 0.995 else beast.species_name()
+		state += ", knocked out" if beast.knocked_out else ", health %d%%" % roundi(100.0 * beast.hp / maxf(beast.max_hp, 1.0))
+		parts.append(state)
 	if kids > 0:
 		parts.append("%d growing up" % kids)
 	var sites := get_tree().get_nodes_in_group("construction_sites").size()
@@ -474,8 +573,11 @@ func _update_jobs(village: PlayerVillage) -> void:
 		var top := village.max_count(role)
 		var want: int = village.wanted[role]
 		(w.count as Label).text = "%d/%d" % [village.count(role), want]
-		var building := "Town guard" if role == "warrior" else "Singing rocks"
-		(w.count as Label).tooltip_text = "Trained / wanted. Up to %d with your %s buildings." % [top, building]
+		(w.count as Label).tooltip_text = "Trained / wanted. Up to %d with your %s buildings." % [top, ROLES[role][1]]
+		# Archers appear once bows have been researched.
+		var known := role != "archer" or village.has_research("bows")
+		for part: String in ["count", "less", "more", "label"]:
+			(w[part] as Control).visible = known
 		(w.more as Button).disabled = want >= top
 		(w.less as Button).disabled = want <= 0
 		var progress := village.training_progress(role)

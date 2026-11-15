@@ -40,7 +40,7 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 | Shapes | `scripts/core/mesh_builder.gd` | Lathes, bevelled boxes, tubes, blobs, curved sheets. |
 | Buildings | `scripts/world/building_factory.gd` | One function per building design. |
 | Island | `scripts/world/terrain.gd` | Outline, underside, rivers and waterfalls. |
-| Tortoise | `tools/bake_creature.py` → `assets/creature/creature.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
+| Creatures | `tools/bake_creature.py` → `assets/creature/creature.glb` (tortoise), `tiger.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
 | Textures | `tools/bake/patterns.gdshader` → `assets/textures/` | Procedural patterns baked to PNG. |
 
 ## Swapping in hand-made or AI-made art later

@@ -42,15 +42,23 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    nearest **Storehouse** (or to the middle of the village while you have
    none); it only counts once it arrives. Boulders come in small boulder
    fields dotted over the island. Trees and boulders run out, so the
-   workers move on. A worker with a full load wheels it home in a
-   wheelbarrow.
+   workers move on. A worker carries a small load (2 units) home on its
+   back. Once you have a **Blacksmith**, workers use wheelbarrows, which
+   take three times as much.
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
    building, and place its outline (**R** rotates it). The cost is paid up
    front and the villagers come and build it: every grown-up helps, and 10
    villagers take one minute. The building rises out of the ground as they work.
    The buildings have jobs: a **Home** (or Mushroom cottage) adds housing, a
    **Storehouse** is where resources are carried, a **Town guard** trains
-   warriors and the **Singing rocks** train wizards.
+   warriors (and archers), the **Singing rocks** train wizards, and a
+   **Blacksmith** makes wheelbarrows and does research.
+   **Research.** With a Blacksmith, press **U** (or the Research button)
+   and pick something to research. It is paid for up front and one thing
+   is researched at a time: **Sharper swords** (5 minutes; warriors do 50%
+   more damage), **Bows** (3 minutes; unlocks archers), and **Pitchforks**,
+   **Mining picks** and **Axes** (2 minutes each; food, stone or lumber is
+   gathered twice as fast).
 4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
    in the **Jobs** row under the resource counter (the - and + buttons).
    Each Town guard allows 4 warriors and trains one at a time, taking a
@@ -60,9 +68,13 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    warriors or wizards go straight back to work; they have to train again
    to return. **Wizards** make 5 magicko a minute each and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
-   sometimes setting them alight.
+   sometimes setting them alight. Once **Bows** are researched an Archers
+   count appears: each Town guard allows 2 **archers** (90 seconds each),
+   who shoot goblins from 22 m.
 5. **Feed everyone.** Each villager (children too) eats 1 food a minute,
-   each warrior 3 and each wizard 2; the counter shows how much is eaten.
+   each warrior 3 and each archer or wizard 2; the counter shows how much
+   is eaten. Your creature eats too: 20 food a minute when full grown, and
+   in proportion to its size before that (3 a minute at the start).
    With no food, no children are born, and after a minute without food
    someone starves every 30 seconds until there is food again.
 6. **Farm.** Pick **Wheat field** in the build menu, then hold the left
@@ -91,6 +103,15 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **eats** them. During a raid it walks to the raiders unless you have
    sent it somewhere. With goblins about it moves 20% faster, scowls and
    opens its mouth. Nobody runs away from the tortoise any more.
+   **Your creature.** Choose a **tortoise** or a **tiger** in the main menu.
+   The tiger is a nervous wreck (it shivers, wrings its paws and keeps
+   glancing over its shoulder) and 30% faster; the tortoise has twice the
+   health. Either starts at 15% of its full size and grows for 30 minutes,
+   getting faster, stronger and tougher as it does (a small one cannot pick
+   goblins up or flatten buildings, and stays out of raids unless you send
+   it). It stops growing while the village has no food. Goblins attack a
+   creature that comes close; at no health it is knocked out for 45
+   seconds and then gets up with half its health. Left alone it heals.
 9. **Cast spells** from the spell bar at the bottom (keys 1 to 4, then click): **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while (and makes wheat under the cloud grow three
@@ -119,7 +140,8 @@ daytime, evening and night.
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
 | 1–4 | Pick a spell (Fireball, Rain, Roots, Blood Sacrifice), then click to cast |
-| B / Backspace | Open or close the build menu (1–8 pick a building or the field) |
+| B / Backspace | Open or close the build menu (1–9 pick a building or the field) |
+| U | Open or close the research menu (needs a Blacksmith) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
 | R / Shift+R | Rotate the building outline |
 | T | Another look for the building |
@@ -137,6 +159,8 @@ daytime, evening and night.
 | Magicko rate | Magicko each grown-up worker adds per minute (wizards make 5) |
 | Goblin spawn | Goblins each starting cave spawns per minute on the first day |
 | Goblin spawn rise | How much faster the caves spawn after every night |
+| Creature food | Food a full-grown creature eats per minute (default 20) |
+| Creature grows in | Minutes for the creature to reach full size (default 30) |
 | Give 100 of everything | For testing |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; `[` and `]` change the brush size |
 | New random world (N) | Generate a brand-new island of the same size |
@@ -192,7 +216,8 @@ the main menu opens it, so maps can be copied and shared.
   loiter around a cave and their huts, far from the villages, until the
   midnight raid. Both catch fire and get flung by explosions; the
   tortoise's footsteps squash goblins and strangers but not your own people.
-- **The tortoise:** a 12 m gloomy tortoise of about 110,000 triangles on a
+- **The creatures:** a 12 m gloomy tortoise of about 110,000 triangles and
+  an 11 m nervous tiger of about 65,000, on the same
   skeleton. Walking is procedural: feet plant on the terrain with two-bone
   IK, and the body, arms, head, jaw and tail react.
 - **Fireball:** thrown from your cursor. It explodes, digs a crater, breaks
@@ -217,7 +242,7 @@ project.godot              Engine settings (Forward+, Jolt physics, autoload "Ga
 scenes/main.tscn           The only scene; everything else is built in code
 shaders/                   Cel shading (toon.gdshaderinc), outlines, terrain, grass, water, sky...
 assets/textures/           Baked textures (made by tools/bake_textures.gd)
-assets/creature/           The creature model (made by tools/bake_creature.py)
+assets/creature/           The creature models (made by tools/bake_creature.py)
 tools/                     Scripts that generate the assets above, and the smoke test
 scripts/
   main.gd                  Builds the world for the session, then starts its controller
@@ -246,7 +271,9 @@ scripts/
   world/day_cycle.gd       Dawn, daytime, evening and night from the weather moods
   world/start_marker.gd    Numbered start-location banners
   world/ground_ring.gd     Circles drawn on the ground (brushes, outlines)
-  units/creature.gd        The tortoise: locomotion, skeleton posing, IK, stomping and grabbing goblins
+  units/creature.gd        The creatures (tortoise, tiger): growth, health, locomotion, IK, faces, attacks
+  game/research.gd         What the Blacksmith can research
+  spells/arrow.gd          An archer's arrow
   units/villager.gd        Villager, warrior, wizard and goblin looks, jobs, fighting, state machine
   spells/fireball.gd       Projectile
   spells/rain.gd           The rain cloud
@@ -277,7 +304,11 @@ pip install numpy scikit-image
 ```
 
 ```bash
-python3 tools/bake_creature.py
+python3 tools/bake_creature.py tortoise
+```
+
+```bash
+python3 tools/bake_creature.py tiger
 ```
 
 ### Smoke test

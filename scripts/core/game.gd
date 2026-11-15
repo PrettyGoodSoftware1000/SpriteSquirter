@@ -16,8 +16,12 @@ const DEFAULT_SETTINGS := {
 	"magicko_rate": 1.0, # per grown-up villager per minute
 	"goblin_rate": 1.0, # goblins per starting cave per minute, on day 1
 	"goblin_rate_growth": 0.5, # added to goblin_rate every night
+	"creature_food": 20.0, # food a full-grown creature eats per minute
+	"creature_grow_minutes": 30.0, # time for the creature to reach full size
 }
 
+## The creature the player chose in the main menu: a key of Creature.SPECIES.
+var creature_kind := "tortoise"
 ## Seed for the current world. Kept here so it survives a scene reload.
 var world_seed: int = 0
 ## Lighting mood, kept here so it survives generating a new world.

@@ -7,7 +7,8 @@ extends Node
 ## goblin_rate_growth every night. Halfway through each night every goblin
 ## leaves its cave and marches on the village; in the morning the survivors
 ## go home. Once a raid has GOBLINS_PER_OGRE goblins an ogre joins it, and
-## another for every GOBLINS_PER_OGRE more. Call setup() with the DayCycle.
+## another for every GOBLINS_PER_OGRE more, and Balance "bats_per_raid"
+## giant bats fly out to carry villagers off. Call setup() with the DayCycle.
 ##
 ## The goblins build, too. Every Balance "goblin_build_minutes" they mark
 ## out one of BuildingFactory.GOBLIN_KINDS near one of their caves, and up
@@ -17,13 +18,20 @@ extends Node
 
 signal raid_started(goblins: int, ogres: int)
 signal raid_ended
+## A giant bat has snatched one of the player's villagers.
+signal bat_took
 
 const GOBLINS_PER_OGRE := 15
 const BUILDERS := 3
+## How near a painted path's ends must be to the goblin's cave and to the village.
+const PATH_SNAP := 45.0
 
 var raiding := false
 ## Nights since the game began (counted at nightfall).
 var nights := 0
+
+## Paths painted in the map editor, each from a cave to a start location.
+var paths: Array = []
 
 var _caves: Array[Node3D] = []
 var _spawned := {}
@@ -200,7 +208,7 @@ func start_raid() -> void:
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
 		var a := randf() * TAU
-		g.start_raid(village.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0))
+		g.start_raid(village.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0), _route_for(g))
 		if g.raiding and g.ogre:
 			ogres += 1
 		elif g.raiding:
@@ -208,6 +216,50 @@ func start_raid() -> void:
 	raiding = count + ogres > 0
 	if raiding:
 		raid_started.emit(count, ogres)
+		for k in roundi(Balance.num("bats_per_raid")):
+			get_tree().create_timer(6.0 + 9.0 * k + randf() * 4.0, false).timeout.connect(launch_bat)
+
+
+## A giant bat flies out of one of the caves to carry off a villager.
+func launch_bat() -> GiantBat:
+	var caves: Array[Node3D] = []
+	for cave in _caves:
+		if is_instance_valid(cave):
+			caves.append(cave)
+	if caves.is_empty() or not raiding:
+		return null
+	var bat := GiantBat.new()
+	bat.cave = caves[randi() % caves.size()]
+	Game.world_root.add_child(bat)
+	bat.global_position = bat.cave.global_position + Vector3.UP * 7.0
+	bat.took.connect(func(_victim: Villager) -> void: bat_took.emit())
+	return bat
+
+
+## The way a goblin takes to the village: one of the map's painted paths
+## that runs from near its cave to near the village, picked at random and
+## shifted a little to one side so the goblins do not walk in single file.
+## Empty if the map has none (the goblin then finds its own way).
+func _route_for(g: Villager) -> PackedVector3Array:
+	var village := Game.village
+	var fits: Array[PackedVector2Array] = []
+	for path: PackedVector2Array in paths:
+		if path.size() < 2:
+			continue
+		var first := path[0]
+		var last := path[path.size() - 1]
+		if Vector2(g.home.x, g.home.z).distance_to(first) < PATH_SNAP and Vector2(village.center.x, village.center.z).distance_to(last) < PATH_SNAP:
+			fits.append(path)
+	var out := PackedVector3Array()
+	if fits.is_empty():
+		return out
+	var path := fits[randi() % fits.size()]
+	var a := randf() * TAU
+	var aside := Vector2(cos(a), sin(a)) * randf_range(0.0, 4.0)
+	for k in range(1, path.size()):
+		var p := path[k] + aside
+		out.append(Vector3(p.x, 0.0, p.y))
+	return out
 
 
 ## One ogre for every GOBLINS_PER_OGRE goblins in the raid. New ones come
@@ -237,6 +289,8 @@ func _muster_ogres() -> void:
 func end_raid() -> void:
 	for node in get_tree().get_nodes_in_group("raiders"):
 		(node as Villager).end_raid()
+	for node in get_tree().get_nodes_in_group("bats"):
+		(node as GiantBat).go_home()
 	if raiding:
 		raiding = false
 		raid_ended.emit()

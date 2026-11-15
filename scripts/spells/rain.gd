@@ -69,6 +69,11 @@ func _process(delta: float) -> void:
 	if _soak_timer <= 0.0 and _time > 0.6:
 		_soak_timer = 0.3
 		Game.fire.soak(_center, RADIUS, DURATION - _time + WET_AFTER)
+		# Everyone under the cloud gets wet (and chain lightning likes that).
+		for node in get_tree().get_nodes_in_group("villagers"):
+			var v := node as Villager
+			if Vector2(v.global_position.x - _center.x, v.global_position.z - _center.z).length() < RADIUS:
+				v.soak()
 		# Wheat under the cloud drinks it up and grows faster.
 		for node in get_tree().get_nodes_in_group("fields"):
 			var field := node as CropField

@@ -40,7 +40,12 @@ static var ATTACK_SECONDS := 1.0
 static var SOLDIER_HEALTH := 4.0
 static var SOLDIER_DAMAGE := 2.0
 ## How close an enemy must be before a fighter goes for it.
+## How far the village's own people will run to meet an enemy that is
+## inside PlayerVillage.DEFEND_RADIUS.
+const DEFEND_REACH := 55.0
 const AGGRO := 13.0
+## Walks longer than this look for a route (see PathGrid).
+const PATH_FROM := 5.0
 const SOLDIER_AGGRO := 60.0
 ## Units of a resource a worker gathers before walking it to the storehouse.
 const CARRY_CAPACITY := 2.0
@@ -130,10 +135,15 @@ var hp := HEALTH
 var damage := ATTACK_DAMAGE
 ## Cannot walk until Game.now passes this (the roots spell, on goblins).
 var snared_until := 0.0
+## Wet from the rain until Game.now passes this.
+var wet_until := 0.0
 ## Walks at SLOWED_SPEED until Game.now passes this (roots, on your own people).
 var slowed_until := 0.0
 
 ## Current job: "", "lumber", "stone", "food", "farm", "build" or "train".
+## The job the player set this worker to: "lumber", "stone", "food",
+## "build" (a builder), or "" for an unassigned worker.
+var pin := ""
 var job := ""
 ## What the job works on: a tree, rock, field, construction site, Town
 ## guard or the village.
@@ -193,6 +203,15 @@ var _raise_target: Villager
 var _raise_timer := 0.0
 var _raise_walk := 0.0
 var _raise_ready := 0.0
+## The route being walked to `_path_goal` (see _path_aim).
+var _path := PackedVector3Array()
+var _path_i := 0
+var _path_goal := Vector3.INF
+var _path_until := 0.0
+var _path_next := 0.0
+## A raider's way to the village along a path painted in the map editor.
+var _raid_route := PackedVector3Array()
+var _raid_i := 0
 ## Crossing a rope bridge: the way, how far along it, and when the villager
 ## may next take one.
 var _route := PackedVector3Array()
@@ -1028,6 +1047,11 @@ func _process(delta: float) -> void:
 			if ogre:
 				pace = 2.1
 			if _move_towards(_target, pace * _speed_scale, delta):
+				if raiding and _raid_i <= _raid_route.size() and not _raid_route.is_empty():
+					# On to the next stretch of the path, and at its end the village.
+					_target = _raid_route[_raid_i] if _raid_i < _raid_route.size() else _raid_goal
+					_raid_i += 1
+					return
 				state = State.IDLE
 				_timer = randf_range(4.0, 12.0) if goblin else randf_range(1.5, 5.0)
 		State.FLEE:
@@ -1224,6 +1248,7 @@ func become_soldier(post: Vector3) -> void:
 		return
 	_unload()
 	clear_job()
+	pin = ""
 	soldier = true
 	add_to_group("soldiers")
 	home = post
@@ -1260,6 +1285,7 @@ func become_wizard(post: Vector3) -> void:
 		return
 	_unload()
 	clear_job()
+	pin = ""
 	wizard = true
 	add_to_group("wizards")
 	home = post
@@ -1401,9 +1427,10 @@ func _try_bridge(goal: Vector3, stroll := false) -> bool:
 			var far := RopeBridge.ladder_foot(bridge.b if from_a else bridge.a)
 			var there := _flat_to(foot)
 			if stroll:
-				if there > 24.0:
+				if there > 40.0:
 					continue
-			elif there + bridge.length + 8.0 + Vector2(far.x - goal.x, far.z - goal.z).length() > _flat_to(goal) * 1.2 + 4.0:
+			elif there + bridge.length + 8.0 + Vector2(far.x - goal.x, far.z - goal.z).length() > _flat_to(goal) * 1.5 + 12.0:
+				# Too far out of the way.
 				continue
 			_route = bridge.route(from_a)
 			_route_i = 0
@@ -1467,6 +1494,7 @@ func become_archer(post: Vector3) -> void:
 		return
 	_unload()
 	clear_job()
+	pin = ""
 	archer = true
 	add_to_group("archers")
 	home = post
@@ -1514,14 +1542,20 @@ func starve() -> void:
 
 # --- Fighting -------------------------------------------------------------------
 
-## Goblins: leave for the village. `goal` is where they gather.
-func start_raid(goal: Vector3) -> void:
+## Goblins: leave for the village. `goal` is where they gather, and
+## `route` the points to pass on the way there (a path from the map editor).
+func start_raid(goal: Vector3, route := PackedVector3Array()) -> void:
 	if not goblin or state == State.DEAD or state == State.HELD or state == State.BURNING:
 		return
 	raiding = true
 	add_to_group("raiders")
 	_raid_goal = goal
+	_raid_route = route
+	_raid_i = 0
 	_target = goal
+	if not route.is_empty():
+		_target = route[0]
+		_raid_i = 1
 	state = State.WALK
 
 
@@ -1560,16 +1594,22 @@ func _think() -> void:
 			if building:
 				_engage(building)
 		return
-	var raiders := get_tree().get_nodes_in_group("raiders")
-	if raiders.is_empty() or (state == State.FIGHT and _foe_ok()):
+	var goblins := get_tree().get_nodes_in_group("goblins")
+	if goblins.is_empty() or (state == State.FIGHT and _foe_ok()):
 		return
 	var fighter := can_fight()
 	var best: Villager = null
-	var best_d := SOLDIER_AGGRO if soldier or wizard or archer or skeleton else (AGGRO if fighter else 8.0)
-	for node in raiders:
+	var reach := SOLDIER_AGGRO if soldier or wizard or archer or skeleton else (AGGRO if fighter else 8.0)
+	var best_d := INF
+	for node in goblins:
 		var g := node as Villager
+		# An enemy is a raider, or a goblin that has walked into the village.
+		# When one is close, every grown-up nearby turns out to fight it.
+		var close := owned and g.threatens_village()
+		if not g.raiding and not close:
+			continue
 		var d := _flat_to(g.global_position)
-		if d < best_d:
+		if d < best_d and d < (maxf(reach, DEFEND_REACH) if close and fighter else reach):
 			best_d = d
 			best = g
 	if best == null:
@@ -1578,6 +1618,16 @@ func _think() -> void:
 		_engage(best)
 	else:
 		flee(best.global_position)
+
+
+## True for a goblin the whole village turns out against: a raider that has
+## come close, or any goblin that has walked right into the village.
+func threatens_village() -> bool:
+	var village := Game.village
+	if not goblin or not is_instance_valid(village) or not village.founded or state == State.DEAD:
+		return false
+	var d := Vector2(global_position.x - village.center.x, global_position.z - village.center.z).length()
+	return d < (PlayerVillage.DEFEND_RADIUS if raiding else PlayerVillage.INTRUDER_RADIUS)
 
 
 func _nearest_villager(reach: float) -> Villager:
@@ -1626,7 +1676,7 @@ func _foe_ok() -> bool:
 		return false
 	var v := _foe as Villager
 	if v:
-		return v.state != State.DEAD and v.state != State.HELD and (goblin or v.raiding)
+		return v.state != State.DEAD and v.state != State.HELD and (goblin or v.raiding or v.threatens_village())
 	var beast := _foe as Creature
 	if beast:
 		return raiding and not beast.knocked_out
@@ -1719,8 +1769,9 @@ func take_hit(amount: float, from: Node3D) -> void:
 
 
 func _choose_wander_target() -> void:
-	# Now and then, a stroll over a rope bridge.
-	if not goblin and randf() < 0.3 and _try_bridge(home, true):
+	# Often as not, a stroll over a rope bridge if there is one about.
+	# (Not for warriors, archers and wizards, who must be ready for a raid.)
+	if not goblin and not soldier and not archer and not wizard and randf() < 0.6 and _try_bridge(home, true):
 		return
 	for attempt in 6:
 		var a := randf() * TAU
@@ -1733,7 +1784,10 @@ func _choose_wander_target() -> void:
 	_timer = 1.0
 
 
-## Moves towards `goal` on the ground. Returns true when arrived or blocked.
+## Moves towards `goal` on the ground, by a route that keeps off cliffs,
+## water and steep slopes where it can (see PathGrid). Walking uphill is
+## slow, and a sheer cliff cannot be climbed. Returns true when arrived or
+## blocked.
 func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	var to := goal - global_position
 	to.y = 0.0
@@ -1746,15 +1800,24 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	if Game.now < slowed_until:
 		# Wading through roots.
 		speed *= SLOWED_SPEED
-	var step := to / dist * minf(speed * delta, dist)
-	if not _open(global_position + step):
+	if dist > PATH_FROM:
+		var via := _path_aim(goal) - global_position
+		via.y = 0.0
+		if via.length() > 0.05:
+			to = via
+			dist = via.length()
+	var dir := to / dist
+	speed *= _slope_speed(dir)
+	var step := dir * minf(speed * delta, dist)
+	if not _open(global_position + step) or _is_cliff(dir):
+		_path_until = 0.0
 		if not raiding:
 			return true
-		# Raiders feel their way round the island's edge.
+		# Raiders feel their way round the island's edge and along a cliff.
 		var found := false
 		for turn: float in [0.7, 1.4, -0.7, -1.4]:
 			var side := step.rotated(Vector3.UP, turn * _steer)
-			if _open(global_position + side):
+			if _open(global_position + side) and not _is_cliff(side.normalized()):
 				step = side
 				found = true
 				break
@@ -1765,6 +1828,46 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	rotation.y = lerp_angle(rotation.y, atan2(step.x, step.z), minf(1.0, delta * 10.0))
 	_moving = true
 	return false
+
+
+## The next point to make for on the way to `goal`. The route is worked out
+## again when the goal moves, and every few seconds in case the ground has
+## changed.
+func _path_aim(goal: Vector3) -> Vector3:
+	if (_path_goal.distance_squared_to(goal) > 9.0 or Game.now >= _path_until) and Game.now >= _path_next:
+		_path_next = Game.now + randf_range(0.6, 1.0)
+		_path_until = Game.now + randf_range(7.0, 10.0)
+		_path_goal = goal
+		_path_i = 0
+		var grid := Game.path_grid()
+		_path = PackedVector3Array() if grid.clear_line(global_position, goal, goblin) else grid.find(global_position, goal, goblin)
+	while _path_i < _path.size() and _flat_to(_path[_path_i]) < 1.6:
+		_path_i += 1
+	return _path[_path_i] if _path_i < _path.size() else goal
+
+
+## How steeply the ground rises over the next metre in direction `dir`.
+func _grade(dir: Vector3) -> float:
+	var p := global_position
+	var terrain := Game.terrain
+	var here := terrain.get_height(p.x, p.z)
+	var ahead := terrain.get_height(p.x + dir.x, p.z + dir.z)
+	if goblin:
+		# Goblins swim: in the water it is the surface that counts.
+		here = maxf(here, terrain.water_level_at(p.x, p.z) - 0.8)
+		ahead = maxf(ahead, terrain.water_level_at(p.x + dir.x, p.z + dir.z) - 0.8)
+	return ahead - here
+
+
+func _is_cliff(dir: Vector3) -> bool:
+	return _grade(dir) > Balance.num("cliff_grade")
+
+
+## 1 on the flat and downhill, falling to Balance "slope_slowest" as the
+## climb gets steeper.
+func _slope_speed(dir: Vector3) -> float:
+	var from := Balance.num("slope_slow_from")
+	return lerpf(1.0, Balance.num("slope_slowest"), clampf((_grade(dir) - from) / 0.6, 0.0, 1.0))
 
 
 ## True if the villager may stand at `p`. Only goblins go into the water.
@@ -1962,6 +2065,35 @@ func sacrifice() -> void:
 	Game.effects.spawn_blood(global_position)
 	_die(false)
 	_set_tint(Color(1.5, 0.2, 0.2))
+
+
+## Wet from the rain for a while (chain lightning hurts the wet twice as much).
+func soak() -> void:
+	wet_until = Game.now + Balance.num("wet_seconds")
+
+
+## Rained on lately, or standing in a river or lake.
+func is_wet() -> bool:
+	return Game.now < wet_until or Game.terrain.water_depth(global_position.x, global_position.z) > Terrain.WET_DEPTH
+
+
+## Dropped by whatever was holding it (a giant bat shot down): back on its feet.
+func release() -> void:
+	if state != State.HELD:
+		return
+	var p := global_position
+	global_position = Vector3(p.x, Game.terrain.get_height(p.x, p.z), p.z)
+	rotation = Vector3(0.0, rotation.y, 0.0)
+	state = State.IDLE
+	_timer = 0.5
+
+
+## Carried away for good (into a goblin cave): gone without a body or bones.
+func carried_off() -> void:
+	for group in ["villagers", "people", "soldiers", "wizards", "archers", "necromancers"]:
+		remove_from_group(group)
+	state = State.DEAD
+	queue_free()
 
 
 ## Swallowed whole.

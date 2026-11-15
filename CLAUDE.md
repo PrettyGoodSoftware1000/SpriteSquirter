@@ -10,6 +10,17 @@
 - The project owner downloads the game from `main`, so finished updates
   go to `main` when they ask for that.
 
+## Asset names
+
+- Every building has an asset name (its model) and a gameplay name (what
+  it does). `Names.txt` pairs them, and the owner edits the gameplay names
+  there.
+- Asset names never change unless the owner says so: Treehouse, Lookout
+  treehouse, Twin treehouse, Great treehouse, Stacked houses, Moon tower,
+  Blacksmith, Mushroom cottage, Singing rocks, Skull tower, Windmill,
+  Crystal tower, Tall house. A new building gets a new asset name and a
+  line in `Names.txt`.
+
 ## Branches
 
 - Do not create new branches without asking first.

@@ -28,7 +28,9 @@ extends Node3D
 
 signal changed(center: Vector3, radius: float)
 
-enum Brush { RAISE, LOWER, FLATTEN, SMOOTH }
+## CUT slices everything inside the brush down to the target height, with
+## no fade at the edge: it leaves a sheer cliff that cannot be climbed.
+enum Brush { RAISE, LOWER, FLATTEN, SMOOTH, CUT }
 
 ## Map sizes the player can choose, in metres (multiples of CHUNK).
 const SIZES := [192, 384, 768]
@@ -643,6 +645,8 @@ func apply_brush(center: Vector3, radius: float, mode: Brush, amount: float, tar
 					h -= amount * w
 				Brush.FLATTEN:
 					h = lerpf(h, target_height, clampf(amount * w, 0.0, 1.0))
+				Brush.CUT:
+					h = minf(h, target_height)
 				Brush.SMOOTH:
 					var avg := (_land_sample(source, i - 1, j, h) + _land_sample(source, i + 1, j, h)
 						+ _land_sample(source, i, j - 1, h) + _land_sample(source, i, j + 1, h) + h) / 5.0

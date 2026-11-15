@@ -6,11 +6,11 @@ capsules) that melt into each other. This script turns that description
 into a dense, smooth mesh, paints it, and attaches it to a skeleton so the
 game can animate it. Every creature uses the same bone names, so the game
 animates them all with the same code. To change one, edit build_shapes()
-(the tortoise, creature.glb) or build_tiger() (tiger.glb) below and run:
+(the tortoise, creature.glb) or build_squirrel() (squirrel.glb) below and run:
 
     pip install numpy scikit-image
     python3 tools/bake_creature.py tortoise
-    python3 tools/bake_creature.py tiger
+    python3 tools/bake_creature.py squirrel
 
 A second argument sets the cell size in metres (default 0.08; smaller is
 finer and bigger).
@@ -28,8 +28,8 @@ import numpy as np
 from skimage import measure
 
 SPECIES = sys.argv[1] if len(sys.argv) > 1 else "tortoise"
-if SPECIES not in ("tortoise", "tiger"):
-    sys.exit("usage: bake_creature.py [tortoise|tiger] [cell size]")
+if SPECIES not in ("tortoise", "squirrel"):
+    sys.exit("usage: bake_creature.py [tortoise|squirrel] [cell size]")
 OUT = Path(__file__).resolve().parent.parent / "assets" / "creature" / ("creature.glb" if SPECIES == "tortoise" else SPECIES + ".glb")
 CELL = float(sys.argv[2]) if len(sys.argv) > 2 else 0.08
 
@@ -40,10 +40,11 @@ SHELL = (0.36, 0.23, 0.12, 0.9)
 SHELL_RIM = (0.50, 0.36, 0.19, 0.3)
 BELLY = (0.68, 0.52, 0.31, 0.75)
 HORN = (0.88, 0.83, 0.66, 0.0)
-# The tiger has fur, not scales: the last number stays 0.
-ORANGE = (0.95, 0.5, 0.1, 0.0)
+# The squirrel has fur, not scales: the last number stays 0.
+RUSSET = (0.8, 0.36, 0.13, 0.0)
 CREAM = (0.97, 0.93, 0.84, 0.0)
-STRIPE = (0.08, 0.06, 0.07, 0.0)
+TAIL = (0.62, 0.25, 0.1, 0.0)
+TAIL_TIP = (0.95, 0.72, 0.45, 0.0)
 PINK = (0.92, 0.5, 0.52, 0.0)
 
 # --- Skeleton: name -> (parent, joint position) -------------------------------
@@ -67,30 +68,31 @@ for side, sx in (("l", -1.0), ("r", 1.0)):
     BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.6, 2.1, 0.6))
     BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.6, 0.7, 0.0))
 
-# The tiger: taller in the leg, thin in the arm, with a long tail that curls up.
-TIGER_BONES = {
+# The squirrel: tall in the leg, thin in the arm, with a bushy tail that
+# stands up behind its back.
+SQUIRREL_BONES = {
     "pelvis": (None, (0.0, 4.4, 0.0)),
     "spine": ("pelvis", (0.0, 5.4, 0.1)),
     "chest": ("spine", (0.0, 6.8, 0.2)),
     "neck": ("chest", (0.0, 8.2, 0.5)),
     "head": ("neck", (0.0, 9.3, 0.8)),
     "jaw": ("head", (0.0, 9.05, 1.2)),
-    "tail1": ("pelvis", (0.0, 4.4, -1.1)),
-    "tail2": ("tail1", (0.0, 4.25, -1.8)),
-    "tail3": ("tail2", (0.0, 4.45, -2.5)),
-    "tail4": ("tail3", (0.0, 4.95, -3.1)),
+    "tail1": ("pelvis", (0.0, 4.5, -1.0)),
+    "tail2": ("tail1", (0.0, 4.6, -2.2)),
+    "tail3": ("tail2", (0.0, 6.2, -3.3)),
+    "tail4": ("tail3", (0.0, 8.6, -3.4)),
 }
 for side, sx in (("l", -1.0), ("r", 1.0)):
     # The arms are sculpted held well out from the body. Shapes that touch
     # melt together, so an arm resting against a thigh would be glued to it.
-    TIGER_BONES[f"arm_upper_{side}"] = ("chest", (sx * 1.85, 7.7, 0.3))
-    TIGER_BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 3.0, 6.7, 0.5))
-    TIGER_BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 4.0, 5.85, 0.75))
-    TIGER_BONES[f"thigh_{side}"] = ("pelvis", (sx * 1.05, 4.3, 0.05))
-    TIGER_BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.15, 2.4, 0.55))
-    TIGER_BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.15, 0.7, 0.0))
-if SPECIES == "tiger":
-    BONES = TIGER_BONES
+    SQUIRREL_BONES[f"arm_upper_{side}"] = ("chest", (sx * 1.85, 7.7, 0.3))
+    SQUIRREL_BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 3.0, 6.7, 0.5))
+    SQUIRREL_BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 4.0, 5.85, 0.75))
+    SQUIRREL_BONES[f"thigh_{side}"] = ("pelvis", (sx * 1.05, 4.3, 0.05))
+    SQUIRREL_BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.15, 2.4, 0.55))
+    SQUIRREL_BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.15, 0.7, 0.0))
+if SPECIES == "squirrel":
+    BONES = SQUIRREL_BONES
 BONE_NAMES = list(BONES)
 
 shapes = []  # dicts: kind, params, bone, colour, blend
@@ -158,70 +160,58 @@ def build_shapes():
         hole((x, 9.42 - 0.3 * (x / 0.85) ** 2, 3.02 - 0.45 * (x / 0.85) ** 2), 0.075, 0.05)
 
 
-def build_tiger():
-    """A lanky tiger on its hind legs: big head, staring eyes, thin arms."""
+def build_squirrel():
+    """A lanky squirrel on its hind legs: big head, staring eyes, thin arms
+    held to its chest and a great bushy tail standing up behind it."""
     # A long, narrow, slightly hunched trunk with a pale front.
-    ellipsoid((0, 5.0, -0.1), (1.35, 1.35, 1.15), "pelvis", ORANGE)
-    ellipsoid((0, 6.1, 0.05), (1.25, 1.3, 1.05), "spine", ORANGE)
-    ellipsoid((0, 7.3, 0.3), (1.6, 1.25, 1.2), "chest", ORANGE)
+    ellipsoid((0, 5.0, -0.1), (1.35, 1.35, 1.15), "pelvis", RUSSET)
+    ellipsoid((0, 6.1, 0.05), (1.25, 1.3, 1.05), "spine", RUSSET)
+    ellipsoid((0, 7.3, 0.3), (1.6, 1.25, 1.2), "chest", RUSSET)
     ellipsoid((0, 6.2, 0.8), (0.85, 1.9, 0.5), "spine", CREAM, 0.3)
-    cone((0, 8.0, 0.45), (0, 9.0, 0.75), 0.75, 0.7, "neck", ORANGE)
+    cone((0, 8.0, 0.45), (0, 9.0, 0.75), 0.75, 0.7, "neck", RUSSET)
 
-    # A head too big for the body: round skull, pale muzzle and cheek ruffs.
-    ellipsoid((0, 9.9, 0.9), (1.6, 1.3, 1.35), "head", ORANGE)
+    # A head too big for the body: round skull, pale muzzle, fat cheeks
+    # and a pair of buck teeth.
+    ellipsoid((0, 9.9, 0.9), (1.6, 1.3, 1.35), "head", RUSSET)
     ellipsoid((0, 9.5, 2.0), (0.85, 0.55, 0.6), "head", CREAM, 0.3)
     ellipsoid((0, 9.05, 1.7), (0.62, 0.3, 0.6), "jaw", CREAM, 0.25)
     ellipsoid((0, 9.76, 2.6), (0.2, 0.14, 0.12), "head", PINK, 0.06)
+    for sx in (-1.0, 1.0):
+        ellipsoid((sx * 0.13, 9.22, 2.42), (0.12, 0.22, 0.07), "head", HORN, 0.04)
 
-    # A long tail that curls up into a dark tuft.
-    cone((0, 4.5, -1.0), (0, 4.25, -1.8), 0.45, 0.36, "tail1", ORANGE, 0.4)
-    cone((0, 4.25, -1.8), (0, 4.45, -2.5), 0.36, 0.3, "tail2", ORANGE, 0.3)
-    cone((0, 4.45, -2.5), (0, 4.95, -3.1), 0.3, 0.26, "tail3", ORANGE, 0.25)
-    cone((0, 4.95, -3.1), (0, 5.7, -3.3), 0.26, 0.32, "tail4", STRIPE, 0.2)
+    # The tail: thin where it leaves the body, then a fat brush that
+    # stands up behind the back and curls forward at the top. It is kept
+    # clear of the back so the two do not melt together.
+    cone((0, 4.5, -1.0), (0, 4.6, -2.2), 0.5, 0.75, "tail1", RUSSET, 0.3)
+    cone((0, 4.6, -2.2), (0, 6.2, -3.3), 0.8, 1.2, "tail2", TAIL, 0.3)
+    cone((0, 6.2, -3.3), (0, 8.6, -3.4), 1.2, 1.35, "tail3", TAIL, 0.3)
+    cone((0, 8.6, -3.4), (0, 10.4, -2.7), 1.35, 1.15, "tail4", TAIL, 0.3)
+    ellipsoid((0, 11.0, -2.0), (1.0, 0.9, 1.0), "tail4", TAIL_TIP, 0.35)
 
     for side, sx in (("l", -1.0), ("r", 1.0)):
-        ellipsoid((sx * 1.35, 9.55, 0.9), (0.6, 0.65, 0.55), "head", CREAM, 0.3)
-        ellipsoid((sx * 1.05, 11.1, 0.6), (0.5, 0.55, 0.22), "head", ORANGE, 0.2)
-        ellipsoid((sx * 1.05, 11.05, 0.8), (0.3, 0.35, 0.1), "head", PINK, 0.08)
+        ellipsoid((sx * 1.35, 9.55, 0.9), (0.66, 0.7, 0.6), "head", CREAM, 0.3)
+        # Tall ears with a tuft of dark hair on each.
+        ellipsoid((sx * 1.05, 11.15, 0.6), (0.42, 0.7, 0.22), "head", RUSSET, 0.2)
+        ellipsoid((sx * 1.05, 11.1, 0.8), (0.24, 0.42, 0.1), "head", PINK, 0.08)
+        cone((sx * 1.05, 11.7, 0.6), (sx * 1.15, 12.5, 0.5), 0.2, 0.03, "head", TAIL, 0.1)
         hole((sx * 0.66, 10.15, 2.05), 0.44)
 
         # Thin arms ending in pale paws.
-        ellipsoid((sx * 1.85, 7.7, 0.3), (0.6, 0.6, 0.6), f"arm_upper_{side}", ORANGE)
-        cone((sx * 1.85, 7.7, 0.3), (sx * 3.0, 6.7, 0.5), 0.5, 0.42, f"arm_upper_{side}", ORANGE, 0.3)
-        cone((sx * 3.0, 6.7, 0.5), (sx * 4.0, 5.85, 0.75), 0.42, 0.36, f"arm_lower_{side}", ORANGE, 0.25)
+        ellipsoid((sx * 1.85, 7.7, 0.3), (0.6, 0.6, 0.6), f"arm_upper_{side}", RUSSET)
+        cone((sx * 1.85, 7.7, 0.3), (sx * 3.0, 6.7, 0.5), 0.5, 0.42, f"arm_upper_{side}", RUSSET, 0.3)
+        cone((sx * 3.0, 6.7, 0.5), (sx * 4.0, 5.85, 0.75), 0.42, 0.36, f"arm_lower_{side}", RUSSET, 0.25)
         ellipsoid((sx * 4.2, 5.65, 0.85), (0.5, 0.45, 0.55), f"hand_{side}", CREAM, 0.2)
         for dz in (-0.28, 0.0, 0.28):
             base = np.array((sx * 4.5, 5.4, 0.95 + dz))
             cone(base, base + np.array((sx * 0.3, -0.3, dz * 0.2)), 0.14, 0.02, f"hand_{side}", HORN, 0.06)
 
         # Long legs on big soft paws.
-        cone((sx * 1.05, 4.3, 0.05), (sx * 1.15, 2.4, 0.55), 0.95, 0.62, f"thigh_{side}", ORANGE, 0.45)
-        cone((sx * 1.15, 2.4, 0.55), (sx * 1.15, 0.9, 0.0), 0.6, 0.45, f"shin_{side}", ORANGE, 0.3)
+        cone((sx * 1.05, 4.3, 0.05), (sx * 1.15, 2.4, 0.55), 0.95, 0.62, f"thigh_{side}", RUSSET, 0.45)
+        cone((sx * 1.15, 2.4, 0.55), (sx * 1.15, 0.9, 0.0), 0.6, 0.45, f"shin_{side}", RUSSET, 0.3)
         ellipsoid((sx * 1.15, 0.45, 0.45), (0.78, 0.45, 1.1), f"foot_{side}", CREAM, 0.25)
         for dx in (-0.42, 0.0, 0.42):
             base = np.array((sx * 1.15 + dx, 0.36, 1.35))
             cone(base, base + np.array((dx * 0.15, -0.1, 0.42)), 0.2, 0.04, f"foot_{side}", HORN, 0.06)
-
-
-def tiger_stripes(verts, colours):
-    """Paints black stripes over the orange fur (and leaves the pale fur alone)."""
-    x, y, z = verts[:, 0], verts[:, 1], verts[:, 2]
-    rgb = colours[:, :3].astype(np.float32) / 255.0
-    orange = (rgb[:, 0] - rgb[:, 2]) > 0.6
-    # Bands round the trunk and limbs, wobbling so they are not neat rings.
-    wobble = 0.5 * np.sin(1.9 * x + 0.7 * z) + 0.35 * np.sin(2.7 * z - 1.3 * x)
-    band = np.sin(y * 4.6 + wobble * 1.7) > 0.6
-    # Along the tail the bands run the other way; on top of the head they
-    # fan back from the brow.
-    tail = z < -1.25
-    band = np.where(tail, np.sin(z * 8.0 + y * 2.0) > 0.25, band)
-    crown = (y > 10.35) & (z > -0.3)
-    band = np.where(crown, (np.sin(x * 6.5) > 0.45) & (z < 1.75), band)
-    # Keep the face clear around the eyes and muzzle.
-    face = (y > 9.2) & (y < 10.35) & (z > 1.5)
-    on = orange & band & ~face
-    colours[on, :3] = (np.array(STRIPE[:3]) * 255 + 0.5).astype(np.uint8)
-    return colours
 
 
 # --- Distance functions -------------------------------------------------------
@@ -425,14 +415,12 @@ def write_glb(verts, normals, faces, colours, joints, weights):
 
 
 def main():
-    if SPECIES == "tiger":
-        build_tiger()
+    if SPECIES == "squirrel":
+        build_squirrel()
     else:
         build_shapes()
     verts, normals, faces = build_mesh()
     colours, joints, weights = paint_and_skin(verts, normals)
-    if SPECIES == "tiger":
-        colours = tiger_stripes(verts, colours)
     write_glb(verts, normals, faces, colours, joints, weights)
     print(f"{OUT.name}: {len(verts)} vertices, {len(faces)} triangles, {len(BONE_NAMES)} bones, "
           f"{OUT.stat().st_size / 1e6:.1f} MB (cell {CELL} m)")

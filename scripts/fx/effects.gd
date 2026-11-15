@@ -9,7 +9,7 @@ const DEBRIS_LIFETIME := 11.0
 
 var _fire_lights_in_use := 0
 
-var _flame_mesh: QuadMesh
+var _flame_mesh: ArrayMesh
 var _ember_mesh: QuadMesh
 var _smoke_mesh: QuadMesh
 var _dust_mesh: QuadMesh
@@ -19,12 +19,20 @@ var _smoke_gradient: Gradient
 var _dust_gradient: Gradient
 var _steam_gradient: Gradient
 var _grow_shrink: Curve
+var _flame_curve: Curve
 var _grow: Curve
 var _debris: Array[Dictionary] = []
 
 
 func _ready() -> void:
-	_flame_mesh = _sprite_quad("flame", 2.3)
+	# A tongue of flame is a solid teardrop, so fires look right from above.
+	var tongue := MeshBuilder.new()
+	tongue.add_lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.14, 0.02), Vector2(0.22, 0.14), Vector2(0.23, 0.28),
+		Vector2(0.17, 0.5), Vector2(0.09, 0.74), Vector2(0.03, 0.92), Vector2(0.0, 1.0)]), 9)
+	_flame_mesh = tongue.commit()
+	var flame_material := ShaderMaterial.new()
+	flame_material.shader = Art.shader("flame")
+	_flame_mesh.surface_set_material(0, flame_material)
 	_ember_mesh = _sprite_quad("ember", 0.22)
 	_smoke_mesh = _sprite_quad("smoke", 2.8)
 	_dust_mesh = _sprite_quad("dust", 2.0)
@@ -56,6 +64,11 @@ func _ready() -> void:
 	_grow_shrink.add_point(Vector2(0.0, 0.35))
 	_grow_shrink.add_point(Vector2(0.25, 1.0))
 	_grow_shrink.add_point(Vector2(1.0, 0.1))
+	_flame_curve = Curve.new()
+	_flame_curve.add_point(Vector2(0.0, 0.3))
+	_flame_curve.add_point(Vector2(0.2, 1.0))
+	_flame_curve.add_point(Vector2(0.7, 0.55))
+	_flame_curve.add_point(Vector2(1.0, 0.0))
 	_grow = Curve.new()
 	_grow.add_point(Vector2(0.0, 0.3))
 	_grow.add_point(Vector2(1.0, 1.0))
@@ -99,10 +112,10 @@ func release_fire_light() -> void:
 
 func make_flames(size: float) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
-	# Each particle is one tongue of flame (drawn by the particle shader):
+	# Each particle is one tongue of flame, a solid shape (see flame.gdshader):
 	# many small ones round the base, a few tall ones leaping out of the middle.
 	p.mesh = _flame_mesh
-	p.amount = clampi(int(24 * size), 10, 60)
+	p.amount = clampi(int(20 * size), 9, 48)
 	p.lifetime = 1.0
 	p.lifetime_randomness = 0.55
 	p.local_coords = false
@@ -113,11 +126,9 @@ func make_flames(size: float) -> CPUParticles3D:
 	p.gravity = Vector3(0.0, 3.0 * size, 0.0)
 	p.initial_velocity_min = 0.3 * size
 	p.initial_velocity_max = 2.4 * size
-	p.angle_min = -9.0
-	p.angle_max = 9.0
-	p.scale_amount_min = 0.45 * size
-	p.scale_amount_max = 1.9 * size
-	p.scale_amount_curve = _grow_shrink
+	p.scale_amount_min = 0.7 * size
+	p.scale_amount_max = 2.6 * size
+	p.scale_amount_curve = _flame_curve
 	p.color_ramp = _fire_gradient
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return p

@@ -31,7 +31,7 @@ ogre_damage = 18
 
 # --- Creatures (full grown; a newborn has 30% of the health) -----------------
 tortoise_health = 1200
-tiger_health = 600
+squirrel_health = 600
 creature_stomp_damage = 60      # in the middle of the stomp, half that at its edge
 creature_knockout_seconds = 45  # how long it stays down at no health
 creature_gather_amount = 25     # lumber, stone or food a full-grown creature brings in one trip
@@ -45,8 +45,10 @@ creature_friendly_fire = 0.1    # share of that damage your own villagers and bu
 building_health = 70
 building_health_per_metre = 5   # added for every metre of the building's height
 
-# What each building costs. To add a cost that is not listed, write a new
-# line: cost_<building>_<lumber, stone, food or bones> = number
+# What each building costs. The cost goes with the gameplay name in
+# Names.txt (a Decoration is a building with no use yet). To add a cost
+# that is not listed, write a new line:
+# cost_<gameplay name>_<lumber, stone, food or bones> = number
 cost_home_lumber = 40
 cost_home_stone = 15
 cost_storehouse_lumber = 35
@@ -56,24 +58,25 @@ cost_town_guard_stone = 40
 cost_town_guard_food = 20
 cost_blacksmith_lumber = 50
 cost_blacksmith_stone = 40
-cost_mushroom_cottage_lumber = 15
-cost_mushroom_cottage_stone = 5
-cost_mushroom_cottage_food = 30
-cost_windmill_lumber = 45
-cost_windmill_stone = 20
-cost_crystal_tower_lumber = 20
-cost_crystal_tower_stone = 45
-cost_singing_rocks_stone = 50
+cost_cottage_lumber = 15
+cost_cottage_stone = 5
+cost_cottage_food = 30
+cost_wizard_school_stone = 50
+cost_decoration_lumber = 30
+cost_decoration_stone = 30
 cost_necromancer_tower_lumber = 20
 cost_necromancer_tower_stone = 60
 cost_necromancer_tower_bones = 20
-cost_bridge_lumber_per_metre = 1    # rope bridges between Homes
-bridge_max_length = 40              # metres
+cost_bridge_lumber_per_metre = 1    # rope bridges between treehouses
+bridge_max_length = 35              # metres: about 20 villagers lying end to end
+home_housing = 6                    # villagers a Home has room for
+cottage_housing = 3
 
 # Building time. A building needs this many seconds of work for every unit
 # of resource it costs, shared between the villagers building it. A Home
 # (55 resources) is 550 seconds of work: under a minute for 10 villagers.
 build_work_per_resource = 10
+builders_per_building = 5           # the most villagers that work on one building at a time
 
 # --- Bones, necromancers and skeletons ----------------------------------------
 bones_min = 2                       # bones the village gets when a villager, goblin or ogre dies...
@@ -95,6 +98,24 @@ goblin_forge_resources = 80
 goblin_potion_hut_resources = 60
 goblin_watchtower_resources = 100
 
+# --- Chain lightning ----------------------------------------------------------
+lightning_damage = 40               # to each thing the bolt jumps through
+lightning_jumps = 6                 # how many things one bolt can hit
+lightning_jump_range = 9            # metres between one and the next
+lightning_wet_bonus = 2             # damage is multiplied by this for anything wet
+wet_seconds = 20                    # how long rain leaves villagers and goblins wet
+
+# --- The giant bat --------------------------------------------------------------
+bats_per_raid = 1                   # each carries one villager off to a cave
+bat_health = 80                     # a fireball or lightning can bring it down
+bat_speed = 11                      # metres a second
+
+# --- Slopes ---------------------------------------------------------------------
+# A slope's steepness is its rise over its run: 0.3 is gentle, 1 is 45 degrees.
+slope_slow_from = 0.3               # walking uphill starts to slow at this steepness
+slope_slowest = 0.3                 # the slowest anyone climbs, as a share of normal speed
+cliff_grade = 1.6                   # steeper than this cannot be climbed at all
+
 # --- What the creature learns ------------------------------------------------
 knowledge_per_watch = 25        # gained each time it watches you cast a spell
 stored_per_lesson = 100         # the villagers store this much of a resource...
@@ -105,6 +126,7 @@ knowledge_fireball = 100
 knowledge_rain = 100
 knowledge_roots = 100
 knowledge_blood = 100
+knowledge_lightning = 100
 knowledge_lumber = 100
 knowledge_stone = 100
 knowledge_food = 100
@@ -114,6 +136,7 @@ cooldown_fireball = 180
 cooldown_rain = 180
 cooldown_roots = 180
 cooldown_blood = 180
+cooldown_lightning = 180
 
 # --- Bless and curse ---------------------------------------------------------
 behavior_start = 50             # how keen the creature is on each thing to begin with (0 never, 100 always)

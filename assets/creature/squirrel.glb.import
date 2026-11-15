@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://j2tl3x14f01m"
-path="res://.godot/imported/tiger.glb-1c3d9e807e82ce9c237b66f1ae3460c5.scn"
+uid="uid://cfx7hnj1xas0u"
+path="res://.godot/imported/squirrel.glb-ce2c1716cd565004cd075fa3a0b6e332.scn"
 
 [deps]
 
-source_file="res://assets/creature/tiger.glb"
-dest_files=["res://.godot/imported/tiger.glb-1c3d9e807e82ce9c237b66f1ae3460c5.scn"]
+source_file="res://assets/creature/squirrel.glb"
+dest_files=["res://.godot/imported/squirrel.glb-ce2c1716cd565004cd075fa3a0b6e332.scn"]
 
 [params]
 

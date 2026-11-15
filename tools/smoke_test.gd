@@ -77,10 +77,16 @@ func _run() -> void:
 	for v in village.people():
 		jobs[v.job] = jobs.get(v.job, 0) + 1
 	print("  jobs %s" % jobs)
-	for res in ["lumber", "stone", "food", "magicko"]:
+	for res in ["lumber", "stone", "magicko"]:
 		_check(village.resources[res] > before[res], "%s is gathered (%.1f -> %.1f)" % [res, before[res], village.resources[res]])
+	# (Food is eaten as fast as it comes in while a child is born every 5
+	# seconds, so count what was carried to the store.)
+	_check(village._stored.get("food", 0.0) > 20.0, "food is gathered (%.1f carried in)" % village._stored.get("food", 0.0))
 	_check(village.population() > first_people or village.population() >= village.housing(), "a child is born")
 
+	# The day stops while building, armies and hunger are tested, so that
+	# midnight's raid does not come in the middle of them.
+	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
 	var spot := _free_spot(play, village.center)
 	_check(spot != Vector3.INF, "found a free building spot")
 	if spot != Vector3.INF:
@@ -96,14 +102,24 @@ func _run() -> void:
 		var built := [false]
 		site.completed.connect(func(_b: Destructible) -> void: built[0] = true)
 		var adults := village.adults()
-		var expected := site.work_needed / maxf(adults, 1.0)
-		await _wait(minf(expected * 2.5 + 20.0, 240.0))
+		# Five villagers at most build one building.
+		var expected := site.work_needed / clampf(adults, 1.0, Balance.num("builders_per_building"))
+		await _wait(8.0)
+		var crew := 0
+		for v in village.people():
+			if v.job == "build":
+				crew += 1
+		_check(crew == mini(adults, 5), "no more than 5 villagers build one building (%d)" % crew)
+		for k in 48:
+			if built[0]:
+				break
+			await _wait(5.0)
 		_check(built[0], "the villagers finish a building (%d adults, ~%d s expected)" % [adults, int(expected)])
 
 	# Warriors: the player asks for them; a Town guard trains one a minute.
-	# The day stops while armies and hunger are tested, so no raid gets in
-	# the way (recruits stop training to fight).
-	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
+	# (The day was stopped above, so no raid gets in the way: recruits stop
+	# training to fight.)
+	play.raids.end_raid()
 	@warning_ignore("integer_division")
 	var guards_before := village.max_count("warrior") / PlayerVillage.WARRIORS_PER_GUARD
 	var tower := BuildingFactory.create("moon_tower", RandomNumberGenerator.new())
@@ -287,8 +303,8 @@ func _run() -> void:
 	game.settings.creature_food = 20.0
 	_check(is_equal_approx(village.creature_upkeep(), 20.0), "a full-grown creature eats 20 food a minute")
 	game.settings.creature_food = 0.0
-	_check(is_equal_approx(Creature.SPECIES.tiger.speed, Creature.SPECIES.tortoise.speed * 1.3)
-		and is_equal_approx(Balance.num("tortoise_health"), Balance.num("tiger_health") * 2.0), "the tiger is 30% faster, the tortoise has twice the health")
+	_check(is_equal_approx(Creature.SPECIES.squirrel.speed, Creature.SPECIES.tortoise.speed * 1.3)
+		and is_equal_approx(Balance.num("tortoise_health"), Balance.num("squirrel_health") * 2.0), "the squirrel is 30% faster, the tortoise has twice the health")
 	beast.take_hit(beast.max_hp * 2.0, null)
 	_check(beast.knocked_out, "the creature is knocked out at no health")
 
@@ -329,11 +345,40 @@ func _run() -> void:
 	_check(not sharp.is_empty() and is_equal_approx((sharp[0] as Villager).damage, Balance.num("warrior_damage") * Balance.num("sharper_swords_bonus")),
 		"warriors hit harder with sharper swords")
 	# The player sets one more miner: it switches at once.
-	var miners_before: int = village.gatherers.stone
+	var spare_before := village.unassigned()
 	village.change_quota("stone", 1)
-	_check(village.gatherers.stone == miners_before + 1 and village.quota.stone == miners_before + 1,
-		"one more miner is set to work at once (%d -> %d)" % [miners_before, village.gatherers.stone])
+	_check(village.quota.stone == 1 and village.unassigned() == spare_before - 1,
+		"setting a miner takes one of the unassigned workers (%d -> %d)" % [spare_before, village.unassigned()])
 	village.change_quota("stone", -1)
+	_check(village.quota.stone == 0 and village.unassigned() == spare_before, "and taking the miner off gives the worker back")
+	# Builders are first onto a site, and two sites get a crew each.
+	village.change_quota("build", 1)
+	var the_builder: Villager = null
+	for v in village.people():
+		if v.pin == "build":
+			the_builder = v
+	_check(the_builder != null and village.quota.build == 1 and the_builder.job == "", "a builder waits for something to build")
+	var two_sites: Array[ConstructionSite] = []
+	for k in 2:
+		var spot2 := _free_spot(play, village.center + Vector3(20.0 - 40.0 * k, 0, -20))
+		var site2 := ConstructionSite.new()
+		site2.setup("mushroom_house", 77 + k, {"lumber": 5000})
+		game.world_root.add_child(site2)
+		site2.global_position = spot2
+		two_sites.append(site2)
+	village._assign_jobs()
+	var crews := [0, 0]
+	for v in village.people():
+		if v.job == "build":
+			crews[two_sites.find(v.job_target)] += 1
+	_check(crews[0] == 5 and crews[1] == 5 and the_builder.job == "build", "two buildings get five builders each (%d and %d)" % crews)
+	for site2 in two_sites:
+		site2.queue_free()
+	village.change_quota("build", -1)
+	await _wait(1.0)
+	_check(BuildingCatalog.find("store").name == "Stacked houses" and BuildingCatalog.role("store") == "store"
+		and BuildingCatalog.find("moon_tower").gameplay == "Town guard" and BuildingCatalog.find("necro_tower").name == "Skull tower"
+		and FileAccess.file_exists(BuildingCatalog.NAMES_PATH), "Names.txt pairs asset names with gameplay names")
 
 	# Treehouse Homes, and a rope bridge between two of them.
 	var homes: Array[Destructible] = []
@@ -346,13 +391,17 @@ func _run() -> void:
 		home.add_to_group("player_buildings")
 		homes.append(home)
 	_check(BuildingCatalog.housing("treehouse") == 6 and homes[0].has_meta("deck_h"), "Homes are treehouses with a deck")
+	for kind: String in ["lookout_treehouse", "twin_treehouse", "great_treehouse"]:
+		var tree_home := BuildingFactory.create(kind, RandomNumberGenerator.new())
+		_check(tree_home.has_meta("deck_h") and BuildingCatalog.role(kind) == "home", "%s is a treehouse Home" % kind)
+		tree_home.free()
+	_check(is_equal_approx(Balance.num("bridge_max_length"), 35.0), "a rope bridge reaches 35 m (20 villagers long)")
 	village.give("lumber", 100.0)
 	play._start_placing("bridge")
-	play._cursor_hit = homes[0].global_position
-	play._bridge_click()
-	play._cursor_hit = homes[1].global_position
+	_check(play._bridge_ghosts != null and play._bridge_ghosts.get_child_count() > 0, "the treehouses a bridge can join are lit up")
+	play._bridge_click(homes[0])
 	var lumber_before := village.amount("lumber")
-	play._bridge_click()
+	play._bridge_click(homes[1])
 	var bridge_site: ConstructionSite = null
 	for node in get_tree().get_nodes_in_group("construction_sites"):
 		if (node as ConstructionSite).kind == "bridge":
@@ -437,14 +486,78 @@ func _run() -> void:
 	if goblin_site:
 		await _wait(40.0)
 		_check(goblin_site.progress > 0.0, "goblins work on it (%.0f%%)" % (goblin_site.progress * 100.0))
+		var goblin_built := get_tree().get_nodes_in_group("goblin_buildings").size()
 		goblin_site.add_work(goblin_site.work_needed)
 		await _wait(0.5)
-		_check(get_tree().get_nodes_in_group("goblin_buildings").size() == 1 and get_tree().get_nodes_in_group("player_buildings").filter(
+		_check(get_tree().get_nodes_in_group("goblin_buildings").size() == goblin_built + 1 and get_tree().get_nodes_in_group("player_buildings").filter(
 			func(n: Node) -> bool: return n.is_in_group("goblin_buildings")).is_empty(), "and it becomes a goblin building")
 	for kind: String in BuildingFactory.GOBLIN_KINDS:
 		var shack := BuildingFactory.create(kind, RandomNumberGenerator.new())
 		_check(shack.height > 2.0 and BuildingCatalog.find(kind).name != "", "%s builds" % kind)
 		shack.free()
+
+	# Chain lightning jumps from one to the next, and the wet take double.
+	var storm_at := village.center + Vector3(60, 0, 60)
+	var struck: Array[Villager] = []
+	for k in 3:
+		var g := WorldPopulator.spawn_villager(game.world_root, terrain, storm_at + Vector3(k * 4.0, 0, 0), 0.1, true)
+		g.max_hp = 1000.0
+		g.hp = 1000.0
+		struck.append(g)
+	struck[1].soak()
+	await _wait(0.2)
+	var hits := ChainLightning.cast(struck[0].global_position)
+	_check(hits >= 3, "chain lightning jumps through the goblins near it (%d hit)" % hits)
+	_check(is_equal_approx(1000.0 - struck[0].hp, Balance.num("lightning_damage")) and is_equal_approx(1000.0 - struck[1].hp, Balance.num("lightning_damage") * 2.0),
+		"a wet goblin takes double from lightning (%.0f and %.0f)" % [1000.0 - struck[0].hp, 1000.0 - struck[1].hp])
+	for g in struck:
+		g.queue_free()
+	_check(SpellBook.index_of("lightning") >= 0 and CreatureMind.SPELLS.has("lightning"), "chain lightning is a spell the creature can learn")
+
+	# Everyone grown up turns out when a goblin comes close to the village.
+	var prowler := WorldPopulator.spawn_villager(game.world_root, terrain, village.center + Vector3(3, 0, 18), 0.1, true)
+	prowler.max_hp = 5000.0
+	prowler.hp = 5000.0
+	await _wait(4.0)
+	var defenders := 0
+	for v in village.people():
+		if v.state == Villager.State.FIGHT and v._foe == prowler:
+			defenders += 1
+	_check(not prowler.raiding or defenders > 0, "a goblin near the village counts as an enemy")
+	_check(defenders >= 3, "villagers of all kinds turn out to fight it (%d)" % defenders)
+	prowler.queue_free()
+	await _wait(0.5)
+
+	# A giant bat carries a villager off to the cave during a raid.
+	var before_bat := village.population()
+	play.raids.raiding = true
+	var bat := play.raids.launch_bat()
+	_check(bat != null and bat.is_in_group("bats"), "a giant bat flies out of a cave during a raid")
+	if bat:
+		bat.global_position = village.center + Vector3(0, 30, 0)
+		var taken := [false]
+		bat.took.connect(func(_v: Villager) -> void: taken[0] = true)
+		for k in 40:
+			await _wait(2.0)
+			if not is_instance_valid(bat):
+				break
+		_check(taken[0] and village.population() == before_bat - 1, "it snatches a villager and takes it into the cave (%d -> %d)" % [before_bat, village.population()])
+	var doomed := play.raids.launch_bat()
+	if doomed:
+		doomed.take_hit(Balance.num("bat_health") + 1.0, null)
+		_check(not doomed.is_alive() and not doomed.is_in_group("bats"), "a bat with no health left falls out of the sky")
+	play.raids.raiding = false
+
+	# Bless and Curse say what the creature last did, and need no aiming.
+	beast.mind.did("explore")
+	play._select_spell(SpellBook.index_of("bless"))
+	_check(play._judge_prompt and play.hud._prompt.text.contains("exploring"), "choosing Bless shows the creature's last action")
+	var keen: float = beast.mind.behavior.explore
+	village.give("magicko", 50.0)
+	play._select_spell(SpellBook.index_of("bless"))
+	_check(beast.mind.behavior.explore > keen, "pressing the Bless key again casts it")
+	play._set_mode(PlayMode.Mode.COMMAND)
+	_check(not play._judge_prompt, "and the text goes when the spell is put away")
 
 	# The creature learns by watching, and is blessed and cursed.
 	var mind := beast.mind
@@ -480,6 +593,10 @@ func _run() -> void:
 	# Fetching a tree once it knows how.
 	await _wait(maxf(0.0, Balance.num("creature_knockout_seconds") - 150.0) + 2.0)
 	mind.knowledge.lumber = Balance.num("knowledge_lumber")
+	# (Only lumber: it may have picked up enough about food or stone by now,
+	# and a spell cast in between would hide the fetching.)
+	for other: String in ["food", "stone"] + CreatureMind.SPELLS:
+		Balance.values["knowledge_" + other] = 1.0e9
 	mind.behavior.explore = 0.0
 	mind._idle_timer = 0.0
 	mind._away = false
@@ -490,7 +607,10 @@ func _run() -> void:
 		if mind.last_action == "lumber":
 			fetched = true
 			break
-	_check(fetched, "the creature fetches a tree for the storehouse")
+	for other: String in ["food", "stone"] + CreatureMind.SPELLS:
+		Balance.values["knowledge_" + other] = Balance.DEFAULTS["knowledge_" + other]
+	_check(fetched, "the creature fetches a tree for the storehouse (task %s, last action %s, knocked out %s, speed %.1f, %.0f m from the village)" % [
+		mind._task, mind.last_action, beast.knocked_out, beast.speed, beast.global_position.distance_to(village.center)])
 	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT
 
 	# Rain puts out fires.
@@ -523,6 +643,43 @@ func _run() -> void:
 	_check(get_tree().get_nodes_in_group("start_markers").size() == placed and placed > 0, "start locations placed (%d)" % placed)
 	editor._place_cave(Vector3(45, game.terrain.get_height(45, -45), -45))
 	editor._plant_tree(Vector3(-10, 0, 10))
+	# The cut brush leaves a sheer cliff, which nobody climbs and routes go round.
+	var et: Terrain = game.terrain
+	var hill := Vector3(-25, 0, -45)
+	et.apply_brush(hill, 10.0, Terrain.Brush.RAISE, 8.0)
+	var floor_h := et.get_height(hill.x + 13.0, hill.z)
+	var climber := WorldPopulator.spawn_villager(game.world_root, et, Vector3(hill.x - 7.0, 0, hill.z), 0.01)
+	climber.global_position = Vector3(hill.x - 7.0, et.get_height(hill.x - 7.0, hill.z), hill.z)
+	_check(climber._slope_speed(Vector3.RIGHT) < 0.6 and is_equal_approx(climber._slope_speed(Vector3.LEFT), 1.0),
+		"walking up a steep slope is slow (%.2f of full speed)" % climber._slope_speed(Vector3.RIGHT))
+	et.apply_brush(Vector3(hill.x + 6.0, floor_h, hill.z), 5.0, Terrain.Brush.CUT, 1.0, floor_h)
+	_check(et.get_height(hill.x, hill.z) - et.get_height(hill.x + 2.0, hill.z) > 3.0, "the cut brush slices a hill into a sheer cliff")
+	climber.global_position = Vector3(hill.x + 1.5, floor_h, hill.z)
+	_check(climber._is_cliff(Vector3.LEFT), "a cliff cannot be climbed")
+	var grid := game.path_grid()
+	var below := Vector3(hill.x + 4.0, 0, hill.z)
+	var above := Vector3(hill.x - 4.0, 0, hill.z)
+	var way := grid.find(below, above)
+	var walked := 0.0
+	var last_point := below
+	for point in way:
+		walked += Vector2(point.x - last_point.x, point.z - last_point.z).length()
+		last_point = point
+	_check(not grid.clear_line(below, above) and walked > 7.0, "the way up goes round the cliff (%.0f m for 8 m)" % walked)
+	climber.queue_free()
+	_check(EditorMode.TOOL_NAMES.has("Expand island") and EditorMode.TOOL_NAMES.has("Cut cliff") and EditorMode.TOOL_NAMES.has("Goblin path"),
+		"the editor has expand-island, cut and goblin-path brushes")
+	# Goblin paths, drawn from the cave to each start.
+	for marker in get_tree().get_nodes_in_group("start_markers"):
+		var m3 := marker as Node3D
+		editor._stroke = PackedVector2Array([Vector2(45, -45), Vector2(30, -20), Vector2(m3.global_position.x, m3.global_position.z)])
+		editor._drawing = true
+		editor._finish_path()
+	_check(editor._paths.size() == placed and (editor.map_data().paths as Array).size() == placed, "goblin paths join the cave to the start locations (%d)" % editor._paths.size())
+	editor._stroke = PackedVector2Array([Vector2(-60, 60), Vector2(-50, 50)])
+	editor._drawing = true
+	editor._finish_path()
+	_check(editor._paths.size() == placed, "a path that joins nothing is not kept")
 	# Grow the island out over the sky with the land brush.
 	var t2: Terrain = game.terrain
 	var out := Vector3(0, 0, 0)
@@ -563,23 +720,26 @@ func _run() -> void:
 	var s0: Vector2 = play._info.starts[0]
 	play._found(Vector3(s0.x, game.terrain.get_height(s0.x, s0.y), s0.y), 0)
 	_check(play.village.population() == PlayerVillage.START_VILLAGERS, "starting villagers spawned (%d)" % play.village.population())
+	var raider := get_tree().get_nodes_in_group("goblins")[0] as Villager
+	var route := play.raids._route_for(raider)
+	_check(play.raids.paths.size() == placed and route.size() >= 2, "goblins take the map's painted path to the village (%d points)" % route.size())
 	await _wait(3.0)
 	_check(get_tree().get_nodes_in_group("start_markers").is_empty(), "banners removed after choosing")
 
-	# 5. A large random island builds. This time with the tiger, growing
+	# 5. A large random island builds. This time with the squirrel, growing
 	# at the normal rate: it starts at 15% of its size.
-	game.creature_kind = "tiger"
+	game.creature_kind = "squirrel"
 	game.settings.creature_grow_minutes = 30.0
 	await _open(game, "play", "", 768)
 	_check(Terrain.SIZE == 768 and Terrain.CHUNKS == 24 and is_equal_approx(Terrain.ISLAND_RADIUS, 348.0), "large map: twice the old island radius")
 	play = get_tree().current_scene.get_node("Controller") as PlayMode
 	var t0: Vector2 = play._info.starts[0]
 	play._found(Vector3(t0.x, game.terrain.get_height(t0.x, t0.y), t0.y), 0)
-	var tiger := play.creature
-	_check(tiger.kind == "tiger" and tiger.size < 0.16 and is_equal_approx(tiger.scale.x, tiger.size), "the tiger starts at 15%% of its size (%.2f)" % tiger.size)
-	tiger.move_to(tiger.global_position + Vector3(6, 0, 6))
+	var squirrel := play.creature
+	_check(squirrel.kind == "squirrel" and squirrel.size < 0.16 and is_equal_approx(squirrel.scale.x, squirrel.size), "the squirrel starts at 15%% of its size (%.2f)" % squirrel.size)
+	squirrel.move_to(squirrel.global_position + Vector3(6, 0, 6))
 	await _wait(60.0)
-	_check(tiger.size > 0.17 and tiger.size < 0.2, "the tiger grows towards full size over 30 minutes (%.3f after 1 minute)" % tiger.size)
+	_check(squirrel.size > 0.17 and squirrel.size < 0.2, "the squirrel grows towards full size over 30 minutes (%.3f after 1 minute)" % squirrel.size)
 	game.creature_kind = "tortoise"
 
 	DirAccess.remove_absolute(path)

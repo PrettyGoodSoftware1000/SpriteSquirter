@@ -8,8 +8,8 @@ extends Node
 ## minute. What they gather only counts once they have carried it to the
 ## nearest Storehouse (or to the village centre while there is none).
 ## Every grown-up also adds a trickle of magicko. While a building is under
-## construction every worker drops their work to help build it, oldest site
-## first.
+## construction up to Balance "builders_per_building" villagers work on
+## it: the builders first, then unassigned workers. Each site gets its own.
 ##
 ## A new child is born every `birth_seconds` while there is housing for it
 ## (Homes add housing) and food in store, and grows up in Villager.GROW_SECONDS.
@@ -44,6 +44,10 @@ const START_VILLAGERS := 8
 const HOME_RADIUS := 16.0
 ## Buildings may go up this far from the village centre...
 const TERRITORY := 45.0
+## Every grown-up turns out to fight a raider this close to the village
+## centre, and any goblin at all (raid or no raid) within INTRUDER_RADIUS.
+const DEFEND_RADIUS := 50.0
+const INTRUDER_RADIUS := 25.0
 ## ...or this close to one of the village's buildings.
 const NEAR_BUILDING := 24.0
 ## How far workers walk to reach trees and rocks.
@@ -102,9 +106,11 @@ var researched := {}
 var research := {}
 ## True while the village has a Blacksmith: loads go home in wheelbarrows.
 var barrows := false
-## Workers the player has set to each gathering job. The rest are shared
-## out by JOB_SHARE.
-var quota := {"lumber": 0, "stone": 0, "food": 0}
+## How many villagers the player has set to each job (Villager.pin): the
+## lumberjacks, miners, farmers and builders. Everyone else is an
+## unassigned worker, who gathers whatever is most needed (JOB_SHARE) and
+## helps on building sites when the builders are too few.
+var quota := {"lumber": 0, "stone": 0, "food": 0, "build": 0}
 ## How many workers are on each gathering job (food includes the farmers).
 var gatherers := {"lumber": 0, "stone": 0, "food": 0}
 
@@ -204,18 +210,37 @@ func store(kind: String, amount: float) -> void:
 		lesson.emit(kind)
 
 
-## Sets one more (or one fewer) worker to a gathering job, at once. Never
-## takes warriors, archers or wizards.
+## Sets one of the unassigned workers to a job ("lumber", "stone", "food"
+## or "build"), or with a `change` of -1 sends one back to the unassigned.
+## It happens at once. Never takes warriors, archers or wizards.
 func change_quota(kind: String, change: int) -> void:
-	var total := workers()
-	var others := 0
-	for k: String in quota:
-		if k != kind:
-			others += quota[k]
-	# Start from how many are doing it now, so + always adds one.
-	var base: int = maxi(quota[kind], gatherers[kind]) if change > 0 else mini(quota[kind], gatherers[kind])
-	quota[kind] = clampi(base + change, 0, maxi(total - others, 0))
+	var chosen: Villager = null
+	for v in people():
+		if not v.can_work() or v.job == "train":
+			continue
+		if change < 0 and v.pin == kind:
+			chosen = v
+			break
+		if change > 0 and v.pin == "":
+			# Someone already doing it, if there is one.
+			if chosen == null or v.job == kind or (kind == "food" and v.job == "farm"):
+				chosen = v
+			if v.job == kind:
+				break
+	if chosen:
+		chosen.pin = kind if change > 0 else ""
+		if change < 0 and chosen.job != "build":
+			chosen.clear_job()
 	_assign_jobs()
+
+
+## Workers the player has not set to any job.
+func unassigned() -> int:
+	var n := 0
+	for v in people():
+		if v.can_work() and v.job != "train" and v.pin == "":
+			n += 1
+	return n
 
 
 ## Blood Sacrifice cast by the creature: any one of the workers.
@@ -622,52 +647,68 @@ func _assign_jobs() -> void:
 	for v in people():
 		if v.can_work() and v.job != "train":
 			workers.append(v)
+	quota = {"lumber": 0, "stone": 0, "food": 0, "build": 0}
 	if workers.is_empty():
+		gatherers = {"lumber": 0, "stone": 0, "food": 0}
 		return
+	for v in workers:
+		if quota.has(v.pin):
+			quota[v.pin] += 1
+	# Building: each site takes up to `most` villagers, builders first, then
+	# unassigned workers; the oldest site is manned first.
+	var most := maxi(1, roundi(Balance.num("builders_per_building")))
 	var sites := get_tree().get_nodes_in_group("construction_sites")
-	if not sites.is_empty():
-		# Everyone grown up helps finish the oldest building first.
-		var site := sites[0] as ConstructionSite
-		for k in workers.size():
-			var v := workers[k]
-			if v.job != "build" or not is_instance_valid(v.job_target) or v.job_target != site:
-				v.assign_job("build", site.work_spot(k, workers.size()), site)
-		return
+	var crew := {}
+	for v in workers:
+		if v.job != "build":
+			continue
+		if is_instance_valid(v.job_target) and sites.has(v.job_target) and crew.get(v.job_target, 0) < most:
+			crew[v.job_target] = crew.get(v.job_target, 0) + 1
+		else:
+			v.clear_job()
+	for node in sites:
+		var site := node as ConstructionSite
+		var have: int = crew.get(site, 0)
+		while have < most:
+			var v := _next_builder(workers, site.global_position, have == 0)
+			if v == null:
+				break
+			v.assign_job("build", site.work_spot(have, most), site)
+			have += 1
 
 	var counts := {"lumber": 0, "stone": 0, "food": 0}
 	var per_target := {}
+	var farmers := {}
+	var farming := 0
 	for v in workers:
-		if v.job == "build":
+		if v.pin == "build" and v.job != "build" and v.job != "":
+			# A builder with nothing to build waits for the next building.
 			v.clear_job()
 		elif counts.has(v.job):
 			counts[v.job] += 1
 			if is_instance_valid(v.job_target):
 				per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
-	# Fields that want sowing or reaping come first: foragers move to them.
-	var farmers := {}
-	var farming := 0
-	for v in workers:
-		if v.job == "farm" and is_instance_valid(v.job_target):
+		elif v.job == "farm" and is_instance_valid(v.job_target):
 			farmers[v.job_target] = farmers.get(v.job_target, 0) + 1
 			farming += 1
-	# The numbers the player set come before everything else: move workers
-	# over from the jobs with the most to spare.
-	for kind: String in quota:
-		var want := mini(quota[kind], workers.size())
-		while counts[kind] + (farming if kind == "food" else 0) < want:
-			var donor: Variant = _quota_donor(workers, kind, counts, farming)
-			if donor == null or not _give_job(donor[0], kind, per_target):
-				break
-			if counts.has(donor[1]):
-				counts[donor[1]] -= 1
-			counts[kind] += 1
+	# The villagers the player set to a job keep to it.
+	for v in workers:
+		if v.job == "build" or not counts.has(v.pin) or v.job == v.pin or (v.pin == "food" and v.job == "farm"):
+			continue
+		var was := v.job
+		if _give_job(v, v.pin, per_target):
+			if counts.has(was):
+				counts[was] -= 1
+			counts[v.pin] += 1
+	# Fields that want sowing or reaping come next: farmers move to them
+	# first, then unassigned workers.
 	for node in get_tree().get_nodes_in_group("fields"):
 		var field := node as CropField
 		if not field.needs_work():
 			continue
 		var have: int = farmers.get(field, 0)
 		while have < field.wanted_workers():
-			var v := _spare_worker(workers, counts)
+			var v := _spare_worker(workers)
 			if v == null:
 				break
 			if counts.has(v.job):
@@ -675,8 +716,9 @@ func _assign_jobs() -> void:
 			v.assign_job("farm", field.work_spot(), field)
 			farming += 1
 			have += 1
+	# Unassigned workers share out the gathering by themselves.
 	for v in workers:
-		if v.job != "":
+		if v.job != "" or v.pin != "":
 			continue
 		var kinds: Array = JOB_SHARE.keys()
 		# Most-needed job first.
@@ -689,37 +731,36 @@ func _assign_jobs() -> void:
 	gatherers = {"lumber": counts.lumber, "stone": counts.stone, "food": counts.food + farming}
 
 
-## A worker to move to the gathering job `kind` to meet the player's
-## number: [the worker, the job it leaves]. Idle workers first, then one
-## from the job with the most workers beyond its own number.
-func _quota_donor(workers: Array[Villager], kind: String, counts: Dictionary, farming: int) -> Variant:
-	for v in workers:
-		if v.job == "":
-			return [v, ""]
-	var from := ""
-	var spare := 0
-	for k: String in quota:
-		var have: int = counts[k] + (farming if k == "food" else 0)
-		if k != kind and have - quota[k] > spare and counts[k] > 0:
-			spare = have - quota[k]
-			from = k
-	if from == "":
-		return null
-	for v in workers:
-		if v.job == from:
-			return [v, from]
+## The next villager to send to a building site at `at`: a builder with
+## nothing to build, else the nearest unassigned worker. A site with nobody
+## on it (`desperate`) will take a lumberjack, miner or farmer.
+func _next_builder(workers: Array[Villager], at: Vector3, desperate: bool) -> Villager:
+	for wanted: String in ["build", "", "any"]:
+		if wanted == "any" and not desperate:
+			break
+		var best: Villager = null
+		var best_d := INF
+		for v in workers:
+			if v.job == "build" or (wanted != "any" and v.pin != wanted):
+				continue
+			var d := v.global_position.distance_to(at)
+			if d < best_d:
+				best_d = d
+				best = v
+		if best:
+			return best
 	return null
 
 
-## A worker that can be moved to a field: idle first, then foragers, then
-## whoever else is not farming already.
-func _spare_worker(workers: Array[Villager], counts: Dictionary) -> Villager:
+## A worker that can be moved to a field: a farmer who is foraging, then
+## unassigned workers (idle first, then foragers, then the rest).
+func _spare_worker(workers: Array[Villager]) -> Villager:
+	for v in workers:
+		if v.pin == "food" and v.job == "food":
+			return v
 	for wanted: String in ["", "food", "lumber", "stone"]:
-		# Leave alone the lumberjacks and miners the player asked for.
-		if (wanted == "lumber" or wanted == "stone") and counts[wanted] <= quota[wanted]:
-			continue
 		for v in workers:
-			if v.job == wanted:
+			if v.pin == "" and v.job == wanted:
 				return v
 	return null
 

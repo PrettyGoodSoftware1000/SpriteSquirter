@@ -12,7 +12,7 @@ const BRUSH_MAX := 30.0
 const ROTATE_STEP := PI / 8.0
 ## How close the cursor must be to a start banner to pick it.
 const PICK_RADIUS := 9.0
-const BRIDGE_HINT := "Click a Home, then a second Home, to hang a rope bridge between them.  Right-click or Esc to stop."
+const BRIDGE_HINT := "The treehouses a rope bridge can join are lit up. Click one, then another.  Right-click or Esc to stop."
 const FIELD_HINT := "Hold the left mouse button and drag to draw the field, then let go. Villagers sow and reap it.  Shift keeps drawing,  right-click or Esc to stop."
 
 var mode: Mode = Mode.COMMAND
@@ -56,6 +56,11 @@ var _field_center := Vector3.ZERO
 var _field_size := Vector2.ZERO
 var _field_problem_text := ""
 var _prompt_timer := 0.0
+## True while the prompt shows the creature's last action (Bless / Curse).
+var _judge_prompt := false
+## See-through copies of the treehouses a rope bridge can join.
+var _bridge_ghosts: Node3D
+var _bridge_ghost_materials: Array[StandardMaterial3D] = []
 ## Hanging a rope bridge: the Home clicked first, and the one under the cursor.
 var _bridge_from: Destructible
 var _bridge_hover: Destructible
@@ -85,10 +90,12 @@ func _ready() -> void:
 	raids = GoblinRaids.new()
 	add_child(raids)
 	raids.setup(day_cycle)
+	raids.paths = _info.get("paths", [])
 	raids.raid_started.connect(func(count: int, ogres: int) -> void:
 		var extra := "" if ogres == 0 else (" and an ogre" if ogres == 1 else " and %d ogres" % ogres)
 		_announce("Midnight: %d goblins%s are marching on your village!" % [count, extra]))
 	raids.raid_ended.connect(func() -> void: _announce("Morning: the goblins go home."))
+	raids.bat_took.connect(func() -> void: _announce("A giant bat has snatched one of your villagers!"))
 
 	_ring = GroundRing.new()
 	add_child(_ring)
@@ -109,7 +116,6 @@ func _ready() -> void:
 	hud.research_selected.connect(_on_research_selected)
 	village.research_done.connect(func(id: String) -> void:
 		_announce("The Blacksmith has finished: %s." % (Research.find(id).name as String).to_lower()))
-	hud.menu_requested.connect(func() -> void: Game.start("menu", "", Terrain.SIZE))
 	hud.regenerate_requested.connect(_regenerate)
 	hud.mood_selected.connect(_set_mood)
 	hud.palette_selected.connect(_set_palette)
@@ -315,6 +321,10 @@ func _set_mode(m: Mode) -> void:
 	_painting = false
 	_field_dragging = false
 	_bridge_from = null
+	if _judge_prompt:
+		_judge_prompt = false
+		hud.set_prompt("")
+	_refresh_bridge_ghosts()
 	if m != Mode.SPELL:
 		spell_index = -1
 	if m != Mode.PLACE and _ghost != null:
@@ -348,10 +358,15 @@ func _select_spell(index: int) -> void:
 		hud.set_spell(-1)
 		return
 	if mode == Mode.SPELL and spell_index == index:
-		_set_mode(Mode.COMMAND)
+		# Bless and Curse need no aiming: the same key again casts them.
+		if _judging():
+			_judge(index)
+		else:
+			_set_mode(Mode.COMMAND)
 		return
 	spell_index = index
 	_set_mode(Mode.SPELL)
+	_show_last_action()
 
 
 func _on_sculpt_selected(index: int) -> void:
@@ -404,6 +419,13 @@ func _on_left_click() -> void:
 		if _hover:
 			_found(_hover.global_position, _hover.index)
 		return
+	# (Bless, Curse and bridges are aimed at things, not at the ground.)
+	if mode == Mode.BRIDGE:
+		_bridge_click()
+		return
+	if mode == Mode.SPELL and _judging():
+		_cast(spell_index)
+		return
 	if _cursor_hit == null:
 		return
 	match mode:
@@ -416,8 +438,6 @@ func _on_left_click() -> void:
 			_flatten_height = (_cursor_hit as Vector3).y
 		Mode.PLACE:
 			_place_building(Input.is_key_pressed(KEY_SHIFT))
-		Mode.BRIDGE:
-			_bridge_click()
 		Mode.FIELD:
 			_field_dragging = true
 			_field_from = _cursor_hit
@@ -435,8 +455,70 @@ func _command_move(pos: Vector3) -> void:
 
 # --- Spells -------------------------------------------------------------------
 
+## True while Bless or Curse is the spell in hand.
+func _judging() -> bool:
+	return mode == Mode.SPELL and spell_index >= 0 and (SpellBook.SPELLS[spell_index].id == "bless" or SpellBook.SPELLS[spell_index].id == "curse")
+
+
+## While Bless or Curse is in hand, the top of the screen says what the
+## creature last did, which is what the spell will judge.
+func _show_last_action() -> void:
+	if not _judging() or creature == null:
+		return
+	var mind := creature.mind
+	var spell: Dictionary = SpellBook.SPELLS[spell_index]
+	var who := creature.species_name()
+	var ago := Game.now - mind.last_action_time
+	if mind.last_action == "" or ago > CreatureMind.JUDGE_SECONDS:
+		hud.set_prompt("%s: the %s has done nothing in the last %d seconds." % [spell.name, who.to_lower(), int(CreatureMind.JUDGE_SECONDS)])
+	else:
+		hud.set_prompt("The %s's last action: %s, %d s ago.  Press %d again or click it to %s." % [who.to_lower(),
+			CreatureMind.DOING[mind.last_action], int(ago), spell_index + 1, (spell.name as String).to_lower()])
+	_prompt_timer = 0.0
+	_judge_prompt = true
+
+
+## Casts Bless or Curse on the creature, for what it last did.
+func _judge(index: int) -> void:
+	if _choosing or creature == null or _cooldowns[index] > 0.0:
+		return
+	var spell: Dictionary = SpellBook.SPELLS[index]
+	if village.amount("magicko") < spell.cost:
+		hud.set_hint("Not enough magicko for %s: it costs %d." % [spell.name, spell.cost])
+		return
+	village.give("magicko", -spell.cost)
+	_cooldowns[index] = spell.cooldown
+	var blessing: bool = spell.id == "bless"
+	Game.effects.spawn_judgement(creature.global_position + Vector3.UP * 4.0 * creature.size, creature.size, blessing)
+	hud.set_hint(creature.mind.judge(1 if blessing else -1))
+
+
+## True if the mouse is on (or near) the creature.
+func _mouse_on_creature() -> bool:
+	if creature == null:
+		return false
+	var cam := Game.camera_rig.camera
+	var mouse := get_viewport().get_mouse_position()
+	for up: float in [1.0, 3.0, 5.5]:
+		var p := creature.global_position + Vector3.UP * up * creature.size
+		if not cam.is_position_behind(p) and cam.unproject_position(p).distance_to(mouse) < 40.0 + 2200.0 * creature.size / maxf(cam.global_position.distance_to(p), 1.0):
+			return true
+	if _cursor_hit == null:
+		return false
+	var hit: Vector3 = _cursor_hit
+	return Vector2(hit.x - creature.global_position.x, hit.z - creature.global_position.z).length() < 2.0 + 4.0 * creature.size
+
+
 func _cast(index: int) -> void:
-	if _choosing or index < 0 or _cursor_hit == null or _cooldowns[index] > 0.0:
+	if _choosing or index < 0 or _cooldowns[index] > 0.0:
+		return
+	if _judging():
+		if _mouse_on_creature():
+			_judge(index)
+		else:
+			hud.set_hint("Click your creature, or press %d again." % (index + 1))
+		return
+	if _cursor_hit == null:
 		return
 	var spell: Dictionary = SpellBook.SPELLS[index]
 	if village.amount("magicko") < spell.cost:
@@ -445,17 +527,6 @@ func _cast(index: int) -> void:
 	var target: Vector3 = _cursor_hit
 	if spell.id == "blood" and not village.sacrifice(target):
 		hud.set_hint("Blood Sacrifice needs one of your villagers within %d m of the click." % int(PlayerVillage.BLOOD_REACH))
-		return
-	if spell.id == "bless" or spell.id == "curse":
-		# These are cast on the creature itself.
-		if creature == null or Vector2(target.x - creature.global_position.x, target.z - creature.global_position.z).length() > _judge_reach():
-			hud.set_hint("%s is cast on your creature: click it." % spell.name)
-			return
-		village.give("magicko", -spell.cost)
-		_cooldowns[index] = spell.cooldown
-		var blessing: bool = spell.id == "bless"
-		Game.effects.spawn_judgement(creature.global_position + Vector3.UP * 4.0 * creature.size, creature.size, blessing)
-		hud.set_hint(creature.mind.judge(1 if blessing else -1))
 		return
 	village.give("magicko", -spell.cost)
 	_cooldowns[index] = spell.cooldown
@@ -477,13 +548,10 @@ func _cast(index: int) -> void:
 			var patch := RootPatch.new()
 			Game.world_root.add_child(patch)
 			patch.cast(target)
+		"lightning":
+			ChainLightning.cast(target)
 	if creature:
 		creature.watch(target)
-
-
-## How near the creature a click must be to bless or curse it.
-func _judge_reach() -> float:
-	return 4.0 + 6.0 * creature.size if creature else 0.0
 
 
 # --- Building placement -------------------------------------------------------
@@ -595,19 +663,75 @@ func _place_building(keep_placing: bool) -> void:
 
 # --- Rope bridges -----------------------------------------------------------------
 
-## The treehouse Home of the village under the cursor, if any.
-func _home_at(p: Vector3) -> Destructible:
-	var best: Destructible = null
-	var best_d := INF
+## The village's finished treehouses: the buildings a bridge can join.
+func _treehouses() -> Array[Destructible]:
+	var out: Array[Destructible] = []
 	for node in get_tree().get_nodes_in_group("player_buildings"):
 		var b := node as Destructible
-		if not b.has_meta("deck_h") or b.destroyed:
-			continue
-		var d := Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length()
-		if d < b.footprint + 2.5 and d < best_d:
-			best_d = d
-			best = b
+		if b.has_meta("deck_h") and not b.destroyed:
+			out.append(b)
+	return out
+
+
+## The treehouse under the mouse, if any. The mouse may be on any part of
+## it (trunk, deck, house or leaves), so this goes by where the treehouse
+## is on the screen, not by the ground behind it.
+func _home_at_mouse() -> Destructible:
+	var cam := Game.camera_rig.camera
+	var mouse := get_viewport().get_mouse_position()
+	var best: Destructible = null
+	var best_d := INF
+	for b in _treehouses():
+		for up: float in [0.5, b.get_meta("deck_h", 4.7), b.height * 0.8]:
+			var p := b.global_position + Vector3.UP * up
+			if cam.is_position_behind(p):
+				continue
+			# About the treehouse's own width on the screen.
+			var reach := 30.0 + 600.0 * b.footprint / maxf(cam.global_position.distance_to(p), 1.0)
+			var d := cam.unproject_position(p).distance_to(mouse)
+			if d < reach and d < best_d:
+				best_d = d
+				best = b
 	return best
+
+
+## Lights up the treehouses a bridge can join: all of them at first, then
+## (once one end is chosen) that one in yellow and those in reach in green.
+func _refresh_bridge_ghosts() -> void:
+	if _bridge_ghosts != null:
+		_bridge_ghosts.queue_free()
+		_bridge_ghosts = null
+	if mode != Mode.BRIDGE:
+		return
+	if _bridge_ghost_materials.is_empty():
+		for color: Color in [Color(0.3, 1.0, 0.5, 0.38), Color(1.0, 0.9, 0.25, 0.45)]:
+			var mat := StandardMaterial3D.new()
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.albedo_color = color
+			mat.no_depth_test = true
+			_bridge_ghost_materials.append(mat)
+	_bridge_ghosts = Node3D.new()
+	add_child(_bridge_ghosts)
+	var from_ok := _bridge_from != null and is_instance_valid(_bridge_from)
+	for b in _treehouses():
+		if from_ok and b != _bridge_from and _bridge_problem(_bridge_from, b, false) != "":
+			continue
+		_add_ghost(b, b, _bridge_ghost_materials[1 if from_ok and b == _bridge_from else 0])
+
+
+func _add_ghost(node: Node, top: Node3D, material: Material) -> void:
+	for child in node.get_children():
+		var mi := child as MeshInstance3D
+		if mi and mi.mesh:
+			var copy := MeshInstance3D.new()
+			copy.mesh = mi.mesh
+			copy.material_override = material
+			copy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_bridge_ghosts.add_child(copy)
+			copy.global_transform = mi.global_transform
+		if not child is CPUParticles3D:
+			_add_ghost(child, top, material)
 
 
 ## How long a bridge between two Homes would be.
@@ -617,37 +741,44 @@ func _bridge_length(a: Destructible, b: Destructible) -> float:
 	return Vector2(eb.x - ea.x, eb.z - ea.z).length()
 
 
-## Why a bridge can't join these two Homes, or "" if it can.
-func _bridge_problem(a: Destructible, b: Destructible) -> String:
+## Why a bridge can't join these two treehouses, or "" if it can.
+## `with_cost` also checks that the village can pay for it.
+func _bridge_problem(a: Destructible, b: Destructible, with_cost := true) -> String:
 	if a == b:
-		return "Pick a different Home for the other end."
+		return "Pick a different treehouse for the other end."
 	var centres := Vector2(b.global_position.x - a.global_position.x, b.global_position.z - a.global_position.z).length()
 	var length := _bridge_length(a, b)
 	if centres < 9.5:
-		return "Those two Homes are too close together for a bridge."
+		return "Those two treehouses are too close together for a bridge."
 	if length > Balance.num("bridge_max_length"):
 		return "Too far: a rope bridge reaches %d m and that is %d m." % [roundi(Balance.num("bridge_max_length")), roundi(length)]
 	for node in get_tree().get_nodes_in_group("bridges"):
 		if (node as RopeBridge).joins(a, b):
-			return "Those two Homes already have a bridge."
+			return "Those two treehouses already have a bridge."
 	for node in get_tree().get_nodes_in_group("construction_sites"):
 		var site := node as ConstructionSite
 		if site.kind == "bridge" and ((site.ends[0] == a and site.ends[1] == b) or (site.ends[0] == b and site.ends[1] == a)):
-			return "Those two Homes already have a bridge."
+			return "Those two treehouses already have a bridge."
+	if not with_cost:
+		return ""
 	var short := village.shortfall(BuildingCatalog.bridge_cost(length))
 	if short != "":
 		return "Need %s more." % short
 	return ""
 
 
-func _bridge_click() -> void:
-	var home := _home_at(_cursor_hit)
+## A click with the bridge tool, on `home` (or on whatever treehouse is
+## under the mouse).
+func _bridge_click(home: Destructible = null) -> void:
 	if home == null:
-		hud.set_hint("Click one of your treehouse Homes (a finished one).")
+		home = _home_at_mouse()
+	if home == null:
+		hud.set_hint("Click one of the lit-up treehouses." if not _treehouses().is_empty() else "A rope bridge joins two treehouses: build some first.")
 		return
 	if _bridge_from == null or not is_instance_valid(_bridge_from):
 		_bridge_from = home
-		hud.set_hint("Now click the Home at the other end.")
+		_refresh_bridge_ghosts()
+		hud.set_hint("Now click the treehouse at the other end (the ones in reach are green).")
 		return
 	var problem := _bridge_problem(_bridge_from, home)
 	if problem != "":
@@ -670,9 +801,10 @@ func _bridge_click() -> void:
 	# The bridge is modelled along its own X axis, from the first Home.
 	site.rotation.y = atan2(-(eb.z - ea.z), eb.x - ea.x)
 	if Input.is_key_pressed(KEY_SHIFT):
-		# Carry on from the second Home.
+		# Carry on from the second treehouse.
 		_bridge_from = home
-		hud.set_hint("Bridge marked out. Click the next Home to carry on from here.")
+		_refresh_bridge_ghosts()
+		hud.set_hint("Bridge marked out. Click the next treehouse to carry on from here.")
 	else:
 		_set_mode(Mode.COMMAND)
 
@@ -793,11 +925,10 @@ func _update_ring() -> void:
 		_ring.draw(c, [_ghost.footprint + 0.5], Color(0.4, 1.0, 0.5) if _ghost_valid else Color(1.0, 0.35, 0.3))
 	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "rain":
 		_ring.draw(c, [RainCloud.RADIUS], Color(0.55, 0.75, 1.0))
+	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "lightning":
+		_ring.draw(c, [Balance.num("lightning_jump_range")], Color(0.7, 0.8, 1.0))
 	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "roots":
 		_ring.draw(c, [RootPatch.RADIUS], Color(0.45, 1.0, 0.5))
-	elif mode == Mode.SPELL and creature and (SpellBook.SPELLS[spell_index].id == "bless" or SpellBook.SPELLS[spell_index].id == "curse"):
-		var p := creature.global_position
-		_ring.draw(Vector3(p.x, 0.0, p.z), [_judge_reach()], Color(1.0, 0.9, 0.3) if SpellBook.SPELLS[spell_index].id == "bless" else Color(1.0, 0.15, 0.15))
 	elif mode == Mode.SPELL and SpellBook.SPELLS[spell_index].id == "blood":
 		_ring.draw(c, [PlayerVillage.BLOOD_REACH], Color(0.9, 0.1, 0.1))
 	elif mode == Mode.FIELD and _field_dragging:
@@ -806,7 +937,7 @@ func _update_ring() -> void:
 	elif mode == Mode.FIELD:
 		_ring.draw(c, [0.6], Color(0.4, 1.0, 0.5))
 	elif mode == Mode.BRIDGE:
-		_bridge_hover = _home_at(c)
+		_bridge_hover = _home_at_mouse()
 		var from_ok := _bridge_from != null and is_instance_valid(_bridge_from)
 		if from_ok and _bridge_hover != null and _bridge_hover != _bridge_from:
 			# A strip on the ground under where the bridge would hang.
@@ -838,6 +969,8 @@ func _update_ui() -> void:
 		var cost: int = CropField.cost_for(_field_size).lumber
 		hud.set_hint("Field %d x %d m: %d lumber.  %s" % [roundi(_field_size.x), roundi(_field_size.y), cost,
 			_field_problem_text if _field_problem_text != "" else "Let go to plant it."])
+	if _judging():
+		_show_last_action()
 	if mode == Mode.BRIDGE and _bridge_from != null and is_instance_valid(_bridge_from) and _bridge_hover != null and _bridge_hover != _bridge_from:
 		var length := _bridge_length(_bridge_from, _bridge_hover)
 		hud.set_hint("Rope bridge %d m: %d lumber.  %s" % [roundi(length), BuildingCatalog.bridge_cost(length).lumber,

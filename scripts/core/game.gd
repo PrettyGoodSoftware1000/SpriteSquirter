@@ -50,6 +50,9 @@ var village: PlayerVillage
 var now := 0.0
 
 
+var _paths: PathGrid
+
+
 func _ready() -> void:
 	Balance.load_file()
 	Villager.apply_balance()
@@ -59,6 +62,14 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	now += delta
+
+
+## The route finder for the current world's terrain (made on first use).
+func path_grid() -> PathGrid:
+	if _paths == null or not is_instance_valid(_paths.terrain) or _paths.terrain != terrain:
+		_paths = PathGrid.new()
+		_paths.setup(terrain)
+	return _paths
 
 
 ## Leaves the current world and builds a new one. With no map_path the

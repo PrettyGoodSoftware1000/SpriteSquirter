@@ -51,7 +51,7 @@ func _ready() -> void:
 	if not map.is_empty():
 		terrain.load_map(map)
 		WorldPopulator.populate_from_map(self, terrain, map, mode == "play")
-		info = {"name": map.name, "starts": map.starts, "caves": map.caves, "from_map": true, "path": Game.session.map_path,
+		info = {"name": map.name, "starts": map.starts, "caves": map.caves, "paths": map.get("paths", []), "from_map": true, "path": Game.session.map_path,
 			"unsaved": not Game.session.get("map_data", {}).is_empty()}
 	elif mode == "editor":
 		terrain.generate(Game.world_seed, false)

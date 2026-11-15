@@ -70,7 +70,7 @@ func _ready() -> void:
 	beasts.add_theme_constant_override("separation", 6)
 	box.add_child(beasts)
 	var beast_group := ButtonGroup.new()
-	var blurbs := {"tortoise": "gloomy, slow, twice as tough", "tiger": "nervous, 30% faster, half as tough"}
+	var blurbs := {"tortoise": "gloomy, slow, twice as tough", "squirrel": "nervous, 30% faster, half as tough"}
 	for kind: String in Creature.SPECIES:
 		var b := _button("%s\n%s" % [Creature.SPECIES[kind].name, blurbs.get(kind, "")])
 		b.toggle_mode = true

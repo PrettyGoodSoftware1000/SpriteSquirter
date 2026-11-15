@@ -1,7 +1,7 @@
 class_name Creature
 extends Node3D
 ## The giant creature. There are two to choose from (set `kind` before
-## adding it to the tree): a gloomy tortoise, and a nervous tiger that is
+## adding it to the tree): a gloomy tortoise, and a nervous squirrel that is
 ## 30% faster but has half the tortoise's health. See SPECIES.
 ##
 ## A creature starts at START_SIZE of its full size and grows for
@@ -50,11 +50,11 @@ const SPECIES := {
 		"mouth": [0.85, -0.08, 2.1, 0.5], "frown": [0.3, 0.2],
 		"arm": Vector3(0.3, -1.0, 0.12), "elbow": -0.25,
 	},
-	"tiger": {
-		"name": "Tiger", "model": "res://assets/creature/tiger.glb", "speed": 3.6 * 1.3,
+	"squirrel": {
+		"name": "Squirrel", "model": "res://assets/creature/squirrel.glb", "speed": 3.6 * 1.3,
 		"nervous": 1.0,
 		"eye": Vector3(0.66, 0.85, 1.27), "eye_size": 0.42, "eye_color": Color(1.0, 0.98, 0.8),
-		"lid_color": Color(0.95, 0.5, 0.1), "lid_y": [0.5, 0.62], "lid_tilt": [-0.3, -0.5], "pupil": [0.62, 0.42],
+		"lid_color": Color(0.8, 0.36, 0.13), "lid_y": [0.5, 0.62], "lid_tilt": [-0.3, -0.5], "pupil": [0.62, 0.42],
 		"mouth": [0.55, -0.02, 1.8, 0.2], "frown": [0.1, 0.18],
 		# Upper arms hang a little forward; `fore` points the forearms up
 		# and in, so the paws are held in front of the chest.
@@ -89,7 +89,7 @@ enum Action { NONE, STOMP, GRAB }
 @export var step_time := 0.7
 @export var step_height := 0.9
 
-## "tortoise" or "tiger". Set before adding to the tree.
+## "tortoise" or "squirrel". Set before adding to the tree.
 var kind := "tortoise"
 ## 1 is full grown.
 var size := START_SIZE
@@ -393,6 +393,11 @@ func _update_locomotion(delta: float) -> void:
 	if Game.now < snared_until or knocked_out:
 		desired_speed = 0.0
 		speed = 0.0
+	# Uphill is slow going for a creature too.
+	var ahead := Vector3(sin(heading), 0.0, cos(heading)) * 2.0 * maxf(size, 0.3)
+	var rise := (Game.terrain.get_height(global_position.x + ahead.x, global_position.z + ahead.z)
+		- Game.terrain.get_height(global_position.x, global_position.z)) / ahead.length()
+	desired_speed *= lerpf(1.0, Balance.num("slope_slowest"), clampf((rise - Balance.num("slope_slow_from")) / 0.6, 0.0, 1.0))
 	speed = move_toward(speed, desired_speed, 3.0 * delta)
 	rotation.y = heading
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
@@ -930,12 +935,12 @@ func _build() -> void:
 		pupil.add_blob(Vector3(0.12, 0.13, 0.09) * e, Transform3D(Basis(), Vector3(0.15, 0.2, 0.25) * e), null, 0.0, 4, 6)
 		_pupils.append(_face_part(attach, pupil.commit(), Art.paint("plaster", 0.0)))
 		# The tortoise's lid droops towards the outside of the face: instant
-		# gloom. The tiger's sits high, so its eyes stare.
+		# gloom. The squirrel's sits high, so its eyes stare.
 		var lid := MeshBuilder.new()
 		lid.color = _spec.lid_color
 		lid.add_blob(Vector3(1.24, 0.88, 1.12) * e, Transform3D.IDENTITY, null, 0.0, 6, 10)
 		_lids.append(_face_part(attach, lid.commit(), paint))
-	if kind == "tiger":
+	if kind == "squirrel":
 		# Inked on: the line from nose to mouth, and kinked whiskers.
 		var ink := MeshBuilder.new()
 		ink.color = Color(0.04, 0.03, 0.04)
@@ -1010,7 +1015,7 @@ func _update_face(delta: float) -> void:
 		_pupils[k].position = c + Vector3(_gaze.x - s * 0.04, _gaze.y - 0.04, 0.25 - 1.2 * _gaze.length_squared()) * e
 		_pupils[k].scale = Vector3.ONE * lerpf(pupil[0], pupil[1], _anger)
 		# The tortoise's sad lids droop outwards, and when it is angry they
-		# slant down to the nose and sit lower. The tiger's lift in fright.
+		# slant down to the nose and sit lower. The squirrel's lift in fright.
 		_lids[k].rotation.z = s * lerpf(lid_tilt[0], lid_tilt[1], _anger)
 		_lids[k].position = c + Vector3(s * 0.03, lerpf(lid_y[0], lid_y[1], _anger) * (1.0 - shut) - shut * 0.02, 0.02 + shut * 0.05) * Vector3(e, 1.0, e)
 	if absf(_jaw - _mouth_drawn.x) > 0.01 or absf(_anger - _mouth_drawn.y) > 0.05:

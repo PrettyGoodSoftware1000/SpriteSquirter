@@ -22,6 +22,11 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 - **Goblin buildings:** crooked dark planks under roofs of coloured rags
   (red, purple, blue, orange, green), held down by crossed bones with a
   horned skull over the door, and sharpened stakes round the bottom.
+- **Fire:** tongues of flame are solid teardrop shapes with hard colour
+  bands (`shaders/flame.gdshader`), not sprites, so a fire looks right
+  from above.
+- **The giant bat:** dark fur, torn purple-grey wings, armour and bone
+  spikes strapped to its back, a pig's snout and fangs.
 - **The undead:** necromancers wear black with glowing purple runes;
   skeletons are bone-white with inked eye sockets and ribs.
 - **Nature follows a palette:** grass, trees, rocks, dirt and water take
@@ -46,7 +51,7 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 | Shapes | `scripts/core/mesh_builder.gd` | Lathes, bevelled boxes, tubes, blobs, curved sheets. |
 | Buildings | `scripts/world/building_factory.gd` | One function per building design. |
 | Island | `scripts/world/terrain.gd` | Outline, underside, rivers and waterfalls. |
-| Creatures | `tools/bake_creature.py` → `assets/creature/creature.glb` (tortoise), `tiger.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
+| Creatures | `tools/bake_creature.py` → `assets/creature/creature.glb` (tortoise), `squirrel.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
 | Textures | `tools/bake/patterns.gdshader` → `assets/textures/` | Procedural patterns baked to PNG. |
 
 ## Swapping in hand-made or AI-made art later

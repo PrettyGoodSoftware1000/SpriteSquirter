@@ -14,7 +14,6 @@ signal sculpt_selected(index: int)
 signal spell_selected(index: int)
 signal build_selected(kind: String)
 signal build_menu_requested
-signal menu_requested
 signal regenerate_requested
 signal mood_selected(index: int)
 signal palette_selected(index: int)
@@ -44,7 +43,6 @@ const SETTING_SLIDERS := [
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 ]
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   Space find %s\nRight-click move %s   1-6 spells   B build   U research   Esc cancel / pause   ~ dev menu"
 ## role -> [name in the jobs row, the building that trains it]
 const ROLES := {
 	"warrior": ["Warriors", "Town guard"],
@@ -88,7 +86,6 @@ func _ready() -> void:
 	add_child(root)
 	_root = root
 	root.theme = UiTheme.get_theme()
-	_build_player_panel(root)
 	_build_resource_bar(root)
 	_build_spell_bar(root)
 	_build_build_menu(root)
@@ -96,53 +93,8 @@ func _ready() -> void:
 	_build_prompt(root)
 	_build_dev_menu(root)
 
-	var help_panel := PanelContainer.new()
-	help_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	help_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	help_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	help_panel.position = Vector2(-12, -12)
-	help_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	help_panel.modulate = Color(1, 1, 1, 0.75)
-	root.add_child(help_panel)
-	var help := Label.new()
-	var beast: String = (Creature.SPECIES[Game.creature_kind].name as String).to_lower()
-	help.text = HELP % [beast, beast]
-	help.add_theme_font_size_override("font_size", 12)
-	help_panel.add_child(help)
-
 
 # --- Layout -------------------------------------------------------------------
-
-func _build_player_panel(root: Control) -> void:
-	var panel := PanelContainer.new()
-	panel.position = Vector2(12, 12)
-	root.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	panel.add_child(box)
-	var top := HBoxContainer.new()
-	box.add_child(top)
-	var title := Label.new()
-	title.text = "SpriteSquirter"
-	title.add_theme_font_size_override("font_size", 20)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(title)
-	var buttons := HBoxContainer.new()
-	box.add_child(buttons)
-	var build := _button("Build (B)")
-	build.pressed.connect(func() -> void: build_menu_requested.emit())
-	buttons.add_child(build)
-	var research := _button("Research (U)")
-	research.pressed.connect(func() -> void: research_menu_requested.emit())
-	buttons.add_child(research)
-	var menu := _button("Menu")
-	menu.pressed.connect(func() -> void: menu_requested.emit())
-	buttons.add_child(menu)
-	_hint = Label.new()
-	_hint.custom_minimum_size = Vector2(320, 0)
-	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_hint)
-
 
 func _build_resource_bar(root: Control) -> void:
 	var panel := PanelContainer.new()
@@ -192,6 +144,7 @@ func _build_jobs_row() -> Control:
 	row.add_child(title)
 	_workers = Label.new()
 	_workers.add_theme_font_size_override("font_size", 15)
+	_workers.mouse_filter = Control.MOUSE_FILTER_STOP
 	row.add_child(_workers)
 	for role: String in ROLES:
 		var role_label := Label.new()
@@ -235,9 +188,10 @@ func _build_gather_row() -> Control:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
 	row.add_child(_heading("Gather"))
-	var names := {"lumber": "Lumberjacks", "stone": "Miners", "food": "Farmers"}
+	var names := {"lumber": "Lumberjacks", "stone": "Miners", "food": "Farmers", "build": "Builders"}
 	for kind: String in names:
-		row.add_child(ResourceIcon.make(kind, 18))
+		if kind != "build":
+			row.add_child(ResourceIcon.make(kind, 18))
 		var label := _text(names[kind], 15)
 		row.add_child(label)
 		var less := _button("-")
@@ -246,15 +200,16 @@ func _build_gather_row() -> Control:
 		row.add_child(less)
 		var count := _text("0", 15)
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		count.custom_minimum_size.x = 64
+		count.custom_minimum_size.x = 30
 		count.mouse_filter = Control.MOUSE_FILTER_STOP
-		count.tooltip_text = "Workers on this job (the number you set). The rest of your workers are shared out by themselves."
+		count.tooltip_text = "Villagers you have set to this job. + takes one of the unassigned Workers, - sends one back." if kind != "build" \
+			else "Builders only build: they are first onto every building site, and wait when there is nothing to build."
 		row.add_child(count)
 		var more := _button("+")
 		more.custom_minimum_size.x = 28
 		more.pressed.connect(func() -> void: quota_changed.emit(kind, 1))
 		row.add_child(more)
-		_gather[kind] = {"count": count, "less": less}
+		_gather[kind] = {"count": count, "less": less, "more": more}
 	return row
 
 
@@ -267,10 +222,26 @@ func _build_spell_bar(root: Control) -> void:
 	root.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
-	box.add_child(_heading("Spells"))
+	# What the tool in hand does, and why something can't be done.
+	_hint = Label.new()
+	_hint.custom_minimum_size = Vector2(700, 0)
+	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.add_theme_font_size_override("font_size", 14)
+	box.add_child(_hint)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(row)
+	var menus := VBoxContainer.new()
+	menus.add_theme_constant_override("separation", 2)
+	row.add_child(menus)
+	var build := _button("Build (B)")
+	build.pressed.connect(func() -> void: build_menu_requested.emit())
+	menus.add_child(build)
+	var research := _button("Research (U)")
+	research.pressed.connect(func() -> void: research_menu_requested.emit())
+	menus.add_child(research)
 	var group := ButtonGroup.new()
 	group.allow_unpress = true
 	for k in SpellBook.SPELLS.size():
@@ -281,14 +252,16 @@ func _build_spell_bar(root: Control) -> void:
 		var b := _button("")
 		b.toggle_mode = true
 		b.button_group = group
-		b.custom_minimum_size = Vector2(140, 58)
-		var price: Control = ResourceIcon.cost_row({"magicko": spell.cost}, 15) if spell.cost > 0 else _text("a villager", 15)
-		b.add_child(_stacked([_text("%d  %s" % [k + 1, spell.name], 16), price]))
+		b.custom_minimum_size = Vector2(132, 58)
+		var lines: Array[Control] = [_text("%d  %s" % [k + 1, spell.name], 15)]
+		if spell.cost > 0:
+			lines.append(ResourceIcon.cost_row({"magicko": spell.cost}, 15))
+		b.add_child(_stacked(lines))
 		b.pressed.connect(func() -> void: spell_selected.emit(k))
 		slot.add_child(b)
 		var bar := ProgressBar.new()
 		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(140, 5)
+		bar.custom_minimum_size = Vector2(132, 5)
 		bar.max_value = 1.0
 		bar.value = 0.0
 		slot.add_child(bar)
@@ -316,7 +289,7 @@ func _build_build_menu(root: Control) -> void:
 		var info: Dictionary = BuildingCatalog.BUILDINGS[k]
 		var b := _button("")
 		b.custom_minimum_size = Vector2(250, 84)
-		var title: String = "%d  %s" % [k + 1, info.name] if k < 9 else info.name
+		var title: String = "%d  %s" % [k + 1, info.name] if k < 9 else (info.name as String)
 		var lines: Array[Control] = [_text(title, 16), _text(info.desc, 13)]
 		if not (info.cost as Dictionary).is_empty():
 			lines.append(ResourceIcon.cost_row(info.cost, 14))
@@ -326,7 +299,7 @@ func _build_build_menu(root: Control) -> void:
 		grid.add_child(b)
 		_build_buttons[kind] = b
 	var note := Label.new()
-	note.text = "Villagers build it: all your workers help. The more a building costs, the longer it takes (a Home: under a minute for 10 villagers).\nWith no Storehouse, villagers carry what they gather to the middle of the village."
+	note.text = "Up to 5 villagers build each building: your Builders first, then unassigned Workers. The more a building costs, the longer it takes.\nWith no Storehouse, villagers carry what they gather to the middle of the village. What each building is for can be changed in Names.txt."
 	note.add_theme_font_size_override("font_size", 13)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
@@ -605,11 +578,14 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 
 
 func _update_jobs(village: PlayerVillage) -> void:
-	_workers.text = "Workers %d" % village.workers()
+	var spare := village.unassigned()
+	_workers.text = "Workers %d" % spare
+	_workers.tooltip_text = "Villagers you have not set to a job. They gather whatever is most needed and help on building sites."
 	for kind: String in _gather:
 		var set_by_player: int = village.quota[kind]
-		(_gather[kind].count as Label).text = str(village.gatherers[kind]) if set_by_player == 0 else "%d (%d set)" % [village.gatherers[kind], set_by_player]
+		(_gather[kind].count as Label).text = str(set_by_player)
 		(_gather[kind].less as Button).disabled = set_by_player <= 0
+		(_gather[kind].more as Button).disabled = spare <= 0
 	for role: String in _jobs:
 		var w: Dictionary = _jobs[role]
 		var top := village.max_count(role)

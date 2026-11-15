@@ -8,17 +8,17 @@ extends Node3D
 ## A new map starts from a random island of the chosen size without
 ## villages; a saved map is loaded as it was left.
 
-enum Tool { RAISE, LOWER, FLATTEN, SMOOTH, LAND, SAND, GRASS, WATER, START, CAVE, TREES, ROCKS, ERASE }
+enum Tool { RAISE, LOWER, FLATTEN, SMOOTH, LAND, SAND, GRASS, WATER, START, CAVE, TREES, ROCKS, ERASE, CUT, PATH }
 
 ## Keys 1-9 and 0 pick the first ten tools.
-const TOOL_NAMES := ["Raise", "Lower", "Flatten", "Smooth", "Land", "Sand", "Grass", "Water",
-	"Start location", "Goblin cave", "Trees", "Rocks", "Erase"]
+const TOOL_NAMES := ["Raise", "Lower", "Flatten", "Smooth", "Expand island", "Sand", "Grass", "Water",
+	"Start location", "Goblin cave", "Trees", "Rocks", "Erase", "Cut cliff", "Goblin path"]
 const TOOL_HINTS := [
 	"Hold left mouse to raise the ground.",
 	"Hold left mouse to dig the ground down. Water next to it flows in.",
 	"Hold left mouse to flatten to the height where you first clicked.",
 	"Hold left mouse to smooth bumps.",
-	"Hold left mouse over the sky by the island to grow new land, at the height where you started (2.4 m when you start in the sky). At the edge of the map you are asked about making the map bigger.",
+	"Hold left mouse and draw out over the sky to grow the island any shape you like, at the height where you started (2.4 m when you start in the sky). At the edge of the map you are asked about making the map bigger.",
 	"Hold left mouse to paint sand.",
 	"Hold left mouse to paint grass. It clears sand, stone and dirt, and fills in water.",
 	"Hold left mouse to flood the ground with water at the height where you first clicked. The ground is flattened under it, with a bank round it.",
@@ -27,7 +27,14 @@ const TOOL_HINTS := [
 	"Hold left mouse to plant trees inside the brush. Trees give lumber.",
 	"Click or hold to place rocks. Rocks give stone.",
 	"Hold left mouse to remove trees, rocks, start locations and caves inside the brush.",
+	"Click on low ground and drag into a hill: everything under the brush is sliced down to the height where you clicked, leaving a sheer cliff nobody can climb.",
+	"Draw the way the goblins take: hold left mouse from a goblin cave and drag to a start location (or the other way). A cave and a start can have several paths. Shift+click a path to remove it.",
 ]
+## The colours of the goblin paths, in turn.
+const PATH_COLORS := [Color(1.0, 0.3, 0.25), Color(0.3, 0.7, 1.0), Color(1.0, 0.85, 0.2), Color(0.5, 1.0, 0.4), Color(1.0, 0.45, 0.9),
+	Color(0.3, 1.0, 0.9), Color(1.0, 0.6, 0.2), Color(0.7, 0.5, 1.0)]
+## A path's ends must be this near a cave and a start location.
+const PATH_SNAP := 30.0
 const BRUSH_MIN := 3.0
 const BRUSH_MAX := 30.0
 const START_SPACING := 14.0
@@ -56,6 +63,13 @@ var _ghost_material := StandardMaterial3D.new()
 var _dirty := false
 var _confirm := ""
 var _rng := RandomNumberGenerator.new()
+## The goblin paths: each runs from a cave to a start location.
+var _paths: Array[PackedVector2Array] = []
+## The path being drawn.
+var _stroke := PackedVector2Array()
+var _drawing := false
+var _path_mesh := ImmediateMesh.new()
+var _path_view: MeshInstance3D
 
 
 func setup(info: Dictionary) -> void:
@@ -69,8 +83,22 @@ func _ready() -> void:
 	var starts: PackedVector2Array = _info.starts
 	for p in starts:
 		_add_start(p)
+	for path: PackedVector2Array in _info.get("paths", []):
+		_paths.append(path)
 	_ring = GroundRing.new()
 	add_child(_ring)
+	_path_view = MeshInstance3D.new()
+	_path_view.mesh = _path_mesh
+	var path_material := StandardMaterial3D.new()
+	path_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	path_material.vertex_color_use_as_albedo = true
+	path_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	path_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	path_material.no_depth_test = true
+	_path_view.material_override = path_material
+	_path_view.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_path_view.visible = false
+	add_child(_path_view)
 	_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_ghost_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_ghost_material.albedo_color = Color(0.4, 1.0, 0.5, 0.4)
@@ -102,6 +130,8 @@ func _process(delta: float) -> void:
 	if tool == Tool.LAND and (_cursor_hit == null or not Game.terrain._land((_cursor_hit as Vector3).x, (_cursor_hit as Vector3).z)):
 		_cursor_hit = _sky_hit(mouse, _land_height)
 	_painting = _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	if _drawing and not _painting:
+		_finish_path()
 	if _painting and _cursor_hit != null:
 		_paint(_cursor_hit, delta)
 	_update_preview()
@@ -140,6 +170,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _set_tool(t: Tool) -> void:
 	tool = t
 	_painting = false
+	_drawing = false
+	_path_view.visible = t == Tool.PATH
+	if t == Tool.PATH:
+		_draw_paths()
 	hud.set_tool(t, TOOL_HINTS[t])
 	if t == Tool.CAVE and _cave_ghost == null:
 		var rng := RandomNumberGenerator.new()
@@ -169,6 +203,13 @@ func _on_click(p: Vector3) -> void:
 			match tool:
 				Tool.ROCKS:
 					_plant_rock(p)
+				Tool.PATH:
+					if Input.is_key_pressed(KEY_SHIFT):
+						_painting = false
+						_remove_path(p)
+					else:
+						_drawing = true
+						_stroke = PackedVector2Array([Vector2(p.x, p.z)])
 				Tool.WATER:
 					var level := Game.terrain.water_level_at(p.x, p.z)
 					_water_level = level if level != Terrain.NO_WATER else p.y
@@ -211,6 +252,98 @@ func _paint(p: Vector3, delta: float) -> void:
 				_plant_rock(p)
 		Tool.ERASE:
 			_erase(p)
+		Tool.CUT:
+			Game.terrain.apply_brush(p, brush_radius, Terrain.Brush.CUT, 1.0, _flatten_height)
+		Tool.PATH:
+			var at := Vector2(p.x, p.z)
+			if _drawing and at.distance_to(_stroke[_stroke.size() - 1]) > 4.0:
+				_stroke.append(at)
+				_draw_paths()
+
+
+# --- Goblin paths ---------------------------------------------------------------
+
+## The mouse was let go: keep the stroke if it joins a cave and a start.
+func _finish_path() -> void:
+	_drawing = false
+	var stroke := _stroke
+	_stroke = PackedVector2Array()
+	if stroke.size() >= 2:
+		var cave_a: Variant = _near(stroke[0], "caves")
+		var start_a: Variant = _near(stroke[0], "start_markers")
+		var cave_b: Variant = _near(stroke[stroke.size() - 1], "caves")
+		var start_b: Variant = _near(stroke[stroke.size() - 1], "start_markers")
+		if cave_a == null and cave_b != null and start_a != null:
+			# Drawn from the start to the cave: turn it round.
+			stroke.reverse()
+			cave_a = cave_b
+			start_b = start_a
+		if cave_a != null and start_b != null:
+			stroke[0] = cave_a
+			stroke[stroke.size() - 1] = start_b
+			_paths.append(stroke)
+			_changed()
+			hud.set_status("Goblin path %d added. Goblins from that cave follow it to that start location." % _paths.size())
+		else:
+			hud.set_status("A goblin path must run between a goblin cave and a start location (within %d m of each)." % int(PATH_SNAP))
+	_draw_paths()
+
+
+## The nearest member of `group` to `p` (as its ground position), if it is
+## within PATH_SNAP.
+func _near(p: Vector2, group: String) -> Variant:
+	var best: Variant = null
+	var best_d := PATH_SNAP
+	for node in get_tree().get_nodes_in_group(group):
+		var q := Vector2((node as Node3D).global_position.x, (node as Node3D).global_position.z)
+		if q.distance_to(p) < best_d:
+			best_d = q.distance_to(p)
+			best = q
+	return best
+
+
+func _remove_path(p: Vector3) -> void:
+	var at := Vector2(p.x, p.z)
+	for k in _paths.size():
+		var path := _paths[k]
+		for j in path.size() - 1:
+			if Geometry2D.get_closest_point_to_segment(at, path[j], path[j + 1]).distance_to(at) < 5.0:
+				_paths.remove_at(k)
+				_changed()
+				_draw_paths()
+				hud.set_status("Goblin path removed.")
+				return
+
+
+## The paths that still have a cave at one end and a start at the other.
+func _valid_paths() -> Array[PackedVector2Array]:
+	var out: Array[PackedVector2Array] = []
+	for path in _paths:
+		if _near(path[0], "caves") != null and _near(path[path.size() - 1], "start_markers") != null:
+			out.append(path)
+	return out
+
+
+## Draws every path as a ribbon on the ground, each in its own colour.
+func _draw_paths() -> void:
+	_path_mesh.clear_surfaces()
+	var all: Array[PackedVector2Array] = _paths.duplicate()
+	if _stroke.size() >= 2:
+		all.append(_stroke)
+	var terrain := Game.terrain
+	for k in all.size():
+		var path := all[k]
+		var color: Color = PATH_COLORS[k % PATH_COLORS.size()] if k < _paths.size() else Color(1, 1, 1)
+		color.a = 0.85
+		_path_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+		for j in path.size():
+			var along := (path[mini(j + 1, path.size() - 1)] - path[maxi(j - 1, 0)]).normalized()
+			var side := Vector2(-along.y, along.x) * 0.9
+			for s: float in [-1.0, 1.0]:
+				var q := path[j] + side * s
+				_path_mesh.surface_set_color(color)
+				_path_mesh.surface_add_vertex(Vector3(q.x, terrain.surface_height(q.x, q.y) + 0.5, q.y))
+		_path_mesh.surface_end()
 
 
 ## Where the mouse ray meets the flat plane at `height`, for growing land
@@ -381,6 +514,10 @@ func _update_preview() -> void:
 			_ring.draw(c, [brush_radius], Color(0.5, 1.0, 0.4))
 		Tool.ROCKS:
 			_ring.draw(c, [1.5], Color(0.85, 0.85, 0.9))
+		Tool.CUT:
+			_ring.draw(c, [brush_radius], Color(1.0, 0.5, 0.2))
+		Tool.PATH:
+			_ring.draw(c, [1.2, PATH_SNAP], Color(1.0, 0.4, 0.3))
 		_:
 			_ring.draw(c, [brush_radius, brush_radius * 0.4], Color(1.0, 0.9, 0.3))
 
@@ -410,6 +547,7 @@ func map_data() -> Dictionary:
 		var n := r as Node3D
 		rocks.append([n.global_position.x, n.global_position.z, n.get_meta("seed", 0), n.scale.x])
 	data["rocks"] = rocks
+	data["paths"] = _valid_paths()
 	return data
 
 

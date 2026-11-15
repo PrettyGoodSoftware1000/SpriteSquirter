@@ -72,6 +72,15 @@ stage.
 - Building costs in balancing.txt; building time in proportion to the cost
 - Goblins put up their own buildings near the caves every 5 minutes
 
+## Version 0.12: Names, builders, slopes and a bat ✅
+- Names.txt: asset names (Stacked houses, Moon tower, Skull tower...) paired with gameplay names
+- Builders; at most 5 villagers per building; Workers are the unassigned villagers
+- Three more treehouses; bridge tool lights up the treehouses it can join
+- The tiger becomes a squirrel; a giant bat carries villagers off during raids
+- Chain lightning (double damage to the wet); solid 3D flames; controls under Esc
+- Slopes slow walkers, cliffs stop them, and villagers and goblins find routes round both
+- Map editor: expand-island, cut-cliff and goblin-path brushes
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

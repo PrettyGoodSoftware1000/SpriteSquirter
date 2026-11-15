@@ -1,7 +1,7 @@
 class_name BuildingFactory
 extends RefCounted
 ## Generates the game's surreal buildings, modelled on the concept art in
-## docs/ART_STYLE.md: the treehouse Home and its rope bridges, crystal tower,
+## docs/ART_STYLE.md: four treehouses and their rope bridges, crystal tower,
 ## moon tower, mushroom house, singing rocks, store-in-a-tree, winged
 ## windmill, blacksmith and necromancer tower for villagers (and the tall
 ## house of older maps), plus the goblins' hut, cave and bone-and-rag shacks.
@@ -92,7 +92,7 @@ class Details:
 
 # --- Entry points -----------------------------------------------------------
 
-const VILLAGE_KINDS := ["treehouse", "treehouse", "crystal_tower", "moon_tower", "mushroom_house",
+const VILLAGE_KINDS := ["treehouse", "lookout_treehouse", "twin_treehouse", "great_treehouse", "crystal_tower", "moon_tower", "mushroom_house",
 	"singing_rocks", "store", "windmill"]
 
 
@@ -126,6 +126,12 @@ static func create(kind: String, rng: RandomNumberGenerator) -> Destructible:
 			top = _build_blacksmith(b, rng)
 		"treehouse":
 			top = _build_treehouse(b, rng)
+		"lookout_treehouse":
+			top = _build_lookout_treehouse(b, rng)
+		"twin_treehouse":
+			top = _build_twin_treehouse(b, rng)
+		"great_treehouse":
+			top = _build_great_treehouse(b, rng)
 		"necro_tower":
 			top = _build_necro_tower(b, rng)
 		"goblin_tent", "goblin_war_hut", "goblin_forge", "goblin_potion_hut", "goblin_watchtower":
@@ -795,35 +801,27 @@ const BONE := Color(0.9, 0.86, 0.72)
 const INK := Color(0.04, 0.03, 0.05)
 
 
-## A Home: a little house on a round deck high in a bright-leaved tree, with
-## a ladder up to it on the front (+Z). Rope bridges join one deck to
-## another (see RopeBridge). The deck's height and radius are kept in the
-## "deck_h" and "deck_r" metas.
-static func _build_treehouse(b: Destructible, rng: RandomNumberGenerator) -> float:
-	b.footprint = 4.2
-	var deck := rng.randf_range(4.3, 5.0)
-	var deck_r := 3.5
-	var top := deck + rng.randf_range(6.2, 7.0)
+## The trunk, roots, deck braces and leafy boughs of a treehouse whose deck
+## is `deck` metres up and `deck_r` across. `girth` fattens the trunk and
+## `spread` the crown. Returns where the crown sits.
+static func _tree_body(b: Destructible, rng: RandomNumberGenerator, deck: float, deck_r: float, top: float, girth := 1.0, spread := 1.0) -> Vector3:
 	var lean := Vector3(rng.randf_range(-0.7, 0.7), 0, rng.randf_range(-0.7, 0.7))
 	var crown := lean + Vector3(0, top, 0)
 	var knee := lean * 0.4 + Vector3(0, deck + (top - deck) * 0.6, 0)
-	b.set_meta("deck_h", deck + 0.22)
-	b.set_meta("deck_r", deck_r)
-
 	var mb := MeshBuilder.new()
 	mb.color = Color(0.5, 0.34, 0.2)
 	mb.add_tube(PackedVector3Array([Vector3(0, -1.2, 0), Vector3(0, 0.4, 0), Vector3(0, deck, 0), knee, crown]),
-		PackedFloat32Array([1.9, 1.3, 0.95, 0.75, 0.45]), 12)
+		PackedFloat32Array([1.9 * girth, 1.3 * girth, 0.95 * girth, 0.75 * girth, 0.45 * girth]), 12)
 	for k in 5:
 		var a := TAU * k / 5.0 + rng.randf()
 		var out := Vector3(cos(a), 0, sin(a))
-		mb.add_tube(PackedVector3Array([out * 0.7 + Vector3(0, 0.9, 0), out * 2.0 + Vector3(0, 0.2, 0), out * 3.0 + Vector3(0, -0.6, 0)]),
-			PackedFloat32Array([0.48, 0.34, 0.18]), 7)
+		mb.add_tube(PackedVector3Array([out * 0.7 * girth + Vector3(0, 0.9, 0), out * 2.0 * girth + Vector3(0, 0.2, 0), out * 3.0 * girth + Vector3(0, -0.6, 0)]),
+			PackedFloat32Array([0.48 * girth, 0.34 * girth, 0.18 * girth]), 7)
 	# Braces under the deck.
 	for k in 4:
 		var a := TAU * k / 4.0 + 0.8
 		var out := Vector3(cos(a), 0, sin(a))
-		mb.add_tube(PackedVector3Array([out * 0.7 + Vector3(0, deck - 2.3, 0), out * (deck_r - 0.5) + Vector3(0, deck - 0.3, 0)]),
+		mb.add_tube(PackedVector3Array([out * 0.7 * girth + Vector3(0, deck - 2.3, 0), out * (deck_r - 0.5) + Vector3(0, deck - 0.3, 0)]),
 			PackedFloat32Array([0.2, 0.13]), 6)
 	# Boughs, each ending in a ball of leaves.
 	var noise := FastNoiseLite.new()
@@ -833,25 +831,32 @@ static func _build_treehouse(b: Destructible, rng: RandomNumberGenerator) -> flo
 	var leaves := [MeshBuilder.new(), MeshBuilder.new()]
 	leaves[0].color = CROWN_COLORS[first]
 	leaves[1].color = CROWN_COLORS[(first + 1 + rng.randi() % (CROWN_COLORS.size() - 1)) % CROWN_COLORS.size()]
-	leaves[0].add_blob(Vector3(3.2, 2.3, 3.2) * rng.randf_range(0.92, 1.08), Transform3D(Basis(), crown + Vector3(0, 1.3, 0)), noise, 0.2, 9, 14)
+	leaves[0].add_blob(Vector3(3.2, 2.3, 3.2) * spread * rng.randf_range(0.92, 1.08), Transform3D(Basis(), crown + Vector3(0, 1.3, 0)), noise, 0.2, 9, 14)
 	var boughs := rng.randi_range(3, 4)
 	var spin := rng.randf() * TAU
 	for k in boughs:
 		var a := spin + TAU * k / boughs + rng.randf_range(-0.3, 0.3)
 		var from := knee.lerp(crown, rng.randf_range(0.45, 0.9))
 		var out := Vector3(cos(a), 0, sin(a))
-		var length := rng.randf_range(2.6, 3.4)
+		var length := rng.randf_range(2.6, 3.4) * spread
 		var tip := from + out * length + Vector3(0, length * rng.randf_range(0.2, 0.5), 0)
 		mb.add_tube(PackedVector3Array([from - out * 0.1, from.lerp(tip, 0.5) + Vector3(0, -0.25, 0), tip]), PackedFloat32Array([0.3, 0.22, 0.14]), 6)
-		var r := rng.randf_range(1.7, 2.2)
+		var r := rng.randf_range(1.7, 2.2) * spread
 		leaves[(k + 1) % 2].add_blob(Vector3(r, r * 0.8, r), Transform3D(Basis(), tip + Vector3(0, r * 0.45, 0)), noise, 0.2, 8, 12)
 	_part(b, mb.commit(), Art.paint("bark"))
 	var leaf := Art.surface("hide", Color(1, 1, 1), Color(0.8, 0.8, 0.8), {"ink": 0.45})
 	for builder: MeshBuilder in leaves:
 		_part(b, builder.commit(), leaf)
+	return crown
 
-	# The deck, its rail (open at the ladder) and the ladder.
-	mb = MeshBuilder.new()
+
+## A treehouse's round deck with its rail (open at the ladder on the front,
+## +Z), the ladder and hanging lanterns. Also notes the deck in the
+## "deck_h" and "deck_r" metas, which rope bridges go by (see RopeBridge).
+static func _tree_deck(b: Destructible, rng: RandomNumberGenerator, deck: float, deck_r: float) -> MeshInstance3D:
+	b.set_meta("deck_h", deck + 0.22)
+	b.set_meta("deck_r", deck_r)
+	var mb := MeshBuilder.new()
 	mb.color = Color(0.66, 0.46, 0.26)
 	mb.add_lathe(PackedVector2Array([Vector2(0.0, -0.45), Vector2(deck_r * 0.75, -0.3), Vector2(deck_r, 0.0), Vector2(deck_r, 0.22),
 		Vector2(deck_r, 0.22), Vector2(0.0, 0.22)]), 12, Transform3D.IDENTITY, 0, 0.0, true)
@@ -869,14 +874,7 @@ static func _build_treehouse(b: Destructible, rng: RandomNumberGenerator) -> flo
 	mb.add_tube(rail, widths, 5)
 	var platform := _part(b, mb.commit(), Art.paint("planks"), Vector3(0, deck, 0))
 	var det := Details.new()
-	var foot := Vector3(0, -deck - 0.6, deck_r + 1.0)
-	var head := Vector3(0, 0.5, deck_r - 0.05)
-	for sx: float in [-1.0, 1.0]:
-		var side := Vector3(sx * 0.36, 0, 0)
-		det.beam(foot + side, head + side, 0.11)
-	for k in range(1, 12):
-		var p := foot.lerp(head, k / 12.0)
-		det.beam(p - Vector3(0.4, 0, 0), p + Vector3(0.4, 0, 0), 0.08)
+	_ladder(det, Vector3(0, -deck - 0.6, deck_r + 1.0), Vector3(0, 0.5, deck_r - 0.05))
 	det.attach(platform)
 	# Lanterns hang from the edge of the deck.
 	var strings := MeshBuilder.new()
@@ -893,12 +891,179 @@ static func _build_treehouse(b: Destructible, rng: RandomNumberGenerator) -> flo
 		lamps.add_blob(Vector3(0.15, 0.2, 0.15), Transform3D(Basis(), p + Vector3(0, -drop - 0.2, 0)), null, 0.0, 5, 8)
 	_child(platform, strings.commit(), Art.paint("planks", 0.5))
 	_child(platform, lamps.commit(), Art.glow(2.2))
+	return platform
 
-	var walls := [Color(0.24, 0.66, 0.66), Color(0.56, 0.4, 0.8), Color(0.92, 0.74, 0.3), Color(0.86, 0.5, 0.62), Color(0.5, 0.74, 0.36)]
-	var roofs := [Color(0.16, 0.56, 0.6), Color(0.5, 0.3, 0.72), Color(0.94, 0.6, 0.14), Color(0.82, 0.24, 0.3), Color(0.3, 0.36, 0.76)]
+
+## A ladder of two rails and rungs from `foot` up to `head`.
+static func _ladder(det: Details, foot: Vector3, head: Vector3) -> void:
+	var across := (head - foot).cross(Vector3.UP)
+	across = across.normalized() if across.length_squared() > 0.001 else Vector3.RIGHT
+	for sx: float in [-1.0, 1.0]:
+		det.beam(foot + across * sx * 0.36, head + across * sx * 0.36, 0.11)
+	var rungs := maxi(3, roundi(foot.distance_to(head) / 0.45))
+	for k in range(1, rungs):
+		var p := foot.lerp(head, k / float(rungs))
+		det.beam(p - across * 0.4, p + across * 0.4, 0.08)
+
+
+## A small extra platform out on a bracket, `r` across, at `at`.
+static func _side_platform(b: Destructible, at: Vector3, r: float) -> void:
+	var mb := MeshBuilder.new()
+	mb.color = Color(0.66, 0.46, 0.26)
+	mb.add_lathe(PackedVector2Array([Vector2(0.0, -0.35), Vector2(r * 0.7, -0.25), Vector2(r, 0.0), Vector2(r, 0.2), Vector2(r, 0.2), Vector2(0.0, 0.2)]),
+		10, Transform3D(Basis(), at), 0, 0.0, true)
+	mb.color = Color(0.5, 0.33, 0.18)
+	var inward := Vector3(-at.x, 0, -at.z).normalized()
+	mb.add_tube(PackedVector3Array([at + inward * (r + 0.6) + Vector3(0, -2.0, 0), at + Vector3(0, -0.3, 0)]), PackedFloat32Array([0.2, 0.14]), 6)
+	_part(b, mb.commit(), Art.paint("planks"))
+
+
+const TREEHOUSE_WALLS := [Color(0.24, 0.66, 0.66), Color(0.56, 0.4, 0.8), Color(0.92, 0.74, 0.3), Color(0.86, 0.5, 0.62), Color(0.5, 0.74, 0.36)]
+const TREEHOUSE_ROOFS := [Color(0.16, 0.56, 0.6), Color(0.5, 0.3, 0.72), Color(0.94, 0.6, 0.14), Color(0.82, 0.24, 0.3), Color(0.3, 0.36, 0.76)]
+
+
+## The Treehouse: a little house on a round deck high in a bright-leaved
+## tree, with a ladder up to it on the front (+Z).
+static func _build_treehouse(b: Destructible, rng: RandomNumberGenerator) -> float:
+	b.footprint = 4.2
+	var deck := rng.randf_range(4.3, 5.0)
+	var top := deck + rng.randf_range(6.2, 7.0)
+	_tree_body(b, rng, deck, 3.5, top)
+	_tree_deck(b, rng, deck, 3.5)
 	_mini_house(b, rng, Vector3(0, deck + 0.22, -0.15), rng.randf_range(-0.25, 0.25), Vector3(2.9, 1.9, 2.4),
-		walls[rng.randi() % walls.size()], roofs[rng.randi() % roofs.size()])
+		_pick(rng, TREEHOUSE_WALLS), _pick(rng, TREEHOUSE_ROOFS))
 	return top + 3.4
+
+
+## The Lookout treehouse: a round summer-house with a swirled pointed roof
+## high up a tree, a little balcony below it and a slide back to the ground.
+static func _build_lookout_treehouse(b: Destructible, rng: RandomNumberGenerator) -> float:
+	b.footprint = 4.0
+	var deck := rng.randf_range(5.2, 5.8)
+	var deck_r := 3.2
+	var top := deck + rng.randf_range(6.6, 7.2)
+	_tree_body(b, rng, deck, deck_r, top, 0.9)
+	_tree_deck(b, rng, deck, deck_r)
+	var base := deck + 0.22
+	# The summer-house: a round wall of arches under a tall striped roof.
+	var wall_h := 2.1
+	var mb := MeshBuilder.new()
+	mb.color = Color(0.93, 0.87, 0.72)
+	mb.add_lathe(PackedVector2Array([Vector2(1.75, 0.0), Vector2(1.85, 0.1), Vector2(1.8, wall_h), Vector2(1.95, wall_h + 0.12)]), 14)
+	var wall := _part(b, mb.commit(), Art.paint("plaster"), Vector3(0, base, 0))
+	var det := Details.new()
+	det.arch_door(_around(0.0, 1.8, 0.0), 0.9, 1.75)
+	for k in range(1, 6):
+		var xf := _around(TAU * k / 6.0, 1.82, 1.15)
+		det.glass.add_box(Vector3(0.62, 0.75, 0.1), 0.02, xf.translated_local(Vector3(0, -0.2, 0)))
+		det.glass.add_blob(Vector3(0.31, 0.31, 0.06), xf.translated_local(Vector3(0, 0.18, 0)), null, 0.0, 5, 10)
+		det.timber.add_box(Vector3(0.8, 0.1, 0.24), 0.02, xf.translated_local(Vector3(0, -0.62, 0.06)))
+	det.attach(wall)
+	mb = MeshBuilder.new()
+	var roof_h := rng.randf_range(2.6, 3.1)
+	_striped_hat(mb, 2.5, roof_h, Vector3(rng.randf_range(-0.5, 0.5), 0, rng.randf_range(-0.5, 0.5)),
+		_pick(rng, [Color(0.86, 0.2, 0.2), Color(0.9, 0.5, 0.12), Color(0.6, 0.25, 0.75)]), Color(0.98, 0.84, 0.3))
+	_part(b, mb.commit(), Art.paint("shingles"), Vector3(0, base + wall_h + 0.05, 0))
+	# The balcony half way up, and the slide winding down from it.
+	var balcony := deck - 2.5
+	mb = MeshBuilder.new()
+	mb.color = Color(0.66, 0.46, 0.26)
+	mb.add_lathe(PackedVector2Array([Vector2(0.8, -0.2), Vector2(2.1, 0.0), Vector2(2.1, 0.18), Vector2(2.1, 0.18), Vector2(0.8, 0.18)]), 12,
+		Transform3D(Basis(), Vector3(0, balcony, 0)), 0, 0.0, true)
+	var rail := PackedVector3Array()
+	for k in 9:
+		var a := -2.6 + 3.6 * k / 8.0
+		var post := Vector3(sin(a), 0, cos(a)) * 2.0 + Vector3(0, balcony, 0)
+		mb.color = Color(0.5, 0.33, 0.18)
+		mb.add_tube(PackedVector3Array([post + Vector3(0, 0.15, 0), post + Vector3(0, 0.95, 0)]), PackedFloat32Array([0.06, 0.05]), 5)
+		rail.append(post + Vector3(0, 0.9, 0))
+	var widths := PackedFloat32Array()
+	widths.resize(rail.size())
+	widths.fill(0.04)
+	mb.color = ROPE
+	mb.add_tube(rail, widths, 5)
+	_part(b, mb.commit(), Art.paint("planks"))
+	mb = MeshBuilder.new()
+	mb.color = Color(0.62, 0.64, 0.72)
+	var slide := PackedVector3Array()
+	var bore := PackedFloat32Array()
+	for k in 12:
+		var t := k / 11.0
+		var a := 2.2 + t * 3.4
+		slide.append(Vector3(sin(a), 0, cos(a)) * lerpf(1.9, 3.3, t) + Vector3(0, lerpf(balcony + 0.5, 0.35, t * t * (3.0 - 2.0 * t)), 0))
+		bore.append(0.46)
+	mb.add_tube(slide, bore, 9)
+	mb.color = INK
+	mb.add_blob(Vector3(0.36, 0.36, 0.36), Transform3D(Basis(), slide[slide.size() - 1]), null, 0.0, 5, 8)
+	_part(b, mb.commit(), Art.paint("stone", 0.6))
+	return top + 3.4
+
+
+## The Twin treehouse: one house on the deck and a second, smaller one on a
+## platform of its own higher up the same tree, with a ladder between them.
+static func _build_twin_treehouse(b: Destructible, rng: RandomNumberGenerator) -> float:
+	b.footprint = 4.4
+	var deck := rng.randf_range(4.2, 4.8)
+	var deck_r := 3.6
+	var top := deck + rng.randf_range(8.0, 8.8)
+	_tree_body(b, rng, deck, deck_r, top, 1.05, 1.1)
+	var platform := _tree_deck(b, rng, deck, deck_r)
+	var first := rng.randi()
+	_mini_house(b, rng, Vector3(-1.0, deck + 0.22, 0.3), rng.randf_range(0.1, 0.5), Vector3(2.5, 1.8, 2.2),
+		TREEHOUSE_WALLS[first % 5], TREEHOUSE_ROOFS[first % 5])
+	var upper := Vector3(2.5, deck + 3.5, -1.5)
+	_side_platform(b, upper, 1.9)
+	_mini_house(b, rng, upper + Vector3(0, 0.2, 0), rng.randf_range(-0.9, -0.4), Vector3(2.0, 1.5, 1.8),
+		TREEHOUSE_WALLS[(first + 2) % 5], TREEHOUSE_ROOFS[(first + 3) % 5])
+	var det := Details.new()
+	_ladder(det, Vector3(2.3, 0.3, 0.9), upper + Vector3(-0.3, 0.3 - deck, 1.7))
+	det.attach(platform)
+	# Bunting from the trunk out to the rail.
+	var flags := MeshBuilder.new()
+	for k in 6:
+		var p := Vector3(-0.7, deck + 2.6, 0.9).lerp(Vector3(-2.2, deck + 1.3, 2.7), k / 5.0)
+		flags.color = Color.from_hsv(fmod(0.13 * k + rng.randf() * 0.1, 1.0), 0.75, 0.95)
+		flags.add_lathe(PackedVector2Array([Vector2(0.0, -0.4), Vector2(0.17, 0.0), Vector2(0.0, 0.02)]), 3, Transform3D(Basis(), p), 0, 0.0, true)
+	_part(b, flags.commit(), Art.paint("plaster", 0.5))
+	return top + 3.6
+
+
+## The Great treehouse: an old giant of a tree with a door and windows in
+## its trunk and three little houses about it, one on the wide deck and two
+## on platforms of their own.
+static func _build_great_treehouse(b: Destructible, rng: RandomNumberGenerator) -> float:
+	b.footprint = 5.6
+	var deck := rng.randf_range(5.0, 5.6)
+	var deck_r := 4.5
+	var girth := 1.7
+	var top := deck + rng.randf_range(8.6, 9.4)
+	_tree_body(b, rng, deck, deck_r, top, girth, 1.3)
+	var platform := _tree_deck(b, rng, deck, deck_r)
+	var first := rng.randi()
+	_mini_house(b, rng, Vector3(-1.9, deck + 0.22, 0.8), 0.5, Vector3(2.2, 1.7, 1.9), TREEHOUSE_WALLS[first % 5], TREEHOUSE_ROOFS[(first + 1) % 5])
+	var side := Vector3(3.1, deck + 3.0, 0.4)
+	_side_platform(b, side, 1.8)
+	_mini_house(b, rng, side + Vector3(0, 0.2, 0), -0.5, Vector3(1.9, 1.5, 1.7), TREEHOUSE_WALLS[(first + 1) % 5], TREEHOUSE_ROOFS[(first + 2) % 5])
+	var back := Vector3(-1.2, deck + 4.2, -2.9)
+	_side_platform(b, back, 1.7)
+	_mini_house(b, rng, back + Vector3(0, 0.2, 0), 2.6, Vector3(1.8, 1.4, 1.6), TREEHOUSE_WALLS[(first + 3) % 5], TREEHOUSE_ROOFS[(first + 4) % 5])
+	# A round door and lit windows in the trunk, and moss on its roots.
+	var det := Details.new()
+	var r_low := 1.3 * girth + 0.1
+	det.arch_door(_around(0.75, r_low, -deck), 1.0, 1.9)
+	det.round_window(_around(-0.6, lerpf(1.3, 0.95, 0.45) * girth + 0.12, -deck + 2.6), 0.42)
+	det.round_window(_around(1.9, lerpf(1.3, 0.95, 0.6) * girth + 0.12, -deck + 3.4), 0.36)
+	_ladder(det, Vector3(1.6, 0.3, -0.6), side + Vector3(-0.9, 0.3 - deck, 0.0))
+	det.attach(platform)
+	var moss := MeshBuilder.new()
+	moss.color = Color(0.36, 0.62, 0.2)
+	for k in 9:
+		var a := rng.randf() * TAU
+		var y := rng.randf_range(0.2, 3.6)
+		var r := lerpf(1.9, 1.3, clampf(y / 0.4, 0.0, 1.0)) * girth * lerpf(1.0, 0.8, clampf(y / deck, 0.0, 1.0))
+		moss.add_blob(Vector3(0.5, 0.3, 0.5) * rng.randf_range(0.6, 1.2), Transform3D(Basis(), Vector3(cos(a) * r, y, sin(a) * r)), null, 0.0, 4, 7)
+	_part(b, moss.commit(), Art.surface("hide", Color(1, 1, 1), Color(0.8, 0.8, 0.8), {"ink": 0.45}))
+	return top + 4.2
 
 
 ## A rope bridge `length` metres long, built along X about its middle: it

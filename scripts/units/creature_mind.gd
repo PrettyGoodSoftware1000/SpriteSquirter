@@ -18,18 +18,18 @@ extends Node
 ##
 ## All the amounts come from balancing.txt (see Balance).
 
-const SPELLS := ["fireball", "rain", "roots", "blood"]
+const SPELLS := ["fireball", "rain", "roots", "lightning", "blood"]
 const HARVESTS := ["lumber", "stone", "food"]
-const ACTIONS := ["stomp", "throw", "eat", "fireball", "rain", "roots", "blood", "lumber", "stone", "food", "explore"]
+const ACTIONS := ["stomp", "throw", "eat", "fireball", "rain", "roots", "lightning", "blood", "lumber", "stone", "food", "explore"]
 ## How each action reads in "blessed for ...".
 const DOING := {
 	"stomp": "stomping", "throw": "throwing enemies", "eat": "eating enemies",
-	"fireball": "casting fireball", "rain": "casting rain", "roots": "casting roots", "blood": "its blood sacrifice",
+	"fireball": "casting fireball", "rain": "casting rain", "roots": "casting roots", "lightning": "casting chain lightning", "blood": "its blood sacrifice",
 	"lumber": "fetching a tree", "stone": "fetching a boulder", "food": "fetching food", "explore": "exploring",
 }
-const SPELL_NAMES := {"fireball": "fireball", "rain": "rain", "roots": "roots", "blood": "blood sacrifice"}
+const SPELL_NAMES := {"fireball": "fireball", "rain": "rain", "roots": "roots", "lightning": "chain lightning", "blood": "blood sacrifice"}
 const LEARNED := {
-	"fireball": "to cast fireball", "rain": "to cast rain", "roots": "to cast roots", "blood": "blood sacrifice",
+	"fireball": "to cast fireball", "rain": "to cast rain", "roots": "to cast roots", "lightning": "to cast chain lightning", "blood": "blood sacrifice",
 	"lumber": "to fetch trees", "stone": "to fetch boulders", "food": "to fetch food",
 }
 ## Bless and Curse judge what the creature did in the last JUDGE_SECONDS.
@@ -226,6 +226,9 @@ func _spell_target(id: String) -> Variant:
 		"roots":
 			# A bigger crowd of raiders, with none of our own people among them.
 			return _enemy_cluster(RootPatch.RADIUS, 4, RootPatch.RADIUS + 4.0, 70.0, false)
+		"lightning":
+			# A crowd of enemies with none of our own people among them.
+			return _enemy_cluster(Balance.num("lightning_jump_range"), 3, Balance.num("lightning_jump_range") + 3.0, 70.0, false)
 		"rain":
 			for node in tree.get_nodes_in_group("player_buildings"):
 				if (node as Destructible).burning:
@@ -293,6 +296,9 @@ func _cast(id: String, target: Vector3) -> void:
 			Game.world_root.add_child(patch)
 			patch.cast(target)
 			did(id, "The creature cast roots")
+		"lightning":
+			ChainLightning.cast(target, Balance.num("creature_friendly_fire"))
+			did(id, "The creature cast chain lightning")
 		"blood":
 			if Game.village.sacrifice_someone():
 				did(id, "The creature blood sacrificed a villager")

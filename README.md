@@ -58,7 +58,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    take three times as much.
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
    building, and place its outline (**R** rotates it). The cost is paid up
-   front and the villagers come and build it: every grown-up helps. The
+   front and the villagers come and build it: up to 5 work on each
+   building (your **Builders** first, then unassigned Workers), and a
+   second building gets 5 of its own. The
    more a building costs, the longer it takes: 10 seconds of one
    villager's work for each unit of resource, so a Home (55) takes 10
    villagers just under a minute. The building rises out of the ground as
@@ -68,9 +70,17 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    warriors (and archers), the **Singing rocks** train wizards, a
    **Necromancer tower** turns wizards into necromancers, and a
    **Blacksmith** makes wheelbarrows and does research.
-   **Treehouses and rope bridges.** A Home is a treehouse: a little house
-   on a deck up a bright-leaved tree, with a ladder. Pick **Rope bridge**
-   in the build menu, click one Home and then another (up to 40 m apart)
+   **Asset names and gameplay names.** Every building has an asset name
+   (its model: Stacked houses, Moon tower, Skull tower, Treehouse...) and
+   a gameplay name (what it does: Storehouse, Town guard, Necromancer
+   tower, Home...). `Names.txt`, next to `project.godot`, pairs them up,
+   one `Asset name = Gameplay name` per line; change the name after the =
+   and that model takes on that job. The asset names never change.
+   **Treehouses and rope bridges.** There are four treehouses (Treehouse,
+   Lookout treehouse, Twin treehouse, Great treehouse): houses on a deck
+   up a bright-leaved tree, with a ladder. Pick **Rope bridge** in the
+   build menu and every treehouse a bridge can join lights up green;
+   click one, then another up to 35 m away (the ones in reach stay lit),
    and the villagers hang a bridge between the two decks. It costs 1
    lumber a metre. Villagers climb up and walk over a bridge when it is
    on their way, and idle ones stroll across.
@@ -90,10 +100,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **Mining picks** and **Axes** (2 minutes each; food, stone or lumber is
    gathered twice as fast).
    Your first **Storehouse** is free: it appears on the start location
-   when you found the village. In the **Gather** row under Jobs, **+**
-   sets one more worker to felling, mining or getting food at once (taken
-   from the other gathering jobs, never from warriors, archers or
-   wizards), and **-** gives one back.
+   when you found the village.
+   **Workers and set jobs.** **Workers** in the Jobs row is the number of
+   villagers you have not set to anything: they gather whatever is most
+   needed by themselves. In the **Gather** row, **+** takes one Worker
+   and makes it a Lumberjack, Miner, Farmer or **Builder** at once (never
+   a warrior, archer or wizard), and **-** sends one back to the Workers.
+   Builders only build: they are first onto every building site and wait
+   when there is nothing to build.
 4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
    in the **Jobs** row under the resource counter (the - and + buttons).
    Each Town guard allows 4 warriors and trains one at a time, taking a
@@ -128,8 +142,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    Once a raid has 15 goblins an **ogre** with a spiked club joins it, and another for
    every 15 more: ten times a goblin's health, three times its damage, too
    big to pick up or throw, and only singed by fire.
+   During a raid a **giant bat** flies out of a cave, snatches one of
+   your villagers at random and carries it back to the cave for good. A
+   fireball or chain lightning brings it down, and a villager it was
+   carrying drops and lives.
    A goblin has the same health, damage and attack speed as a grown-up
-   villager. Grown-ups fight back, children run, and **warriors** (leather
+   villager. Every grown-up in the village turns out to fight raiders
+   that come within 50 m of its centre (and any goblin that wanders
+   within 25 m, raid or no raid); children run, and **warriors** (leather
    armour, helmet, sword and shield; four times the health and twice the
    damage) go looking for raiders. The **tortoise** helps by itself: goblins
    within its reach get a **stomp** that hurts everything round its foot
@@ -138,8 +158,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **eats** them. During a raid it walks to the raiders unless you have
    sent it somewhere. With goblins about it moves 20% faster, scowls and
    opens its mouth. Nobody runs away from the tortoise any more.
-   **Your creature.** Choose a **tortoise** or a **tiger** in the main menu.
-   The tiger is a nervous wreck (it shivers, wrings its paws and keeps
+   **Your creature.** Choose a **tortoise** or a **squirrel** in the main menu.
+   The squirrel is a nervous wreck (it shivers, wrings its paws and keeps
    glancing over its shoulder) and 30% faster; the tortoise has twice the
    health. Either starts at 15% of its full size and grows for 30 minutes,
    getting faster, stronger and tougher as it does (a small one cannot pick
@@ -152,8 +172,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    the village, it chases them, turning 30% faster in a fight. A line of
    text floats up from its head when it does something ("The creature ate
    2 goblins").
-   **What it learns.** Each time you cast Fireball, Rain, Roots or Blood
-   Sacrifice the creature gains 25 knowledge of that spell; at 100 it has
+   **What it learns.** Each time you cast Fireball, Rain, Roots, Chain
+   Lightning or Blood Sacrifice the creature gains 25 knowledge of that spell; at 100 it has
    learned it and casts it by itself when it suits (fireball at a knot of
    enemies away from your buildings, roots on a crowd of raiders, rain on a
    fire in the village, a blood sacrifice when magicko has run dry and
@@ -163,18 +183,23 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    carry into the store it gains 25 knowledge of harvesting that; once
    learned it pulls up a tree or a boulder (or reaps ripe wheat) and
    carries it to the Storehouse, 25 at a time when full grown.
-   **Bless and Curse.** Cast **Bless** (golden sparkles, 10 magicko) on the
-   creature within 30 seconds of it doing something and it becomes keener
-   on doing that again; **Curse** (red and creepy, 10 magicko) makes it
-   less keen. Every action starts at 50 out of 100 and moves 10 a time; at
+   **Bless and Curse.** Press the **Bless** key (golden sparkles, 10
+   magicko) and the top of the screen says what the creature last did;
+   press the key again, or click the creature, within 30 seconds of that
+   action and it becomes keener on doing it again. **Curse** (red and
+   creepy, 10 magicko) works the same way and makes it less keen. Every action starts at 50 out of 100 and moves 10 a time; at
    0 it never does it. The creature cannot learn these two.
-9. **Cast spells** from the spell bar at the bottom (keys 1 to 6, then click): **Fireball** blows
+9. **Cast spells** from the spell bar at the bottom (keys 1 to 7, then click): **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while (and makes wheat under the cloud grow three
    times as fast while it is wet), and **Roots** grows a glowing green patch
    of roots for 20 seconds: goblins and the tortoise in it are held where
    they stand, and your own people wade through at a quarter of their
    speed. The cost in magicko (the blue droplet) is under each spell.
+   **Chain Lightning** strikes whoever is nearest the click and jumps
+   on through up to six things, each within 9 m of the last: goblins,
+   ogres, bats and your own people alike. Anything wet (rained on in the
+   last 20 seconds, or standing in a river or lake) takes double.
    **Blood Sacrifice** costs none: click near one of your villagers and
    they die, and magicko comes in twice as fast for 30 seconds (the counter
    turns red and drips while it lasts). A fireball crater is bare stone; it
@@ -187,6 +212,8 @@ daytime, evening and night.
 
 ## Controls
 
+In the game, press **Esc** and **Show controls** for this list.
+
 | Input | Action |
 |---|---|
 | WASD / arrow keys | Pan camera (hold Shift for faster) |
@@ -195,8 +222,9 @@ daytime, evening and night.
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
-| 1–6 | Pick a spell (Fireball, Rain, Roots, Blood Sacrifice, Bless, Curse), then click to cast |
-| B / Backspace | Open or close the build menu (1–9 pick a building or the field) |
+| 1–7 | Pick a spell (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Curse), then click to cast |
+| Bless or Curse key twice | Bless or curse what the creature last did (or click the creature) |
+| B / Backspace | Open or close the build menu (1–9 pick the field, the bridge or a building) |
 | U | Open or close the research menu (needs a Blacksmith) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
 | R / Shift+R | Rotate the building outline |
@@ -238,7 +266,7 @@ game, villagers build everything.
 | Tool (key) | Action |
 |---|---|
 | Raise, Lower, Flatten, Smooth (1–4) | Sculpt the terrain; `[` and `]` change the brush size |
-| Land (5) | Hold over the sky beside the island to grow new land |
+| Expand island (5) | Hold and draw out over the sky to grow the island, in any shape |
 | Sand (6) | Paint sand |
 | Grass (7) | Paint grass; clears sand, stone and dirt, and fills in water |
 | Water (8) | Flood the ground at the height where you clicked; the ground is flattened under it with a bank round it, so ponds can sit up on hills |
@@ -247,6 +275,8 @@ game, villagers build everything.
 | Trees | Hold to plant trees inside the brush |
 | Rocks | Click or hold to place rocks |
 | Erase | Hold to remove trees, rocks, start locations and caves inside the brush |
+| Cut cliff | Click on low ground and drag into a hill: it is sliced down to that height, leaving a sheer cliff nobody can climb |
+| Goblin path | Draw from a goblin cave to a start location (or back): raiders from that cave loosely follow it. Several paths can join the same two; each has its own colour, shown only while this brush is picked. Shift+click removes one |
 
 Water flows: lower the ground next to a river or lake and the water runs
 in, and wherever water reaches the edge of the island it pours over as a
@@ -260,13 +290,20 @@ saved as compressed files in Godot's user folder under `maps/` (on Windows
 `%APPDATA%\Godot\app_userdata\SpriteSquirter\maps`); **Open maps folder** in
 the main menu opens it, so maps can be copied and shared.
 
+**Slopes.** Villagers, goblins and the creature slow down a lot walking
+uphill, and nobody can climb a sheer cliff. Villagers and goblins plan
+their way to keep off steep ground and round cliffs and water, unless
+there is no other way.
+
 ## Balancing
 
 `balancing.txt`, in the game's folder next to `project.godot`, holds the
 numbers you may want to tune: the health and damage of villagers,
 warriors, archers, wizards, goblins, ogres and the creatures, building
 health, what every building costs and how long building takes, bones,
-necromancers and skeletons, how often the goblins build, fireball damage, how much knowledge the creature needs to learn
+necromancers and skeletons, how often the goblins build, chain
+lightning, the giant bat, how steep a slope slows or stops walkers,
+how many villagers build one building, fireball damage, how much knowledge the creature needs to learn
 each thing, the cooldown of each spell it casts, and the size of a bless
 or curse. Open it in any text editor, change a number, save, and start
 the game again. Each line reads `name = number`, with a note after `#`.
@@ -290,7 +327,7 @@ the game again. Each line reads `name = number`, with a note after `#`.
   midnight raid. Both catch fire and get flung by explosions; the
   tortoise's footsteps squash goblins and strangers but not your own people.
 - **The creatures:** a 12 m gloomy tortoise of about 110,000 triangles and
-  an 11 m nervous tiger of about 65,000, on the same
+  an 11 m nervous squirrel of about 65,000, on the same
   skeleton. Walking is procedural: feet plant on the terrain with two-bone
   IK, and the body, arms, head, jaw and tail react.
 - **Fireball:** thrown from your cursor. It explodes, digs a crater, breaks
@@ -327,7 +364,10 @@ scripts/
   game/player_village.gd   Resources, villager jobs, carrying, births, housing, food,
                            training warriors and wizards
   game/construction_site.gd  A building going up (the villagers', or the goblins')
-  world/rope_bridge.gd       A rope bridge between two treehouse Homes, and the way over it
+  world/rope_bridge.gd       A rope bridge between two treehouses, and the way over it
+  world/path_grid.gd         Routes over the island that keep off slopes, cliffs and water
+  units/bat.gd               The giant bat that carries villagers off during raids
+  spells/chain_lightning.gd  The chain lightning spell
   game/building_catalog.gd   Build menu: names, costs and what each building is for
   game/crop_field.gd       A wheat field: sowing, growing, reaping
   game/goblin_raids.gd     Goblins spawning at the caves, the midnight raid, and what the goblins build
@@ -345,7 +385,7 @@ scripts/
   world/day_cycle.gd       Dawn, daytime, evening and night from the weather moods
   world/start_marker.gd    Numbered start-location banners
   world/ground_ring.gd     Circles drawn on the ground (brushes, outlines)
-  units/creature.gd        The creatures (tortoise, tiger): growth, health, locomotion, IK, faces, attacks
+  units/creature.gd        The creatures (tortoise, squirrel): growth, health, locomotion, IK, faces, attacks
   units/creature_mind.gd   What the creature learns, likes and does by itself; bless and curse
   core/balance.gd          Reads balancing.txt
   ui/pause_menu.gd         The pause screen (Esc)
@@ -385,7 +425,7 @@ python3 tools/bake_creature.py tortoise
 ```
 
 ```bash
-python3 tools/bake_creature.py tiger
+python3 tools/bake_creature.py squirrel
 ```
 
 ### Smoke test

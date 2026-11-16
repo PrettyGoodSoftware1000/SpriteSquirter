@@ -10,8 +10,9 @@ signal menu_requested
 signal new_requested(size: int)
 signal name_changed(text: String)
 signal expand_requested
+signal palette_selected(index: int)
 
-const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   1-9, 0 tools   [ ] brush size   R turn cave   Ctrl+S save"
+const HELP := "WASD pan   Q/E rotate   Wheel zoom   Middle-drag tilt   1-9, 0 tools   Ctrl+wheel brush size   R turn cave   Ctrl+S save"
 
 var _name_edit: LineEdit
 var _size_label: Label
@@ -22,6 +23,7 @@ var _counts: Label
 var _status: Label
 var _expand_panel: PanelContainer
 var _expand_label: Label
+var _palette_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -80,6 +82,22 @@ func _ready() -> void:
 	_counts = Label.new()
 	_counts.modulate = Color(1, 1, 1, 0.8)
 	box.add_child(_counts)
+
+	# The colours the map is played in.
+	box.add_child(_heading("Colour palette"))
+	var palettes := GridContainer.new()
+	palettes.columns = 4
+	box.add_child(palettes)
+	var palette_group := ButtonGroup.new()
+	for k in Art.PALETTES.size():
+		var b := _button(Art.PALETTES[k].name)
+		b.toggle_mode = true
+		b.button_group = palette_group
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.tooltip_text = "Play this map in the %s colours." % Art.PALETTES[k].name
+		b.pressed.connect(func() -> void: palette_selected.emit(k))
+		palettes.add_child(b)
+		_palette_buttons.append(b)
 
 	var actions := HBoxContainer.new()
 	box.add_child(actions)
@@ -173,7 +191,12 @@ func set_tool(tool: int, hint: String) -> void:
 
 
 func set_brush(radius: float) -> void:
-	_brush.text = "Brush radius: %d m   ( [ ] )" % roundi(radius)
+	_brush.text = "Brush radius: %d m   ( Ctrl + wheel )" % roundi(radius)
+
+
+func set_palette(index: int) -> void:
+	for k in _palette_buttons.size():
+		_palette_buttons[k].set_pressed_no_signal(k == index)
 
 
 func set_counts(starts: int, caves: int, trees: int, rocks: int) -> void:

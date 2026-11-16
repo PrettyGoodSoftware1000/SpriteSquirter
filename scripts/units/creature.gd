@@ -8,9 +8,11 @@ extends Node3D
 ## Game.settings.creature_grow_minutes (it stops growing while the village
 ## has no food). Its speed, reach, strength and health grow with it. It
 ## eats Game.settings.creature_food a minute when full grown, less while
-## small. Goblins can hurt it: at no health it is knocked out for
-## a while, then gets up with half its health. Health, stomp damage and the
-## knock-out time come from balancing.txt (see Balance).
+## small. Goblins can hurt it: at no health it is knocked out for a while
+## and shrinks by Balance "creature_shrink_on_knockout" of its size, then
+## gets up with "creature_getup_health" of its health. Health, stomp damage
+## and the knock-out time come from balancing.txt (see Balance). Its mind
+## may make it run from a fight (run_from_battle()).
 ##
 ## Each model (assets/creature/*.glb) is a single skinned mesh on a
 ## skeleton, sculpted by tools/bake_creature.py. All animation is procedural:
@@ -132,6 +134,8 @@ var _jaw := 0.0
 
 ## Cannot walk until Game.now passes this (the roots spell).
 var snared_until := 0.0
+## Running away from a fight until Game.now passes this: it does not attack.
+var fleeing_until := 0.0
 
 var _action := Action.NONE
 var _action_t := 0.0
@@ -220,7 +224,7 @@ func _grow(delta: float) -> void:
 		_ko_timer -= delta
 		if _ko_timer <= 0.0:
 			knocked_out = false
-			hp = max_hp * 0.5
+			hp = max_hp * Balance.num("creature_getup_health")
 			_crouch = 0.0
 			got_up.emit()
 	elif _hurt_timer <= 0.0 and not hungry:
@@ -239,6 +243,8 @@ func take_hit(amount: float, _from: Node3D) -> void:
 	hp = 0.0
 	knocked_out = true
 	_ko_timer = Balance.num("creature_knockout_seconds")
+	fleeing_until = 0.0
+	shrink(Balance.num("creature_shrink_on_knockout"))
 	if _action == Action.GRAB:
 		_end_grab()
 	has_target = false
@@ -249,6 +255,62 @@ func take_hit(amount: float, _from: Node3D) -> void:
 	_jaw_want = 0.0
 	Game.effects.spawn_dust(global_position, 3.0 * size)
 	knocked_down.emit()
+
+
+## Makes the creature smaller by `share` of its size (never below
+## START_SIZE). It grows back over time like before.
+func shrink(share: float) -> void:
+	var minutes: float = maxf(Game.settings.creature_grow_minutes, 0.05)
+	var smaller := maxf(START_SIZE, size * (1.0 - clampf(share, 0.0, 1.0)))
+	age = inverse_lerp(START_SIZE, 1.0, smaller) * minutes * 60.0
+	_grow(0.0)
+
+
+## 0..1 of its health left.
+func health_share() -> float:
+	return clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
+
+
+## Runs away from the enemies around it, towards the village if that is
+## away from them. Returns false if there is nowhere to run to.
+func run_from_battle(seconds := 8.0) -> bool:
+	var middle := Vector3.ZERO
+	var n := 0
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g.is_alive() and _flat(g.global_position, global_position) < HUNT_RANGE * 0.3:
+			middle += g.global_position
+			n += 1
+	if n == 0:
+		return false
+	middle /= n
+	var away := global_position - middle
+	away.y = 0.0
+	away = away.normalized() if away.length_squared() > 0.01 else Vector3(sin(heading), 0.0, cos(heading))
+	var village := Game.village
+	var tries: Array[Vector3] = [away, away.rotated(Vector3.UP, 0.8), away.rotated(Vector3.UP, -0.8)]
+	if is_instance_valid(village) and village.founded:
+		var home_way := village.center - global_position
+		home_way.y = 0.0
+		if home_way.length_squared() > 1.0 and home_way.normalized().dot(away) > 0.0:
+			tries.push_front(home_way.normalized())
+	for dir in tries:
+		var p := global_position + dir * (25.0 + 15.0 * size)
+		if Game.terrain.is_inside(p.x, p.z) and Game.terrain.is_dry(p.x, p.z):
+			if _action == Action.GRAB:
+				_end_grab()
+			_action = Action.NONE
+			# A stomp under way finishes as an ordinary step.
+			_stomp_leg = -1
+			_turning = false
+			fleeing_until = Game.now + seconds
+			auto_move(p)
+			return true
+	return false
+
+
+func is_fleeing() -> bool:
+	return Game.now < fleeing_until
 
 
 ## Puts the creature somewhere with both feet on the ground.
@@ -520,6 +582,11 @@ func _update_attacks(delta: float) -> void:
 	if _scan_timer > 0.0:
 		return
 	_scan_timer = 0.3
+	if is_fleeing():
+		# Running away: scared, and not stopping for anyone.
+		_alert = true
+		_jaw_want = 0.3
+		return
 	var near: Array[Villager] = []
 	var nearest: Villager = null
 	var nearest_d := INF
@@ -631,7 +698,7 @@ func _on_stomp(pos: Vector3) -> void:
 	_action = Action.NONE
 	_action_cooldown = 1.4
 	if not hit.is_empty():
-		mind.did("stomp", "The creature stomped %s" % _name_them(hit))
+		mind.did("stomp", Texts.line("stomped", {"them": _name_them(hit)}))
 
 
 ## "a goblin", "3 goblins and an ogre", ...
@@ -706,7 +773,7 @@ func _update_grab(delta: float) -> void:
 				g.eaten()
 			_released += 1
 		if t > 1.9 + 0.25 * _held.size():
-			mind.did("eat", "The creature ate %s" % _name_them(_held))
+			mind.did("eat", Texts.line("ate", {"them": _name_them(_held)}))
 			_end_grab()
 			return
 	else:
@@ -719,7 +786,7 @@ func _update_grab(delta: float) -> void:
 				if is_instance_valid(g) and g.state == Villager.State.HELD:
 					g.toss((fwd * randf_range(15.0, 22.0) + Vector3.UP * randf_range(9.0, 13.0) + right * randf_range(-5.0, 5.0)) * lerpf(0.5, 1.0, size))
 			_released = _held.size()
-			mind.did("throw", "The creature threw %s" % _name_them(_held))
+			mind.did("throw", Texts.line("threw", {"them": _name_them(_held)}))
 		if t > 2.5:
 			_end_grab()
 			return

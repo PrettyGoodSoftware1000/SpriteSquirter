@@ -21,6 +21,14 @@
   Crystal tower, Tall house. A new building gets a new asset name and a
   line in `Names.txt`.
 
+## Announcements
+
+- Every line of text the game announces (the messages in the middle of
+  the screen, the creature's floating lines, the Bless / Curse text and
+  the sentence for each creature action) is in `Announcements.txt`. The
+  owner writes it. New announcement text gets a line there (and a default
+  in `scripts/core/texts.gd`), never a string in the code.
+
 ## Branches
 
 - Do not create new branches without asking first.

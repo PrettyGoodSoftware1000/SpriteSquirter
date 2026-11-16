@@ -1158,9 +1158,17 @@ func _update_job(delta: float) -> void:
 		if _move_towards(job_pos, 1.7 * _speed_scale, delta):
 			var gap := Vector2(job_pos.x - global_position.x, job_pos.z - global_position.z).length()
 			if gap > 2.5:
-				# Blocked by water or the island's edge: let the village pick another job.
-				clear_job()
-				return
+				var site := job_target as ConstructionSite
+				if goblin and site:
+					# A goblin builder never gives up on its building: it works
+					# from here if it is close enough, or tries another spot.
+					if _flat_to(site.global_position) > site.footprint + 4.0:
+						job_pos = site.work_spot(randi() % 8, 8)
+						return
+				else:
+					# Blocked by water or the island's edge: let the village pick another job.
+					clear_job()
+					return
 			_working = true
 			_farm_timer = randf_range(3.0, 6.0)
 		return

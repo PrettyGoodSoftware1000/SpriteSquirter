@@ -12,7 +12,7 @@ const DEFAULT_SETTINGS := {
 	"lumber_rate": 6.0, # per worker per minute
 	"stone_rate": 4.0, # per worker per minute
 	"food_rate": 6.0, # per worker per minute
-	"birth_seconds": 45.0, # time between new villagers
+	"birth_seconds": 30.0, # time between new villagers
 	"magicko_rate": 1.0, # per grown-up villager per minute
 	"goblin_rate": 1.0, # goblins per starting cave per minute, on day 1
 	"goblin_rate_growth": 0.5, # added to goblin_rate every night
@@ -26,6 +26,9 @@ var creature_kind := "tortoise"
 var world_seed: int = 0
 ## Lighting mood, kept here so it survives generating a new world.
 var mood_index: int = 0
+## The nature palette the player picked in the dev menu (see Art.PALETTES).
+## A map from the editor can choose its own, which is used while it is played.
+var palette_index: int = 0
 ## Index into Grass.DENSITY_LEVELS (0 = full detail).
 var grass_level: int = 0
 ## Whether the dev menu (~) is open.
@@ -45,6 +48,8 @@ var camera_rig: RtsCamera
 var creature: Creature
 ## The player's village while playing; null in the menu and the editor.
 var village: PlayerVillage
+## Day and night while playing; null in the menu and the editor.
+var day_cycle: DayCycle
 ## Seconds of game time since the program started. Timed effects (such as
 ## the roots spell) compare against this.
 var now := 0.0
@@ -55,6 +60,7 @@ var _paths: PathGrid
 
 func _ready() -> void:
 	Balance.load_file()
+	Texts.load_file()
 	Villager.apply_balance()
 	BuildingCatalog.apply_balance()
 	world_seed = randi()
@@ -79,6 +85,7 @@ func start(mode: String, map_path := "", size := 384, new_seed := true, map_data
 	if new_seed:
 		world_seed = randi()
 	village = null
+	day_cycle = null
 	get_tree().reload_current_scene()
 
 

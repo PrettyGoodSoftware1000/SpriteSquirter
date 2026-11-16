@@ -23,6 +23,8 @@ func _ready() -> void:
 		if map.is_empty():
 			push_warning("Falling back to a random island")
 	Terrain.configure(int(map.size) if not map.is_empty() else int(Game.session.size))
+	# A map from the editor brings its own nature palette.
+	Art.set_palette(int(map.get("palette", Game.palette_index)) if not map.is_empty() else Game.palette_index)
 	Grass.density = Grass.DENSITY_LEVELS[Game.grass_level]
 	Game.world_root = self
 

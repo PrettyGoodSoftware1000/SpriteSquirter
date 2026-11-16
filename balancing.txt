@@ -32,9 +32,30 @@ ogre_damage = 18
 # --- Creatures (full grown; a newborn has 30% of the health) -----------------
 tortoise_health = 1200
 squirrel_health = 600
+raven_health = 800
 creature_stomp_damage = 60      # in the middle of the stomp, half that at its edge
+creature_strike_damage = 70     # a blow with the fists at the other giant (your creature against the balrog, and back)
 creature_knockout_seconds = 45  # how long it stays down at no health
 creature_gather_amount = 25     # lumber, stone or food a full-grown creature brings in one trip
+
+# --- The raven ---------------------------------------------------------------
+raven_fly_distance = 30         # metres: it flies any journey longer than this, and walks shorter ones (unless the way climbs steeply or it is getting out of a fight)
+raven_fly_height = 9            # metres above the ground when full grown
+raven_fly_speed = 2.5           # flying is this many times as fast as walking
+raven_flee_health = 0.25        # it flees a fight by itself below this share of its health (0 = never)
+raven_return_health = 0.6       # ...and keeps away from enemies until it has healed to this share
+
+# --- The balrog (the goblins' giant; it grows as your creature does) ----------
+balrogs = 1                     # how many the goblins keep (0 = none)
+balrog_health = 2000            # full grown; a newborn has 30% of it
+balrog_speed = 2.3              # metres a second, at any size (goblins march at 2.6)
+balrog_guard_radius = 40        # until it is full grown it attacks only what comes this close to its cave
+balrog_fireball_size = 0.5      # it can cast fireball from this share of its full size
+balrog_fireball_seconds = 20    # time between its fireballs
+balrog_fireball_power = 0.5     # share of fireball_damage and fireball_building_damage its fireball does
+balrog_building_damage = 40     # what one of its stomps does to a building, full grown
+balrog_respawn_minutes = 10     # after one dies, the next hatches this much later
+balrog_bones = 12               # bones the village gets for killing a full-grown one
 
 # --- Fireball ---------------------------------------------------------------
 fireball_damage = 150           # to villagers and goblins; anything with less health is killed

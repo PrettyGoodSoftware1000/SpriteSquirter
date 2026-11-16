@@ -93,7 +93,12 @@ func _ready() -> void:
 	raids.paths = _info.get("paths", [])
 	raids.raid_started.connect(func(count: int, ogres: int) -> void:
 		var extra := "" if ogres == 0 else (" and an ogre" if ogres == 1 else " and %d ogres" % ogres)
+		if raids.marching > 0:
+			extra += ", and the balrog with them,"
 		_announce("Midnight: %d goblins%s are marching on your village!" % [count, extra]))
+	raids.balrog_came.connect(func() -> void: _announce("A balrog has hatched at a goblin cave. It will guard the cave until it is full grown."))
+	raids.balrog_grown.connect(func() -> void: _announce("The balrog is full grown. It will march with the next raid."))
+	raids.balrog_died.connect(func() -> void: _announce("The balrog is dead!"))
 	raids.raid_ended.connect(func() -> void: _announce("Morning: the goblins go home."))
 	raids.bat_took.connect(func() -> void: _announce("A giant bat has snatched one of your villagers!"))
 

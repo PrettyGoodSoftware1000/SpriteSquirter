@@ -50,9 +50,13 @@ func _snare() -> void:
 			v.slowed_until = maxf(v.slowed_until, _ends)
 		else:
 			v.snared_until = maxf(v.snared_until, _ends)
-	var creature := Game.creature
-	if is_instance_valid(creature) and _inside(creature.global_position):
-		creature.snared_until = maxf(creature.snared_until, _ends)
+	var giants := get_tree().get_nodes_in_group("balrogs")
+	giants.append(Game.creature)
+	for node in giants:
+		var giant := node as Creature
+		# (A raven on the wing is out of the roots' reach.)
+		if is_instance_valid(giant) and not giant.is_flying() and _inside(giant.global_position):
+			giant.snared_until = maxf(giant.snared_until, _ends)
 
 
 func _inside(p: Vector3) -> bool:

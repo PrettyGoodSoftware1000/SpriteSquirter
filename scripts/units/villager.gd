@@ -1582,7 +1582,7 @@ func _think() -> void:
 		var victim := _nearest_villager(AGGRO)
 		# The creature is fair game when it is close, unless a villager is closer.
 		var beast := Game.creature
-		if is_instance_valid(beast) and not beast.knocked_out:
+		if is_instance_valid(beast) and not beast.knocked_out and not beast.is_flying():
 			var d := _flat_to(beast.global_position)
 			if d < 4.0 + 5.0 * beast.size and (victim == null or d < _flat_to(victim.global_position)):
 				_engage(beast)
@@ -1595,7 +1595,8 @@ func _think() -> void:
 				_engage(building)
 		return
 	var goblins := get_tree().get_nodes_in_group("goblins")
-	if goblins.is_empty() or (state == State.FIGHT and _foe_ok()):
+	var fiend := _fiend()
+	if (goblins.is_empty() and fiend == null) or (state == State.FIGHT and _foe_ok()):
 		return
 	var fighter := can_fight()
 	var best: Villager = null
@@ -1612,12 +1613,33 @@ func _think() -> void:
 		if d < best_d and d < (maxf(reach, DEFEND_REACH) if close and fighter else reach):
 			best_d = d
 			best = g
+	if fiend != null:
+		# The Balrog: fighters take it on, the rest keep well clear.
+		var d := _flat_to(fiend.global_position) - 2.0 * fiend.size
+		if fighter and d < best_d and d < maxf(reach, DEFEND_REACH):
+			_engage(fiend)
+			return
+		if not fighter and d < 14.0 and d < best_d:
+			flee(fiend.global_position)
+			return
 	if best == null:
 		return
 	if fighter:
 		_engage(best)
 	else:
 		flee(best.global_position)
+
+
+## The Balrog, if it is out to hurt the village and this is one of the
+## village's people. Otherwise null.
+func _fiend() -> Creature:
+	if not owned:
+		return null
+	for node in get_tree().get_nodes_in_group("balrogs"):
+		var b := node as Creature
+		if not b.knocked_out and b.is_threat():
+			return b
+	return null
 
 
 ## True for a goblin the whole village turns out against: a raider that has
@@ -1679,7 +1701,9 @@ func _foe_ok() -> bool:
 		return v.state != State.DEAD and v.state != State.HELD and (goblin or v.raiding or v.threatens_village())
 	var beast := _foe as Creature
 	if beast:
-		return raiding and not beast.knocked_out
+		if beast.hostile:
+			return owned and not beast.knocked_out and beast.is_threat()
+		return raiding and not beast.knocked_out and not beast.is_flying()
 	var b := _foe as Destructible
 	return b != null and not b.destroyed
 
@@ -1694,11 +1718,11 @@ func _update_fight(delta: float) -> void:
 		return
 	var to := _foe.global_position - global_position
 	to.y = 0.0
-	if wizard and _foe is Villager:
-		_cast_at(_foe as Villager, to, delta)
+	if wizard and (_foe is Villager or _foe is Creature):
+		_cast_at(_foe, to, delta)
 		return
-	if archer and _foe is Villager:
-		_shoot_at(_foe as Villager, to, delta)
+	if archer and (_foe is Villager or _foe is Creature):
+		_shoot_at(_foe, to, delta)
 		return
 	var reach := 2.6 if ogre else 1.2
 	var building := _foe as Destructible
@@ -1724,7 +1748,7 @@ func _update_fight(delta: float) -> void:
 
 
 ## Archers stand off and shoot.
-func _shoot_at(foe: Villager, to: Vector3, delta: float) -> void:
+func _shoot_at(foe: Node3D, to: Vector3, delta: float) -> void:
 	_in_reach = to.length() <= ARCHER_RANGE
 	if not _in_reach:
 		_move_towards(foe.global_position, 2.6 * _speed_scale, delta)
@@ -1738,7 +1762,7 @@ func _shoot_at(foe: Villager, to: Vector3, delta: float) -> void:
 
 
 ## Wizards keep their distance and throw firebolts.
-func _cast_at(foe: Villager, to: Vector3, delta: float) -> void:
+func _cast_at(foe: Node3D, to: Vector3, delta: float) -> void:
 	_in_reach = to.length() <= WIZARD_RANGE
 	if not _in_reach:
 		_move_towards(foe.global_position, 2.4 * _speed_scale, delta)

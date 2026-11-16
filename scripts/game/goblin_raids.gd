@@ -10,6 +10,11 @@ extends Node
 ## another for every GOBLINS_PER_OGRE more, and Balance "bats_per_raid"
 ## giant bats fly out to carry villagers off. Call setup() with the DayCycle.
 ##
+## The goblins have a giant of their own, the Balrog (Balance "balrogs" of
+## them). It hatches at a cave soon after the village is founded, guards the
+## cave while it grows, and marches with the raids once it is full grown.
+## When one dies the next hatches "balrog_respawn_minutes" later.
+##
 ## The goblins build, too. Every Balance "goblin_build_minutes" they mark
 ## out one of BuildingFactory.GOBLIN_KINDS near one of their caves, and up
 ## to BUILDERS goblins put it up, going back to the cave now and then for
@@ -20,6 +25,9 @@ signal raid_started(goblins: int, ogres: int)
 signal raid_ended
 ## A giant bat has snatched one of the player's villagers.
 signal bat_took
+signal balrog_came
+signal balrog_grown
+signal balrog_died
 
 const GOBLINS_PER_OGRE := 15
 const BUILDERS := 3
@@ -37,6 +45,10 @@ var _caves: Array[Node3D] = []
 var _spawned := {}
 var _build_timer := 0.0
 var _site_timer := 0.0
+## Seconds until the next balrog hatches (if there is room for one).
+var _balrog_timer := 3.0
+## Balrogs that set out with the raid that is on.
+var marching := 0
 
 
 func setup(day_cycle: DayCycle) -> void:
@@ -65,6 +77,11 @@ func _process(delta: float) -> void:
 			due -= 1.0
 			spawn_at(cave)
 		_spawned[cave] = due
+	if get_tree().get_nodes_in_group("balrogs").size() < roundi(Balance.num("balrogs")):
+		_balrog_timer -= delta
+		if _balrog_timer <= 0.0:
+			_balrog_timer = Balance.num("balrog_respawn_minutes") * 60.0
+			hatch_balrog()
 	_build_timer += delta
 	if _build_timer >= Balance.num("goblin_build_minutes") * 60.0:
 		_build_timer = 0.0
@@ -73,6 +90,26 @@ func _process(delta: float) -> void:
 	if _site_timer <= 0.0:
 		_site_timer = 1.0
 		_manage_builders()
+
+
+## A new balrog, as small as a newborn creature, at one of the caves.
+func hatch_balrog() -> Balrog:
+	var caves: Array[Node3D] = []
+	for cave in _caves:
+		if is_instance_valid(cave):
+			caves.append(cave)
+	if caves.is_empty():
+		return null
+	var balrog := Balrog.new()
+	balrog.name = "Balrog"
+	Game.world_root.add_child(balrog)
+	balrog.settle(caves[randi() % caves.size()])
+	balrog.grew_up.connect(func() -> void: balrog_grown.emit())
+	balrog.died.connect(func() -> void:
+		_balrog_timer = Balance.num("balrog_respawn_minutes") * 60.0
+		balrog_died.emit())
+	balrog_came.emit()
+	return balrog
 
 
 # --- Building ---------------------------------------------------------------------
@@ -208,12 +245,19 @@ func start_raid() -> void:
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
 		var a := randf() * TAU
-		g.start_raid(village.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0), _route_for(g))
+		g.start_raid(village.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0), _route_for(g.home))
 		if g.raiding and g.ogre:
 			ogres += 1
 		elif g.raiding:
 			count += 1
-	raiding = count + ogres > 0
+	# A full-grown balrog comes too.
+	marching = 0
+	for node in get_tree().get_nodes_in_group("balrogs"):
+		var balrog := node as Balrog
+		if balrog.grown() >= 1.0:
+			balrog.start_raid(village.center, _route_for(balrog.global_position))
+			marching += 1
+	raiding = count + ogres + marching > 0
 	if raiding:
 		raid_started.emit(count, ogres)
 		for k in roundi(Balance.num("bats_per_raid")):
@@ -236,11 +280,12 @@ func launch_bat() -> GiantBat:
 	return bat
 
 
-## The way a goblin takes to the village: one of the map's painted paths
-## that runs from near its cave to near the village, picked at random and
-## shifted a little to one side so the goblins do not walk in single file.
-## Empty if the map has none (the goblin then finds its own way).
-func _route_for(g: Villager) -> PackedVector3Array:
+## The way a goblin (or the balrog) whose camp is at `from` takes to the
+## village: one of the map's painted paths that runs from near there to
+## near the village, picked at random and shifted a little to one side so
+## the goblins do not walk in single file. Empty if the map has none (the
+## goblin then finds its own way).
+func _route_for(from: Vector3) -> PackedVector3Array:
 	var village := Game.village
 	var fits: Array[PackedVector2Array] = []
 	for path: PackedVector2Array in paths:
@@ -248,7 +293,7 @@ func _route_for(g: Villager) -> PackedVector3Array:
 			continue
 		var first := path[0]
 		var last := path[path.size() - 1]
-		if Vector2(g.home.x, g.home.z).distance_to(first) < PATH_SNAP and Vector2(village.center.x, village.center.z).distance_to(last) < PATH_SNAP:
+		if Vector2(from.x, from.z).distance_to(first) < PATH_SNAP and Vector2(village.center.x, village.center.z).distance_to(last) < PATH_SNAP:
 			fits.append(path)
 	var out := PackedVector3Array()
 	if fits.is_empty():
@@ -291,6 +336,8 @@ func end_raid() -> void:
 		(node as Villager).end_raid()
 	for node in get_tree().get_nodes_in_group("bats"):
 		(node as GiantBat).go_home()
+	for node in get_tree().get_nodes_in_group("balrogs"):
+		(node as Balrog).end_raid()
 	if raiding:
 		raiding = false
 		raid_ended.emit()

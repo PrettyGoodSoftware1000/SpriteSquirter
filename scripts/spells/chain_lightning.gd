@@ -3,7 +3,7 @@ extends Node3D
 ## The chain lightning spell: a bolt comes down on whoever is nearest the
 ## point and jumps on from one to the next, up to Balance "lightning_jumps"
 ## of them, each within "lightning_jump_range" of the last. It hits
-## villagers, goblins, ogres, skeletons and giant bats alike. Anything wet
+## villagers, goblins, ogres, skeletons, giant bats and the Balrog alike. Anything wet
 ## (rained on lately, or standing in water) takes "lightning_wet_bonus"
 ## times the damage. Use ChainLightning.cast().
 
@@ -19,7 +19,7 @@ static func cast(pos: Vector3, friendly := 1.0) -> int:
 	var tree := Game.get_tree()
 	var reach := Balance.num("lightning_jump_range")
 	var left: Array[Node3D] = []
-	for node in tree.get_nodes_in_group("villagers") + tree.get_nodes_in_group("bats"):
+	for node in tree.get_nodes_in_group("villagers") + tree.get_nodes_in_group("bats") + tree.get_nodes_in_group("balrogs"):
 		left.append(node as Node3D)
 	var ground := Vector3(pos.x, Game.terrain.surface_height(pos.x, pos.z), pos.z)
 	var points := PackedVector3Array([ground + Vector3(randf_range(-4.0, 4.0), 34.0, randf_range(-4.0, 4.0))])
@@ -48,7 +48,8 @@ static func cast(pos: Vector3, friendly := 1.0) -> int:
 				harm *= friendly
 			v.take_hit(harm, null)
 		else:
-			points.append(best.global_position)
+			var giant := best as Creature
+			points.append(best.global_position + Vector3.UP * (5.0 * giant.size if giant else 0.0))
 			best.call("take_hit", harm, null)
 	if hits == 0:
 		points.append(ground)

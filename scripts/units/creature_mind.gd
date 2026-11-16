@@ -58,6 +58,10 @@ func _ready() -> void:
 		knowledge[id] = 0.0
 	for action: String in ACTIONS:
 		behavior[action] = Balance.num("behavior_start")
+	if creature.hostile:
+		# The goblins' giant learns nothing and decides nothing here.
+		set_process(false)
+		return
 	if is_instance_valid(Game.village):
 		Game.village.lesson.connect(_on_lesson)
 
@@ -131,7 +135,7 @@ func player_moved(pos: Vector3) -> void:
 # --- Deciding -------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	if creature.knocked_out:
+	if creature.knocked_out or creature.fleeing:
 		_drop_task()
 		return
 	_update_task()
@@ -264,6 +268,9 @@ func _enemy_cluster(radius: float, at_least: int, nearest: float, farthest: floa
 			var o := other as Villager
 			if o.global_position.distance_to(p) < radius:
 				score += 3.0 if o.ogre else 1.0
+		for b in tree.get_nodes_in_group("balrogs"):
+			if (b as Node3D).global_position.distance_to(p) < radius:
+				score += 4.0
 		for v in village.people():
 			if v.global_position.distance_to(p) < radius + 2.0:
 				score -= 1.5 if spare_buildings else 100.0

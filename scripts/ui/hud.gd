@@ -568,6 +568,8 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 	if is_instance_valid(beast):
 		var state := "%s %d%% grown" % [beast.species_name(), roundi(beast.grown() * 100.0)] if beast.grown() < 0.995 else beast.species_name()
 		state += ", knocked out" if beast.knocked_out else ", health %d%%" % roundi(100.0 * beast.hp / maxf(beast.max_hp, 1.0))
+		if beast.fleeing:
+			state += ", fleeing"
 		parts.append(state)
 	if kids > 0:
 		parts.append("%d growing up" % kids)

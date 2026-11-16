@@ -1,8 +1,9 @@
 class_name Creature
 extends Node3D
-## The giant creature. There are two to choose from (set `kind` before
-## adding it to the tree): a gloomy tortoise, and a nervous squirrel that is
-## 30% faster but has half the tortoise's health. See SPECIES.
+## The giant creature. There are three to choose from (set `kind` before
+## adding it to the tree): a gloomy tortoise, a nervous squirrel that is
+## 30% faster but has half the tortoise's health, and a raven that flies.
+## See SPECIES. (The goblins' Balrog is a Creature too: see balrog.gd.)
 ##
 ## A creature starts at START_SIZE of its full size and grows for
 ## Game.settings.creature_grow_minutes (it stops growing while the village
@@ -29,6 +30,15 @@ extends Node3D
 ## or buildings. With goblins about it is "alert": it
 ## walks ALERT_SPEED times as fast, scowls, bares its mouth and its eyes
 ## dart around.
+##
+## Giants fight each other with their fists (Action.STRIKE): the player's
+## creature and the Balrog are each other's `_rival()`.
+##
+## The raven flies (see _should_fly): on any journey longer than Balance
+## "raven_fly_distance", over ground that climbs steeply, and to get out of
+## a fight. In the air nothing on the ground can reach it and it treads on
+## nothing. Hurt below "raven_flee_health" it flees a fight by itself, and
+## keeps out of trouble until it has healed to "raven_return_health".
 ##
 ## The face is drawn on top of the model: eyeballs, pupils that look about,
 ## lids that blink and slant with its mood, and an inked mouth line that
@@ -60,6 +70,19 @@ const SPECIES := {
 		# and in, so the paws are held in front of the chest.
 		"arm": Vector3(0.25, -0.85, 0.4), "elbow": -0.4, "fore": Vector3(-0.35, 0.5, 0.8),
 	},
+	"raven": {
+		"name": "Raven", "model": "res://assets/creature/raven.glb", "speed": 3.6,
+		"nervous": 0.25, "flies": true,
+		# Blank eyes that glow, and a beak in place of a drawn mouth.
+		"eye": Vector3(0.63, 0.62, 1.18), "eye_size": 0.3, "eye_color": Color(0.82, 0.9, 1.0), "eye_glow": 1.5,
+		"lid_color": Color(0.105, 0.12, 0.21), "lid_y": [0.34, 0.2], "lid_tilt": [0.2, 0.55], "pupil": [1.0, 1.0],
+		"jaw_rest": -0.1,
+		"arm": Vector3(0.3, -1.0, 0.12), "elbow": -0.25,
+		# The wing's flat side faces this way (on the right; mirrored on
+		# the left). To fly, the wing swings out by `wing_open` and the
+		# long feathers at its tip by `tip_open`.
+		"wing_normal": Vector3(0.5, 0.0, 0.866), "wing_open": 0.32, "tip_open": 0.4,
+	},
 }
 
 signal knocked_down
@@ -78,10 +101,16 @@ const HUNT_RANGE := 150.0
 const ALERT_SPEED := 1.2
 ## How much faster it turns to keep enemies in front of it.
 const COMBAT_TURN := 1.3
+## A blow with the fists at another giant: how long it takes, and when in
+## that time it lands.
+const STRIKE_TIME := 1.1
+const STRIKE_LANDS := 0.6
+## The raven never bothers to fly anywhere nearer than this.
+const SHORT_HOP := 8.0
 ## Arms held out in front, for carrying a tree or a boulder.
 const CARRY_POSE := Vector3(0.25, 0.15, 1.0)
 
-enum Action { NONE, STOMP, GRAB }
+enum Action { NONE, STOMP, GRAB, STRIKE }
 
 @export var max_speed := 3.6
 @export var turn_speed := 1.2
@@ -98,6 +127,12 @@ var age := 0.0
 var max_hp := 0.0
 var hp := 0.0
 var knocked_out := false
+## True for the goblins' giant, which fights the village and not for it.
+var hostile := false
+## In the air (the raven), from take-off until its feet are down again.
+var flying := false
+## Hurt and keeping away from enemies until it has healed (the raven).
+var fleeing := false
 ## Knowledge, likes and dislikes, and what it does when left alone.
 var mind: CreatureMind
 ## A tree, boulder or sheaf the creature is carrying in its arms.
@@ -178,10 +213,19 @@ var _twitch_timer := 0.0
 var _glance_timer := 0.0
 var _fore_blend := 1.0
 var _say_free_at := 0.0
+## Metres above the ground, and 0..1 how far into its flying pose it is.
+var _alt := 0.0
+var _fly := 0.0
+var _flap := 0.0
+## How far the journey was when it began.
+var _flight_length := 0.0
+var _flee_until := 0.0
+var _flee_again_at := 0.0
+var _struck := false
 
 
 func _ready() -> void:
-	_spec = SPECIES[kind]
+	_spec = _species()
 	max_speed = _spec.speed
 	_arm_pose = _spec.arm
 	_arm_want = _spec.arm
@@ -196,6 +240,42 @@ func species_name() -> String:
 	return _spec.name
 
 
+## Everything that sets this kind of creature apart (see SPECIES).
+func _species() -> Dictionary:
+	return SPECIES[kind]
+
+
+## A creature with no food to eat stops growing and healing.
+func _hungry() -> bool:
+	var village := Game.village
+	return is_instance_valid(village) and village.founded and village.amount("food") <= 0
+
+
+## Walking speed at its present size, before slopes and so on.
+func _top_speed() -> float:
+	return max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0)
+
+
+## The other giant: the Balrog for the player's creature, and the other
+## way about. Null if there is none to fight just now.
+func _rival() -> Creature:
+	for node in get_tree().get_nodes_in_group("balrogs"):
+		var b := node as Creature
+		if not b.knocked_out:
+			return b
+	return null
+
+
+## True if this giant is out to hurt the village right now (the Balrog).
+func is_threat() -> bool:
+	return false
+
+
+## True while it is too high for anything on the ground to reach.
+func is_flying() -> bool:
+	return flying and _alt > 1.5 * size
+
+
 ## 0..1: how far it has grown from START_SIZE to full size.
 func grown() -> float:
 	return inverse_lerp(START_SIZE, 1.0, size)
@@ -204,8 +284,7 @@ func grown() -> float:
 ## Grows, and heals slowly when nothing has hurt it for a while. A creature
 ## with no food to eat does neither.
 func _grow(delta: float) -> void:
-	var village := Game.village
-	var hungry := is_instance_valid(village) and village.founded and village.amount("food") <= 0
+	var hungry := _hungry()
 	if not hungry:
 		age += delta
 	var minutes: float = maxf(Game.settings.creature_grow_minutes, 0.05)
@@ -235,12 +314,14 @@ func take_hit(amount: float, _from: Node3D) -> void:
 	_hurt_timer = 6.0
 	_cast_timer = maxf(_cast_timer, 0.25)
 	if hp > 0.0:
+		if _spec.get("flies", false) and not fleeing and hp < max_hp * Balance.num("raven_flee_health"):
+			_flee()
 		return
 	hp = 0.0
 	knocked_out = true
+	fleeing = false
 	_ko_timer = Balance.num("creature_knockout_seconds")
-	if _action == Action.GRAB:
-		_end_grab()
+	_cancel_action()
 	has_target = false
 	_auto = false
 	_turning = false
@@ -275,6 +356,9 @@ func move_to(pos: Vector3) -> void:
 	_auto = false
 	_look_at = pos
 	mind.player_moved(pos)
+	_flight_length = _flat(pos, global_position)
+	if _should_fly(pos, true):
+		_take_off()
 
 
 ## The creature goes somewhere of its own accord. (Chasing enemies and the
@@ -284,6 +368,147 @@ func auto_move(pos: Vector3) -> void:
 	has_target = true
 	_auto = true
 	_look_at = pos
+	_flight_length = _flat(pos, global_position)
+	if _should_fly(pos):
+		_take_off()
+
+
+# --- Flying (the raven) -------------------------------------------------------
+
+## True if the raven would rather fly to `pos` than walk: it is a long
+## way, the ground climbs steeply on the way, or it is running from a
+## fight (by itself, or because the player has `ordered` it away).
+func _should_fly(pos: Vector3, ordered := false) -> bool:
+	if flying:
+		return false
+	if not _spec.get("flies", false) or knocked_out or Game.now < snared_until:
+		return false
+	var d := _flat(pos, global_position)
+	if d > Balance.num("raven_fly_distance"):
+		return true
+	if d < SHORT_HOP:
+		return false
+	if fleeing or (ordered and (_alert or _action != Action.NONE)):
+		return true
+	# Look for a climb on the way.
+	var terrain := Game.terrain
+	var steps := ceili(d / 3.0)
+	var last := terrain.get_height(global_position.x, global_position.z)
+	for k in range(1, steps + 1):
+		var p := global_position.lerp(pos, k / float(steps))
+		var h := terrain.get_height(p.x, p.z)
+		if (h - last) / (d / steps) > Balance.num("slope_slow_from"):
+			return true
+		last = h
+	return false
+
+
+func _take_off() -> void:
+	_cancel_action()
+	flying = true
+	_turning = false
+	_alert = false
+	_jaw_want = 0.0
+	for k in 2:
+		_stepping[k] = false
+	Game.effects.spawn_dust(global_position, 2.0 * size)
+
+
+func _land() -> void:
+	flying = false
+	_alt = 0.0
+	var fwd := Vector3(sin(heading), 0.0, cos(heading))
+	var right := Vector3(cos(heading), 0.0, -sin(heading))
+	for k in 2:
+		_plant[k] = _foot_home(_side(k), fwd, right)
+		_stepping[k] = false
+	Game.effects.spawn_dust(global_position, 2.0 * size)
+	_scan_timer = 0.0
+
+
+## Runs from the fight: flies to the safest spot it can find and keeps
+## away from enemies until it has healed (or a minute has gone by).
+func _flee() -> void:
+	fleeing = true
+	_flee_until = Game.now + 60.0
+	_flee_again_at = Game.now + 4.0
+	var enemies: Array[Vector3] = []
+	for node in get_tree().get_nodes_in_group("goblins"):
+		enemies.append((node as Node3D).global_position)
+	var rival := _rival()
+	if rival != null:
+		enemies.append(rival.global_position)
+	var terrain := Game.terrain
+	var best := global_position
+	var best_score := -INF
+	for reach: float in [70.0, 50.0, 30.0]:
+		for k in 12:
+			var a := k / 12.0 * TAU
+			var p := global_position + Vector3(sin(a), 0.0, cos(a)) * reach
+			if not terrain.is_inside(p.x, p.z) or not terrain.is_dry(p.x, p.z):
+				continue
+			var score := 80.0
+			for e in enemies:
+				score = minf(score, _flat(e, p))
+			# Of two safe places, the one nearer home.
+			score -= 0.1 * _flat(p, mind.home)
+			if score > best_score:
+				best_score = score
+				best = p
+	say("The %s flees!" % species_name().to_lower(), Color(1.0, 0.6, 0.4))
+	target = best
+	has_target = true
+	_auto = true
+	_look_at = best
+	_flight_length = _flat(best, global_position)
+	if not flying and Game.now >= snared_until and _flat(best, global_position) > 2.0:
+		_take_off()
+
+
+## In the air: climbs to its cruising height (and over any hill ahead),
+## flies to the target and comes down on it.
+func _update_flight(delta: float) -> void:
+	var terrain := Game.terrain
+	var cruise := Balance.num("raven_fly_height") * lerpf(0.4, 1.0, size)
+	var to := target - global_position
+	to.y = 0.0
+	var dist := to.length()
+	var desired_speed := 0.0
+	# It starts down a little way short of the target (half way, on a short hop).
+	var landing := knocked_out or not has_target or dist < maxf(minf(cruise * 1.3, _flight_length * 0.5), 3.0)
+	if has_target and not knocked_out:
+		if dist < 0.8:
+			has_target = false
+			_auto = false
+		else:
+			var want := atan2(to.x, to.z)
+			heading = rotate_toward(heading, want, turn_speed * 2.2 * delta)
+			var facing := cos(angle_difference(heading, want))
+			var top := max_speed * lerpf(0.5, 1.0, size) * Balance.num("raven_fly_speed")
+			# Slow until it is off the ground, and again as it comes in.
+			desired_speed = top * clampf(facing, 0.15, 1.0) * clampf(dist / (cruise * 1.5 + 2.0), 0.2, 1.0) * clampf(_alt / (cruise * 0.4) + 0.25, 0.25, 1.0)
+	speed = move_toward(speed, desired_speed, 7.0 * delta)
+	rotation.y = heading
+	var fwd := Vector3(sin(heading), 0.0, cos(heading))
+	var p := global_position + fwd * speed * delta
+	if not terrain.is_inside(p.x, p.z):
+		p = global_position
+		has_target = false
+	var ground := terrain.get_height(p.x, p.z)
+	var want_alt := 0.0
+	if not landing:
+		var ahead := ground
+		for k: float in [1.0, 2.0, 3.0]:
+			var q := p + fwd * speed * k * 0.7
+			ahead = maxf(ahead, terrain.get_height(q.x, q.z))
+		want_alt = cruise + ahead - ground
+	_alt = lerpf(_alt, want_alt, 1.0 - exp(-(4.0 if knocked_out else 1.8) * delta))
+	_alt = move_toward(_alt, want_alt, cruise * 0.25 * delta)
+	_ground_y = lerpf(_ground_y, ground, 1.0 - exp(-8.0 * delta))
+	p.y = _ground_y + _alt
+	global_position = p
+	if landing and _alt < 0.12 * size + 0.03:
+		_land()
 
 
 func is_auto() -> bool:
@@ -293,6 +518,16 @@ func is_auto() -> bool:
 ## True while there are enemies to deal with.
 func is_fighting() -> bool:
 	return _alert or _action != Action.NONE
+
+
+## Drops whatever attack is under way.
+func _cancel_action() -> void:
+	if _action == Action.GRAB:
+		_end_grab()
+	_action = Action.NONE
+	_stomp_leg = -1
+	_crouch = 0.0
+	_arm_want = _spec.arm
 
 
 ## Takes `node` (already somewhere in the world) into its arms.
@@ -354,9 +589,12 @@ func _process(delta: float) -> void:
 	_time += delta
 	_cast_timer = maxf(0.0, _cast_timer - delta)
 	_grow(delta)
-	if not knocked_out:
+	if not knocked_out and not flying:
 		_update_attacks(delta)
-	_update_locomotion(delta)
+	if flying:
+		_update_flight(delta)
+	else:
+		_update_locomotion(delta)
 	_update_feet(delta)
 	_update_body(delta)
 	_update_legs()
@@ -383,8 +621,7 @@ func _update_locomotion(delta: float) -> void:
 			var want := atan2(to.x, to.z)
 			heading = rotate_toward(heading, want, turn_speed * (COMBAT_TURN if _alert else 1.0) * delta)
 			var facing := cos(angle_difference(heading, want))
-			var top := max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0)
-			desired_speed = top * clampf(facing, 0.0, 1.0) * clampf(dist / 5.0, 0.25, 1.0)
+			desired_speed = _top_speed() * clampf(facing, 0.0, 1.0) * clampf(dist / 5.0, 0.25, 1.0)
 	if _action != Action.NONE or _turning:
 		# Stand still and face the goblins.
 		desired_speed = 0.0
@@ -422,6 +659,12 @@ func _update_feet(delta: float) -> void:
 	for k in 2:
 		homes[k] = _foot_home(_side(k), fwd, right)
 		dists[k] = Vector2(homes[k].x - _plant[k].x, homes[k].z - _plant[k].z).length()
+	if flying:
+		# No steps in the air: the feet wait on the ground below.
+		for k in 2:
+			_stepping[k] = false
+			_plant[k] = homes[k]
+		return
 	for k in 2:
 		if _stepping[k]:
 			_step_t[k] = minf(1.0, _step_t[k] + delta / (STOMP_TIME if k == _stomp_leg else _current_step_time()))
@@ -492,25 +735,40 @@ func _on_footfall(pos: Vector3) -> void:
 		# A small creature is too light to flatten buildings and trees, and
 		# a big one treads carefully round its own village (it goes in and
 		# out by itself now, fetching things).
-		if d.is_in_group("player_buildings"):
+		# (The Balrog knocks buildings down on purpose, not by walking.)
+		if d.is_in_group("player_buildings") or (hostile and d.is_building):
 			continue
 		if size > 0.45 and flat < d.footprint * 0.7 + 1.4 * size:
 			d.stomp(pos)
 	for node in get_tree().get_nodes_in_group("villagers"):
 		var v := node as Villager
 		# The tortoise watches its step around its own village.
-		if not v.owned and size > 0.3 and v.global_position.distance_to(pos) < 1.8 * size:
+		if _spares(v) or size <= 0.3 or v.global_position.distance_to(pos) >= 1.8 * size:
+			continue
+		if hostile:
+			# The village's fighters are not squashed flat by a careless step.
+			v.take_hit(Balance.num("creature_stomp_damage") * 0.5 * lerpf(0.3, 1.0, size), self)
+		else:
 			v.squish()
 	footfall.emit(pos)
 
 
 # --- Fighting goblins ---------------------------------------------------------
 
+## Villagers this creature's feet and stomps leave alone.
+func _spares(v: Villager) -> bool:
+	return v.goblin if hostile else v.owned
+
+
 func _update_attacks(delta: float) -> void:
 	_action_cooldown = maxf(0.0, _action_cooldown - delta)
 	if _action == Action.GRAB:
 		_alert = true
 		_update_grab(delta)
+		return
+	if _action == Action.STRIKE:
+		_alert = true
+		_update_strike(delta)
 		return
 	if _action == Action.STOMP:
 		_alert = true
@@ -538,14 +796,41 @@ func _update_attacks(delta: float) -> void:
 		elif d < hunt_d and (g.raiding or _threatens_village(g)):
 			hunt_d = d
 			hunt = g
-	_alert = nearest != null or hunt != null
+	# The other giant counts too: in reach of our fists, or to be hunted
+	# down when it comes for the village.
+	var rival := _rival()
+	var focus: Node3D = nearest
+	var hunt_pos := hunt.global_position if hunt != null else Vector3.ZERO
+	var hunting := hunt != null
+	if rival != null and not rival.is_flying():
+		var d := _flat(rival.global_position, global_position) - 2.0 * rival.size
+		if d < REACH * size + 1.0:
+			if d < nearest_d:
+				focus = rival
+		elif d < hunt_d and (rival.is_threat() or d < REACH * rival.size + 6.0):
+			# (Or when it is near enough to be hitting us already.)
+			hunting = true
+			hunt_pos = rival.global_position
+	_alert = focus != null or hunting
 	_jaw_want = 0.16 + 0.14 * float(_spec.nervous) if _alert else 0.0
-	if nearest == null:
+	if fleeing:
+		# Keeping out of it until the wounds have closed.
+		_turning = false
+		if hp >= max_hp * Balance.num("raven_return_health") or Game.now > _flee_until:
+			fleeing = false
+		elif focus != null and Game.now >= _flee_again_at and Game.now >= snared_until:
+			_flee()
+		if fleeing:
+			return
+	if focus == null:
 		_turning = false
 		# Nothing in reach: go after raiders, unless the player sent us somewhere.
 		# (A little one stays out of it.)
-		if hunt != null and size >= 0.35 and (not has_target or _auto) and Game.now >= snared_until:
-			target = hunt.global_position
+		if hunting and size >= 0.35 and (not has_target or _auto) and Game.now >= snared_until:
+			if _should_fly(hunt_pos):
+				auto_move(hunt_pos)
+				return
+			target = hunt_pos
 			has_target = true
 			_auto = true
 			_look_at = target
@@ -553,7 +838,7 @@ func _update_attacks(delta: float) -> void:
 	if _auto:
 		has_target = false
 		_auto = false
-	_action_point = nearest.global_position
+	_action_point = focus.global_position
 	_look_at = _action_point
 	var to := _action_point - global_position
 	to.y = 0.0
@@ -561,6 +846,9 @@ func _update_attacks(delta: float) -> void:
 	_turning = _action_cooldown < 0.4
 	var facing := absf(angle_difference(heading, atan2(to.x, to.z))) < 0.55
 	if not facing or _action_cooldown > 0.0 or _stepping[0] or _stepping[1] or speed > 0.6:
+		return
+	if focus == rival:
+		_start_strike()
 		return
 	var point := global_position + to.normalized() * minf(to.length(), STOMP_STRIDE * size)
 	var in_blast := 0
@@ -583,9 +871,46 @@ func _update_attacks(delta: float) -> void:
 		_action_cooldown = 0.8
 
 
+## A blow at the other giant with both fists.
+func _start_strike() -> void:
+	_action = Action.STRIKE
+	_action_t = 0.0
+	_struck = false
+	_jaw_want = 0.45
+
+
+func _update_strike(delta: float) -> void:
+	_action_t += delta
+	if _action_t < STRIKE_LANDS - 0.15:
+		# Fists up and back...
+		_arm_want = Vector3(0.45, 0.95, -0.25)
+		_crouch = 0.0
+	else:
+		# ...and down on its head.
+		_arm_want = Vector3(0.12, -0.25, 1.0)
+		_crouch = 0.35
+	if not _struck and _action_t >= STRIKE_LANDS:
+		_struck = true
+		var rival := _rival()
+		if rival != null and not rival.is_flying() and _flat(rival.global_position, global_position) - 2.0 * rival.size < REACH * size + 2.5:
+			rival.take_hit(Balance.num("creature_strike_damage") * lerpf(0.3, 1.0, size), self)
+			var at := rival.global_position.lerp(global_position, 0.3)
+			Game.effects.spawn_dust(at + Vector3.UP * 3.0 * rival.size, 2.5 * size)
+			Game.shake(0.7 * size, at)
+	if _action_t >= STRIKE_TIME:
+		_action = Action.NONE
+		_action_cooldown = 1.0
+		_crouch = 0.0
+		_jaw_want = 0.0
+		_arm_want = _spec.arm
+
+
 ## A stomp hurts everything round the foot, so it is only allowed when no
 ## villager and none of the village's buildings would be caught in it.
+## (The Balrog has no such scruples: its stomps leave goblins unharmed.)
 func _stomp_is_safe(point: Vector3) -> bool:
+	if hostile:
+		return true
 	for node in get_tree().get_nodes_in_group("villagers"):
 		var v := node as Villager
 		if not v.goblin and _flat(v.global_position, point) < STOMP_RADIUS * size + 1.0:
@@ -619,7 +944,7 @@ func _on_stomp(pos: Vector3) -> void:
 		var d := _flat(v.global_position, pos)
 		if d >= radius:
 			continue
-		if v.owned:
+		if _spares(v):
 			continue
 		hit.append(v)
 		# Enough to kill a goblin at the centre; less towards the edge.
@@ -627,10 +952,19 @@ func _on_stomp(pos: Vector3) -> void:
 		v.take_hit(Balance.num("creature_stomp_damage") * (1.0 - 0.5 * d / radius) * lerpf(0.3, 1.0, size), self)
 		if not v.is_alive():
 			v.fling(pos, 8.0 * lerpf(0.4, 1.0, size), false)
+	# The other giant feels it too, and the Balrog's stomps break buildings.
+	var rival := _rival()
+	if rival != null and not rival.is_flying() and _flat(rival.global_position, pos) < radius + 2.0 * rival.size:
+		rival.take_hit(Balance.num("creature_stomp_damage") * lerpf(0.3, 1.0, size), self)
+	if hostile:
+		for node in get_tree().get_nodes_in_group("player_buildings"):
+			var b := node as Destructible
+			if not b.destroyed and _flat(b.global_position, pos) < radius + b.footprint * 0.6:
+				b.damage(Balance.num("balrog_building_damage") * lerpf(0.3, 1.0, size), pos, 5.0)
 	_stomp_leg = -1
 	_action = Action.NONE
 	_action_cooldown = 1.4
-	if not hit.is_empty():
+	if not hit.is_empty() and not hostile:
 		mind.did("stomp", "The creature stomped %s" % _name_them(hit))
 
 
@@ -780,9 +1114,15 @@ func _update_body(delta: float) -> void:
 		_crouch = 1.3
 	# Crouching (to grab) bends the knees and tips the body forwards.
 	var stoop := _crouch + (0.35 if _stomp_leg >= 0 else 0.0)
+	# In the air the body lies forward along the way it is going.
+	_fly = move_toward(_fly, 1.0 if flying and _alt > 0.4 * size else 0.0, delta * 1.6)
+	var aloft := smoothstep(0.0, 1.0, _fly)
+	if aloft > 0.0:
+		pace = minf(pace, 1.0) * (1.0 - aloft)
+		stoop *= 1.0 - aloft
 	_bob = lerpf(_bob, swing * 0.3 - 0.3 * pace - 0.12 + breath * 0.03 - stoop * 0.9, blend)
 	_sway = lerpf(_sway, sway_target, blend)
-	_lean = lerpf(_lean, pace * 0.14 + stoop * 0.42, blend)
+	_lean = lerpf(_lean, pace * 0.14 + stoop * 0.42 + aloft * 1.2, blend)
 
 	# A nervous creature shivers, and its head jerks about.
 	var shiver := Vector3(sin(_time * 31.0), sin(_time * 37.0), 0.0) * 0.035 * nervous
@@ -806,7 +1146,9 @@ func _update_body(delta: float) -> void:
 	_skel.set_bone_pose_rotation(_bone["neck"], Quaternion.from_euler(Vector3(nod * 0.5, _look_yaw * 0.5, 0.0)))
 	_skel.set_bone_pose_rotation(_bone["head"], Quaternion.from_euler(Vector3(nod * 0.5, _look_yaw * 0.5 + _twitch, _sway * 0.5)))
 	_jaw = lerpf(_jaw, maxf(0.4 if casting else 0.03 + 0.02 * breath, _jaw_want), 1.0 - exp(-14.0 * delta))
-	_skel.set_bone_pose_rotation(_bone["jaw"], Quaternion(Vector3.RIGHT, _jaw))
+	_skel.set_bone_pose_rotation(_bone["jaw"], Quaternion(Vector3.RIGHT, _jaw + float(_spec.get("jaw_rest", 0.0))))
+	if _bone.has("wing_l"):
+		_update_wings(delta, aloft)
 
 	# Arms hang from the bind pose and swing against the legs.
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
@@ -841,14 +1183,49 @@ func _update_body(delta: float) -> void:
 		_skel.set_bone_pose_rotation(_bone["tail%d" % (i + 1)], Quaternion.from_euler(Vector3(lift, wave, 0.0)))
 
 
+## Wings: the raven's hang half open at rest and beat when it flies; the
+## Balrog's little ones only twitch.
+func _update_wings(delta: float, aloft: float) -> void:
+	var beats := 0.0
+	var lift := 0.0
+	if _spec.get("flies", false):
+		# Hard beats to climb, slower ones to cruise, and a flare to land.
+		var climbing := flying and _fly < 0.95
+		_flap += delta * (9.0 if climbing else 6.0) * (1.4 - 0.4 * size)
+		var air := 1.0 if flying else 0.0
+		beats = sin(_flap) * lerpf(0.05, 0.62, maxf(aloft, air * 0.8))
+		lift = lerpf(0.0, -0.22, aloft) + sin(_time * 1.3) * 0.03 * (1.0 - air)
+	else:
+		_flap += delta * (11.0 if _alert else 2.5)
+		beats = sin(_flap) * (0.3 if _alert else 0.1)
+	var normal: Vector3 = _spec.get("wing_normal", Vector3.BACK)
+	var open: float = float(_spec.get("wing_open", 0.0)) * aloft
+	var tip_open: float = float(_spec.get("tip_open", 0.0)) * aloft
+	for k in 2:
+		var s := _side(k)
+		var side := "l" if k == 0 else "r"
+		var n := Vector3(s * normal.x, normal.y, normal.z)
+		# Up and down about the spine; out and in within the wing's own plane.
+		var wing := Quaternion(Vector3.UP, s * (beats + lift)) * Quaternion(n, -s * open)
+		_skel.set_bone_pose_rotation(_bone["wing_" + side], wing)
+		if _bone.has("wingtip_" + side):
+			var tip := Quaternion(Vector3.UP, s * sin(_flap - 0.9) * 0.3 * aloft) * Quaternion(n, s * tip_open)
+			_skel.set_bone_pose_rotation(_bone["wingtip_" + side], tip)
+
+
 func _update_legs() -> void:
 	var to_skel := _skel.global_transform.affine_inverse()
 	var pelvis := _skel.get_bone_global_pose(_bone["pelvis"])
+	var aloft := smoothstep(0.0, 1.0, _fly)
 	for k in 2:
 		var side := "l" if k == 0 else "r"
 		var hip: Vector3 = pelvis * (_rest["thigh_" + side] - _rest["pelvis"])
 		var sole := _foot_pos(k)
 		var ankle: Vector3 = to_skel * (sole + Vector3.UP * ANKLE_HEIGHT * size)
+		if flying or aloft > 0.0:
+			# Legs trail under the body, knees a little bent.
+			var tucked: Vector3 = pelvis * Vector3(_side(k) * _foot_spread * 0.85, -(_thigh_length + _shin_length) * 0.84, 0.9)
+			ankle = ankle.lerp(tucked, maxf(aloft, 0.0 if _alt < 0.3 * size else 0.35))
 		var knee := _solve_knee(hip, ankle)
 		var reach := knee + (ankle - knee).normalized() * _shin_length
 		var thigh_rest: Vector3 = _rest["shin_" + side] - _rest["thigh_" + side]
@@ -860,6 +1237,9 @@ func _update_legs() -> void:
 		var foot_basis := Basis(Quaternion(Vector3.UP, normal.normalized()))
 		if _stepping[k]:
 			foot_basis = foot_basis * Basis(Vector3.RIGHT, sin(_step_t[k] * PI) * 0.45)
+		if aloft > 0.0:
+			# Toes hang.
+			foot_basis = Basis(Quaternion(foot_basis).slerp(Quaternion(pelvis.basis * Basis(Vector3.RIGHT, 0.6)), aloft))
 		_skel.set_bone_global_pose(_bone["foot_" + side], Transform3D(foot_basis, reach))
 
 
@@ -907,6 +1287,8 @@ func _build() -> void:
 	var hide := ShaderMaterial.new()
 	hide.shader = Art.shader("creature")
 	hide.set_shader_parameter("detail_tex", Art.tex("hide_detail"))
+	if _spec.has("crack_glow"):
+		hide.set_shader_parameter("crack_glow", _spec.crack_glow)
 	hide.next_pass = Art.outline(1.0)
 	for node in model.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
@@ -919,8 +1301,9 @@ func _build() -> void:
 	_skel.add_child(attach)
 	attach.bone_name = "head"
 	var paint := Art.paint("plaster", 0.25)
+	var glowing: bool = _spec.has("eye_glow")
 	var whites := MeshBuilder.new()
-	whites.color = _spec.eye_color
+	whites.color = Color.WHITE if glowing else _spec.eye_color
 	var e: float = _spec.eye_size
 	var eye: Vector3 = _spec.eye
 	for k in 2:
@@ -928,7 +1311,20 @@ func _build() -> void:
 		var centre := Vector3(s * eye.x, eye.y, eye.z)
 		_eye_centres.append(centre)
 		whites.add_blob(Vector3(e, e, e * 0.88), Transform3D(Basis(), centre), null, 0.0, 8, 12)
+		# Glowing eyes are blank: only a faint brighter spot looks about.
 		var pupil := MeshBuilder.new()
+		if glowing:
+			pupil.color = Color.WHITE
+			pupil.add_blob(Vector3(0.5, 0.5, 0.3) * e, Transform3D.IDENTITY, null, 0.0, 6, 10)
+			var spark := StandardMaterial3D.new()
+			spark.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			spark.albedo_color = Color(1.0, 1.0, 1.0) * (float(_spec.eye_glow) * 1.3)
+			_pupils.append(_face_part(attach, pupil.commit(), spark))
+			var shut := MeshBuilder.new()
+			shut.color = _spec.lid_color
+			shut.add_blob(Vector3(1.24, 0.88, 1.12) * e, Transform3D.IDENTITY, null, 0.0, 6, 10)
+			_lids.append(_face_part(attach, shut.commit(), paint))
+			continue
 		pupil.color = Color(0.05, 0.04, 0.04)
 		pupil.add_blob(Vector3(0.44, 0.5, 0.3) * e, Transform3D.IDENTITY, null, 0.0, 6, 10)
 		pupil.color = Color(1.0, 1.0, 1.0)
@@ -953,7 +1349,14 @@ func _build() -> void:
 					Vector3(s * 1.55, y + 0.32 * (w - 1) - 0.06, 1.42), Vector3(s * 2.0, y + 0.5 * (w - 1) + 0.1, 1.25)]),
 					PackedFloat32Array([0.028, 0.022, 0.016, 0.006]), 5)
 		_face_part(attach, ink.commit(), Art.paint("plaster", 0.0))
-	_face_part(attach, whites.commit(), paint)
+	if glowing:
+		var lit := StandardMaterial3D.new()
+		lit.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		var c: Color = _spec.eye_color
+		lit.albedo_color = Color(c.r, c.g, c.b) * float(_spec.eye_glow)
+		_face_part(attach, whites.commit(), lit).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	else:
+		_face_part(attach, whites.commit(), paint)
 	_mouth_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_mouth_material.vertex_color_use_as_albedo = true
 	_mouth_material.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1028,6 +1431,9 @@ func _update_face(delta: float) -> void:
 ## inside of the mouth with a second line for the lower lip.
 func _draw_mouth(open: float, anger: float) -> void:
 	_mouth.clear_surfaces()
+	if not _spec.has("mouth"):
+		# A beak needs no drawing.
+		return
 	var upper := PackedVector3Array()
 	var lower := PackedVector3Array()
 	var m: Array = _spec.mouth
@@ -1043,7 +1449,7 @@ func _draw_mouth(open: float, anger: float) -> void:
 		lower.append(lip + Vector3(0.0, -gape, 0.1 * minf(gape, 1.0) - 0.12 * gape * gape))
 	if open > 0.03:
 		_mouth.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _mouth_material)
-		_mouth.surface_set_color(Color(0.11, 0.015, 0.03))
+		_mouth.surface_set_color(_spec.get("mouth_color", Color(0.11, 0.015, 0.03)))
 		for i in 13:
 			_mouth.surface_add_vertex(upper[i] + Vector3(0, 0, 0.04))
 			_mouth.surface_add_vertex(lower[i] + Vector3(0, 0, 0.04))

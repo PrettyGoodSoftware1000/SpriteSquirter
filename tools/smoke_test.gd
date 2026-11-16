@@ -31,6 +31,8 @@ func _run() -> void:
 	# fetching food or casting spells in the middle of the others.
 	for id: String in CreatureMind.SPELLS + CreatureMind.HARVESTS:
 		Balance.values["knowledge_" + id] = 1.0e9
+	# No balrog until its own checks at the end.
+	Balance.values["balrogs"] = 0.0
 
 	# 1. The menu.
 	await _open(game, "menu", "", 384)
@@ -721,7 +723,7 @@ func _run() -> void:
 	play._found(Vector3(s0.x, game.terrain.get_height(s0.x, s0.y), s0.y), 0)
 	_check(play.village.population() == PlayerVillage.START_VILLAGERS, "starting villagers spawned (%d)" % play.village.population())
 	var raider := get_tree().get_nodes_in_group("goblins")[0] as Villager
-	var route := play.raids._route_for(raider)
+	var route := play.raids._route_for(raider.home)
 	_check(play.raids.paths.size() == placed and route.size() >= 2, "goblins take the map's painted path to the village (%d points)" % route.size())
 	await _wait(3.0)
 	_check(get_tree().get_nodes_in_group("start_markers").is_empty(), "banners removed after choosing")
@@ -740,6 +742,111 @@ func _run() -> void:
 	squirrel.move_to(squirrel.global_position + Vector3(6, 0, 6))
 	await _wait(60.0)
 	_check(squirrel.size > 0.17 and squirrel.size < 0.2, "the squirrel grows towards full size over 30 minutes (%.3f after 1 minute)" % squirrel.size)
+
+	# 6. The raven, which flies, and the goblins' balrog.
+	game.creature_kind = "raven"
+	game.settings.creature_grow_minutes = 0.02
+	await _open(game, "play", "", 384)
+	play = get_tree().current_scene.get_node("Controller") as PlayMode
+	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
+	var r0: Vector2 = play._info.starts[0]
+	play._found(Vector3(r0.x, game.terrain.get_height(r0.x, r0.y), r0.y), 0)
+	await _wait(3.0)
+	var raven := play.creature
+	raven.mind.process_mode = Node.PROCESS_MODE_DISABLED
+	_check(raven.kind == "raven" and raven.size > 0.99 and is_equal_approx(raven.max_hp, Balance.num("raven_health")), "the raven is the player's creature")
+	# A short walk on the flat is walked.
+	var hop_to := raven.global_position
+	for k in 24:
+		var a := TAU * k / 24.0
+		var p := raven.global_position + Vector3(cos(a), 0, sin(a)) * 12.0
+		if game.terrain.is_dry(p.x, p.z) and absf(game.terrain.get_height(p.x, p.z) - raven.global_position.y) < 0.5:
+			hop_to = p
+			break
+	raven.move_to(hop_to)
+	await _wait(1.0)
+	_check(hop_to != raven.global_position and not raven.flying, "the raven walks a short way on the flat")
+	await _wait(8.0)
+	# A long way is flown.
+	var flight_to := raven.global_position
+	for k in 24:
+		var a := TAU * k / 24.0
+		var p := raven.global_position + Vector3(cos(a), 0, sin(a)) * 70.0
+		if game.terrain.is_inside(p.x, p.z) and game.terrain.is_dry(p.x, p.z):
+			flight_to = p
+			break
+	raven.move_to(flight_to)
+	await _wait(4.0)
+	var up := raven.global_position.y - game.terrain.get_height(raven.global_position.x, raven.global_position.z)
+	_check(raven.flying and raven.is_flying() and up > 5.0, "the raven flies a journey longer than raven_fly_distance (%.1f m up)" % up)
+	for k in 30:
+		if not raven.flying and not raven.has_target:
+			break
+		await _wait(1.0)
+	up = raven.global_position.y - game.terrain.get_height(raven.global_position.x, raven.global_position.z)
+	_check(not raven.flying and up < 0.5 and Vector2(raven.global_position.x - flight_to.x, raven.global_position.z - flight_to.z).length() < 3.0, "the raven lands where it was sent")
+	# Badly hurt, it flees by air.
+	raven.take_hit(raven.max_hp * 0.8, null)
+	await _wait(2.0)
+	_check(raven.fleeing and raven.flying and not raven.knocked_out, "a badly hurt raven flees, flying")
+	for k in 30:
+		if not raven.flying:
+			break
+		await _wait(1.0)
+	raven.hp = raven.max_hp
+	await _wait(1.0)
+	_check(not raven.fleeing, "the raven stops fleeing once it has healed")
+
+	# The balrog hatches small, guards its cave and grows.
+	game.settings.creature_grow_minutes = 30.0
+	Balance.values["balrogs"] = 1.0
+	play.raids._balrog_timer = 0.0
+	await _wait(0.5)
+	var fiends := get_tree().get_nodes_in_group("balrogs")
+	_check(fiends.size() == 1, "a balrog hatches at a goblin cave")
+	if fiends.size() == 1:
+		var balrog := fiends[0] as Balrog
+		var bones_then := play.village.amount("bones")
+		_check(balrog.size < 0.16 and balrog.hostile and absf(balrog.max_hp - Balance.num("balrog_health") * 0.3) < 5.0, "the balrog starts at 15%% of its size (%.2f)" % balrog.size)
+		_check(balrog._top_speed() < 2.6 and balrog._top_speed() > 2.0, "the balrog is a little slower than a marching goblin")
+		play.raids.start_raid()
+		_check(not balrog.raiding, "a growing balrog stays at its cave during a raid")
+		play.raids.end_raid()
+		balrog._fire_ready_at = 0.0
+		raven.place(balrog.global_position + Vector3(0, 0, 26), 0.0)
+		balrog._try_fireball()
+		_check(_fireballs() == 0, "a small balrog cannot cast fireball")
+		balrog.age = 30.0 * 60.0 * 0.5
+		await _wait(0.2)
+		raven.place(balrog.global_position + Vector3(0, 0, 26), 0.0)
+		balrog._alert = true
+		balrog._try_fireball()
+		_check(balrog.size > 0.5 and _fireballs() == 1, "at half size the balrog casts fireball (size %.2f)" % balrog.size)
+		raven.place(Vector3(r0.x, 0, r0.y), 0.0)
+		balrog.auto_move(balrog.global_position + Vector3(0, 0, 60))
+		_check(not balrog.flying, "the balrog cannot fly")
+		balrog.age = 30.0 * 60.0
+		await _wait(0.3)
+		_check(balrog.grown() >= 1.0, "the balrog grows to full size like the creature")
+		play.raids.start_raid()
+		_check(balrog.raiding and balrog.is_threat() and play.raids.marching == 1, "a full-grown balrog marches with the raid")
+		play.raids.end_raid()
+		_check(not balrog.raiding, "the balrog goes home in the morning")
+		# The two giants go for each other with their fists.
+		# (The raven is put back to full size: the slower growing set above shrank it.)
+		raven.age = 30.0 * 60.0
+		await _wait(0.3)
+		raven.hp = raven.max_hp
+		raven.fleeing = false
+		raven.place(balrog.global_position + Vector3(0, 0, 7), PI)
+		for k in 20:
+			if balrog.hp < balrog.max_hp and raven.hp < raven.max_hp:
+				break
+			await _wait(1.0)
+		_check(balrog.hp < balrog.max_hp and raven.hp < raven.max_hp, "the creature and the balrog fight each other (%d and %d health lost)" % [roundi(raven.max_hp - raven.hp), roundi(balrog.max_hp - balrog.hp)])
+		balrog.take_hit(1.0e6, null)
+		_check(balrog.knocked_out and get_tree().get_nodes_in_group("balrogs").is_empty() and play.village.amount("bones") > bones_then, "a balrog at no health is dead, and leaves bones")
+	Balance.values["balrogs"] = 0.0
 	game.creature_kind = "tortoise"
 
 	DirAccess.remove_absolute(path)
@@ -750,6 +857,14 @@ func _run() -> void:
 	else:
 		print("SMOKE TEST FAILED:\n  " + "\n  ".join(_failures))
 		get_tree().quit(1)
+
+
+func _fireballs() -> int:
+	var n := 0
+	for node in Game.world_root.get_children():
+		if node is Fireball:
+			n += 1
+	return n
 
 
 func _open(game: Variant, mode: String, map_path: String, size: int) -> void:

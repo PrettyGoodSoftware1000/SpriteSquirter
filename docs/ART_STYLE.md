@@ -27,6 +27,13 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
   from above.
 - **The giant bat:** dark fur, torn purple-grey wings, armour and bone
   spikes strapped to its back, a pig's snout and fangs.
+- **The raven:** stands like a man. Shaggy blue-black feathers in three
+  tones, a heavy hooked beak, blank glowing eyes, grey scaly hands and
+  feet with dark claws, a fan of tail feathers and two great wings.
+- **The balrog:** as broad as it is tall. Dark cracked hide with glowing
+  lines between the scales, ridged ram's horns, glowing purple eyes that
+  trail fire, a glowing scar on the chest, iron armour with purple
+  panels, purple rags, cloven hooves, a bladed tail and two little wings.
 - **The undead:** necromancers wear black with glowing purple runes;
   skeletons are bone-white with inked eye sockets and ribs.
 - **Nature follows a palette:** grass, trees, rocks, dirt and water take
@@ -51,7 +58,7 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 | Shapes | `scripts/core/mesh_builder.gd` | Lathes, bevelled boxes, tubes, blobs, curved sheets. |
 | Buildings | `scripts/world/building_factory.gd` | One function per building design. |
 | Island | `scripts/world/terrain.gd` | Outline, underside, rivers and waterfalls. |
-| Creatures | `tools/bake_creature.py` → `assets/creature/creature.glb` (tortoise), `squirrel.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
+| Creatures | `tools/bake_creature.py` → `assets/creature/creature.glb` (tortoise), `squirrel.glb`, `raven.glb`, `balrog.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
 | Textures | `tools/bake/patterns.gdshader` → `assets/textures/` | Procedural patterns baked to PNG. |
 
 ## Swapping in hand-made or AI-made art later

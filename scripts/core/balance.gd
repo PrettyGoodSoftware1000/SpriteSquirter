@@ -45,6 +45,12 @@ const DEFAULTS := {
 	"bats_per_raid": 1.0, "bat_health": 80.0, "bat_speed": 11.0,
 	"squirrel_health": 600.0,
 	"slope_slow_from": 0.3, "slope_slowest": 0.3, "cliff_grade": 1.6,
+	"raven_health": 800.0, "raven_fly_distance": 30.0, "raven_fly_height": 9.0, "raven_fly_speed": 2.5,
+	"raven_flee_health": 0.25, "raven_return_health": 0.6,
+	"creature_strike_damage": 70.0,
+	"balrogs": 1.0, "balrog_health": 2000.0, "balrog_speed": 2.3, "balrog_guard_radius": 40.0,
+	"balrog_fireball_size": 0.5, "balrog_fireball_seconds": 20.0, "balrog_fireball_power": 0.5,
+	"balrog_building_damage": 40.0, "balrog_respawn_minutes": 10.0, "balrog_bones": 12.0,
 }
 
 static var values := {}

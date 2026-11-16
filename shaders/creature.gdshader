@@ -3,14 +3,19 @@ shader_type spatial;
 // model baker (alpha = how scaly the spot is). Scales are projected from the
 // rest pose, stored in UV (x, y) and UV2 (z), so they stick to the skin as
 // it moves, and are drawn as flat tones with ink lines between them.
+// UV2.y is how much the spot glows (the Balrog's armour and scar), and
+// crack_glow lights the lines between the scales like cooling lava.
 
 uniform sampler2D detail_tex : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float tex_scale = 0.4;
+uniform vec3 crack_glow : source_color = vec3(0.0);
 
 varying vec3 rest_pos;
+varying float glow;
 
 void vertex() {
 	rest_pos = vec3(UV.x, UV.y, UV2.x);
+	glow = UV2.y;
 }
 
 void fragment() {
@@ -26,6 +31,8 @@ void fragment() {
 	float tone = mix(1.0, mix(0.84, 1.0, smoothstep(0.5, 0.55, d.g)), scaly);
 	// max() matters: at polygon edges the interpolated colour can dip below zero.
 	ALBEDO = pow(max(COLOR.rgb, vec3(0.0)), vec3(2.2)) * line * tone;
+	float lit = clamp(glow, 0.0, 1.0);
+	EMISSION = ALBEDO * lit * 1.3 + crack_glow * (1.0 - smoothstep(0.3, 0.4, d.r)) * scaly * (1.0 - lit);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 }

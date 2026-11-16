@@ -81,6 +81,11 @@ stage.
 - Slopes slow walkers, cliffs stop them, and villagers and goblins find routes round both
 - Map editor: expand-island, cut-cliff and goblin-path brushes
 
+## Version 0.13: A raven and a balrog ✅
+- A third creature, the raven: flies long journeys and over climbs, flees when badly hurt
+- The balrog, the goblins' giant: guards its cave while it grows, then joins the raids; casts fireball from half size
+- Giants fight each other with their fists; glowing parts on creature models
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

@@ -146,6 +146,17 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    your villagers at random and carries it back to the cave for good. A
    fireball or chain lightning brings it down, and a villager it was
    carrying drops and lives.
+   The goblins have a giant of their own, the **balrog**: a horned demon
+   that hatches at one of their caves and grows just as your creature
+   does. Until it is full grown it only guards its cave, attacking whoever
+   comes within 40 m of it. Full grown, it marches with every midnight
+   raid and stamps your buildings down. From half its full size it spits
+   a **fireball** every 20 seconds (half as strong as yours). It has two
+   little wings and cannot fly, and it walks a little slower than a goblin.
+   Your creature and the balrog fight each other with their fists; your
+   archers, wizards and everyone else join in, and fireballs and chain
+   lightning hurt it. When it dies the village gets bones, and another
+   hatches ten minutes later.
    A goblin has the same health, damage and attack speed as a grown-up
    villager. Every grown-up in the village turns out to fight raiders
    that come within 50 m of its centre (and any goblin that wanders
@@ -158,10 +169,16 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **eats** them. During a raid it walks to the raiders unless you have
    sent it somewhere. With goblins about it moves 20% faster, scowls and
    opens its mouth. Nobody runs away from the tortoise any more.
-   **Your creature.** Choose a **tortoise** or a **squirrel** in the main menu.
+   **Your creature.** Choose a **tortoise**, a **squirrel** or a **raven**
+   in the main menu.
    The squirrel is a nervous wreck (it shivers, wrings its paws and keeps
    glancing over its shoulder) and 30% faster; the tortoise has twice the
-   health. Either starts at 15% of its full size and grows for 30 minutes,
+   health. The raven **flies**: any journey longer than 30 m, any way that
+   climbs steeply, and whenever you send it out of a fight. In the air it
+   is two and a half times as fast, treads on nothing and cannot be reached from
+   the ground. Hurt below a quarter of its health it flees the fight by
+   itself and keeps away from enemies until it has healed. Shorter trips
+   on the flat it walks. Each starts at 15% of its full size and grows for 30 minutes,
    getting faster, stronger and tougher as it does (a small one cannot pick
    goblins up or flatten buildings, and stays out of raids unless you send
    it). It stops growing while the village has no food. Goblins attack a
@@ -302,7 +319,7 @@ numbers you may want to tune: the health and damage of villagers,
 warriors, archers, wizards, goblins, ogres and the creatures, building
 health, what every building costs and how long building takes, bones,
 necromancers and skeletons, how often the goblins build, chain
-lightning, the giant bat, how steep a slope slows or stops walkers,
+lightning, the giant bat, the raven's flying, the balrog, how steep a slope slows or stops walkers,
 how many villagers build one building, fireball damage, how much knowledge the creature needs to learn
 each thing, the cooldown of each spell it casts, and the size of a bless
 or curse. Open it in any text editor, change a number, save, and start
@@ -326,8 +343,9 @@ the game again. Each line reads `name = number`, with a note after `#`.
   loiter around a cave and their huts, far from the villages, until the
   midnight raid. Both catch fire and get flung by explosions; the
   tortoise's footsteps squash goblins and strangers but not your own people.
-- **The creatures:** a 12 m gloomy tortoise of about 110,000 triangles and
-  an 11 m nervous squirrel of about 65,000, on the same
+- **The creatures:** a 12 m gloomy tortoise of about 110,000 triangles,
+  an 11 m nervous squirrel of about 65,000, a raven of about 155,000
+  with two-jointed wings, and the goblins' balrog of about 135,000, on the same
   skeleton. Walking is procedural: feet plant on the terrain with two-bone
   IK, and the body, arms, head, jaw and tail react.
 - **Fireball:** thrown from your cursor. It explodes, digs a crater, breaks
@@ -367,6 +385,7 @@ scripts/
   world/rope_bridge.gd       A rope bridge between two treehouses, and the way over it
   world/path_grid.gd         Routes over the island that keep off slopes, cliffs and water
   units/bat.gd               The giant bat that carries villagers off during raids
+  units/balrog.gd            The goblins' giant: guards its cave, grows, raids and casts fireball
   spells/chain_lightning.gd  The chain lightning spell
   game/building_catalog.gd   Build menu: names, costs and what each building is for
   game/crop_field.gd       A wheat field: sowing, growing, reaping
@@ -385,7 +404,7 @@ scripts/
   world/day_cycle.gd       Dawn, daytime, evening and night from the weather moods
   world/start_marker.gd    Numbered start-location banners
   world/ground_ring.gd     Circles drawn on the ground (brushes, outlines)
-  units/creature.gd        The creatures (tortoise, squirrel): growth, health, locomotion, IK, faces, attacks
+  units/creature.gd        The creatures (tortoise, squirrel, raven): growth, health, locomotion, flying, IK, faces, attacks
   units/creature_mind.gd   What the creature learns, likes and does by itself; bless and curse
   core/balance.gd          Reads balancing.txt
   ui/pause_menu.gd         The pause screen (Esc)
@@ -426,6 +445,14 @@ python3 tools/bake_creature.py tortoise
 
 ```bash
 python3 tools/bake_creature.py squirrel
+```
+
+```bash
+python3 tools/bake_creature.py raven 0.09
+```
+
+```bash
+python3 tools/bake_creature.py balrog 0.09
 ```
 
 ### Smoke test

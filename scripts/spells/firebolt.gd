@@ -6,13 +6,14 @@ extends Node3D
 const SPEED := 28.0
 const IGNITE_CHANCE := 0.3
 
-var _target: Villager
+## A Villager, or the Balrog.
+var _target: Node3D
 var _caster: Node3D
 var _trail: CPUParticles3D
 var _life := 2.5
 
 
-func launch(from: Vector3, target: Villager, caster: Node3D) -> void:
+func launch(from: Vector3, target: Node3D, caster: Node3D) -> void:
 	global_position = from
 	_target = target
 	_caster = caster
@@ -38,20 +39,27 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_life -= delta
-	if not is_instance_valid(_target) or not _target.is_alive() or _life <= 0.0:
+	if not is_instance_valid(_target) or not _alive() or _life <= 0.0:
 		_fizzle()
 		return
-	var aim := _target.global_position + Vector3.UP * 0.9 * _target.scale.y
+	var giant := _target as Creature
+	var aim := _target.global_position + Vector3.UP * (5.0 * giant.size if giant else 0.9 * _target.scale.y)
 	var to := aim - global_position
 	var step := SPEED * delta
-	if to.length() <= step + 0.3:
-		_target.take_hit(Villager.FIREBOLT_DAMAGE, _caster if is_instance_valid(_caster) else null)
-		if _target.is_alive() and randf() < IGNITE_CHANCE:
-			_target.catch_fire()
+	if to.length() <= step + 0.3 + (1.5 * giant.size if giant else 0.0):
+		_target.call("take_hit", Villager.FIREBOLT_DAMAGE, _caster if is_instance_valid(_caster) else null)
+		var v := _target as Villager
+		if v and v.is_alive() and randf() < IGNITE_CHANCE:
+			v.catch_fire()
 		Game.effects.spawn_dust(aim, 0.3)
 		_fizzle()
 		return
 	global_position += to.normalized() * step
+
+
+func _alive() -> bool:
+	var giant := _target as Creature
+	return not giant.knocked_out if giant else (_target as Villager).is_alive()
 
 
 func _fizzle() -> void:

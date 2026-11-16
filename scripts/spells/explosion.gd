@@ -6,7 +6,10 @@ extends RefCounted
 
 ## `friendly` is the share of the damage the player's own villagers and
 ## buildings take: 1 for the player's fireball, less for the creature's.
-static func detonate(pos: Vector3, radius: float, friendly := 1.0) -> void:
+## A `hostile` blast (the Balrog's fireball) is the other way about: it
+## spares goblins and all that is theirs, and hurts the player's creature
+## where any other blast hurts the Balrog. `power` scales all its damage.
+static func detonate(pos: Vector3, radius: float, friendly := 1.0, hostile := false, power := 1.0) -> void:
 	var tree := Game.get_tree()
 	var terrain := Game.terrain
 	Game.effects.spawn_explosion(pos, radius)
@@ -33,27 +36,44 @@ static func detonate(pos: Vector3, radius: float, friendly := 1.0) -> void:
 		if friendly < 1.0 and d.is_in_group("player_buildings"):
 			d.hp = maxf(1.0, d.hp - Balance.num("fireball_building_damage") * falloff * friendly)
 			continue
-		d.damage(Balance.num("fireball_building_damage") * falloff, pos, 16.0 * falloff + 4.0)
+		if hostile and d.is_in_group("goblin_buildings"):
+			continue
+		d.damage(Balance.num("fireball_building_damage") * falloff * power, pos, 16.0 * falloff + 4.0)
 		if not d.destroyed and randf() < 0.5 + 0.5 * falloff:
 			d.ignite()
 
-	for node in tree.get_nodes_in_group("bats"):
-		var bat := node as GiantBat
-		if Vector2(bat.global_position.x - pos.x, bat.global_position.z - pos.z).length() < radius * 1.1 and bat.global_position.y - pos.y < 20.0:
-			bat.take_hit(Balance.num("fireball_damage"), null)
+	if not hostile:
+		for node in tree.get_nodes_in_group("bats"):
+			var bat := node as GiantBat
+			if Vector2(bat.global_position.x - pos.x, bat.global_position.z - pos.z).length() < radius * 1.1 and bat.global_position.y - pos.y < 20.0:
+				bat.take_hit(Balance.num("fireball_damage"), null)
 
-	# A goblin building that is still going up is knocked flat.
-	for node in tree.get_nodes_in_group("goblin_sites"):
-		var site := node as ConstructionSite
-		if site.global_position.distance_to(pos) < radius + site.footprint * 0.5:
-			site.wreck()
+		# A goblin building that is still going up is knocked flat.
+		for node in tree.get_nodes_in_group("goblin_sites"):
+			var site := node as ConstructionSite
+			if site.global_position.distance_to(pos) < radius + site.footprint * 0.5:
+				site.wreck()
+
+	# The giants: a blast is one good blow to the one on the other side.
+	var giants: Array[Node] = []
+	if hostile:
+		giants.append(Game.creature)
+	else:
+		giants = tree.get_nodes_in_group("balrogs")
+	for node in giants:
+		var giant := node as Creature
+		if not is_instance_valid(giant):
+			continue
+		var flat := Vector2(giant.global_position.x - pos.x, giant.global_position.z - pos.z).length()
+		if flat < radius * 0.75 + 2.0 * giant.size and absf(giant.global_position.y + 4.0 * giant.size - pos.y) < radius + 6.0 * giant.size:
+			giant.take_hit(Balance.num("fireball_damage") * power, null)
 
 	for node in tree.get_nodes_in_group("villagers"):
 		var v := node as Villager
-		if v == null:
+		if v == null or (hostile and v.goblin):
 			continue
 		var dist := v.global_position.distance_to(pos)
-		var harm := Balance.num("fireball_damage")
+		var harm := Balance.num("fireball_damage") * power
 		if friendly < 1.0 and v.owned:
 			# The creature's fireball only singes the player's own people.
 			if dist < radius * 0.75:
@@ -68,7 +88,7 @@ static func detonate(pos: Vector3, radius: float, friendly := 1.0) -> void:
 
 	Game.alarm(pos, radius * 4.0)
 	Game.effects.push_debris(pos, radius * 1.5, 14.0)
-	for k in (randi_range(4, 7) if friendly >= 1.0 else 2):
+	for k in (randi_range(4, 7) if friendly >= 1.0 and not hostile else 2):
 		var a := randf() * TAU
 		var r := randf_range(1.0, radius * 0.8)
 		Game.fire.start_fire(pos + Vector3(cos(a) * r, 0.0, sin(a) * r), 0)

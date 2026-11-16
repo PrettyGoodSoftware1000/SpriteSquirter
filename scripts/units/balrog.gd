@@ -12,6 +12,10 @@ extends Creature
 ## marches with every midnight raid, by a painted goblin path if the map
 ## has one, and knocks the village's buildings down with its stomps.
 ##
+## It smoulders: smoke and sparks rise from it, the cracks in its hide
+## glow, and every step leaves a small fire that burns out by itself
+## without spreading.
+##
 ## From "balrog_fireball_size" of its full size it spits a fireball every
 ## "balrog_fireball_seconds" at whatever group of enemies it can see. It has
 ## two little wings and cannot fly. It always walks at "balrog_speed", a
@@ -26,11 +30,12 @@ signal grew_up
 const SPEC := {
 	"name": "Balrog", "model": "res://assets/creature/balrog.glb", "speed": 2.3,
 	"nervous": 0.0,
-	"eye": Vector3(0.68, 0.55, 1.2), "eye_size": 0.3, "eye_color": Color(0.72, 0.36, 1.0), "eye_glow": 1.8,
+	"eye_size": 0.28, "eye_color": Color(0.72, 0.36, 1.0), "eye_glow": 1.8,
 	"lid_color": Color(0.125, 0.075, 0.07), "lid_y": [0.26, 0.16], "lid_tilt": [0.45, 0.62], "pupil": [1.0, 1.0],
-	"mouth": [0.8, -0.27, 1.88, 0.5], "frown": [0.22, 0.3], "mouth_color": Color(1.6, 0.62, 0.1),
-	"arm": Vector3(0.35, -1.0, 0.2), "elbow": -0.35,
-	"crack_glow": Color(0.95, 0.24, 0.03),
+	# (No drawn mouth: the model's jaws hang open on a glowing throat.)
+	"eye": Vector3(0.62, 0.62, 1.1), "frown": [0.22, 0.3],
+	"arm": Vector3(0.3, -1.0, 0.2), "elbow": -0.35,
+	"crack_glow": Color(1.5, 0.36, 0.04),
 }
 ## How long the body lies there before it crumbles.
 const DEATH_SECONDS := 9.0
@@ -52,6 +57,8 @@ var _fire_ready_at := 0.0
 var _stroll_at := 0.0
 var _dead_for := -1.0
 var _was_grown := false
+var _smoke: CPUParticles3D
+var _sparks: CPUParticles3D
 
 
 func _init() -> void:
@@ -64,6 +71,20 @@ func _ready() -> void:
 	add_to_group("balrogs")
 	knocked_down.connect(_on_killed)
 	_fire_ready_at = Game.now + 5.0
+	# Smoke off its back and sparks from the cracks. (They ride on the
+	# model, so they shrink and grow with it.)
+	_smoke = Game.effects.make_smoke(1.6)
+	_smoke.amount = 14
+	_smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_smoke.emission_box_extents = Vector3(2.2, 2.5, 1.4)
+	add_child(_smoke)
+	_smoke.position = Vector3(0, 7.0, -0.5)
+	_sparks = Game.effects.make_embers(2.4)
+	_sparks.amount = 22
+	_sparks.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_sparks.emission_box_extents = Vector3(2.4, 3.2, 1.5)
+	add_child(_sparks)
+	_sparks.position = Vector3(0, 5.5, 0)
 
 
 ## Puts the balrog at its post in front of `at`.
@@ -114,7 +135,15 @@ func _process(delta: float) -> void:
 		grew_up.emit()
 
 
+## Every step leaves a little fire behind.
+func _on_footfall(pos: Vector3) -> void:
+	super._on_footfall(pos)
+	if not knocked_out:
+		Game.fire.start_fire(pos, 0, 0.35 + 0.9 * size, true)
+
+
 func _on_killed() -> void:
+	_sparks.emitting = false
 	# Dead, not knocked out: it never gets up.
 	_ko_timer = INF
 	_dead_for = 0.0

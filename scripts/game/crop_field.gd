@@ -123,6 +123,11 @@ func work_spot() -> Vector3:
 	return to_global(Vector3(randf_range(-0.45, 0.45) * size.x, 0.0, randf_range(-0.45, 0.45) * size.y))
 
 
+## True while rain is making the wheat grow faster.
+func is_wet() -> bool:
+	return _wet > 0.0
+
+
 func contains(p: Vector3, margin := 0.0) -> bool:
 	return in_rect(p, global_position, size, rotation.y, margin)
 

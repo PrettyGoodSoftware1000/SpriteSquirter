@@ -34,11 +34,21 @@ extends Node3D
 ## Giants fight each other with their fists (Action.STRIKE): the player's
 ## creature and the Balrog are each other's `_rival()`.
 ##
-## The raven flies (see _should_fly): on any journey longer than Balance
+## The raven flies (see _should_hurry): on any journey longer than Balance
 ## "raven_fly_distance", over ground that climbs steeply, and to get out of
 ## a fight. In the air nothing on the ground can reach it and it treads on
 ## nothing. Hurt below "raven_flee_health" it flees a fight by itself, and
 ## keeps out of trouble until it has healed to "raven_return_health".
+##
+## The squirrel runs on all fours where the raven would fly: half as fast
+## again, and no slope slows it. Both use up stamina, and must stop when it
+## is gone. The tortoise can do neither, but when it is hurt it may pull
+## into its shell, where blows do a fifth of their harm. Flying, running
+## and hiding are all things the player can Bless or Curse (the shell
+## separately at low, middling and high health: see CreatureMind).
+##
+## Stamina, and the magicko the creature's own spells cost, each level up
+## with use (see _note_drain): 10% more of it and 20% faster back.
 ##
 ## The face is drawn on top of the model: eyeballs, pupils that look about,
 ## lids that blink and slant with its mood, and an inked mouth line that
@@ -53,7 +63,7 @@ const START_SIZE := 0.15
 const SPECIES := {
 	"tortoise": {
 		"name": "Tortoise", "model": "res://assets/creature/creature.glb", "speed": 3.6,
-		"nervous": 0.0,
+		"nervous": 0.0, "shell": true,
 		"eye": Vector3(0.74, 0.5, 1.22), "eye_size": 0.34, "eye_color": Color(0.96, 0.94, 0.84),
 		"lid_color": Color(0.36, 0.38, 0.2), "lid_y": [0.2, 0.14], "lid_tilt": [-0.38, 0.5], "pupil": [1.0, 0.72],
 		# Mouth: half width, height, how far forward, how far its corners curve back.
@@ -62,7 +72,7 @@ const SPECIES := {
 	},
 	"squirrel": {
 		"name": "Squirrel", "model": "res://assets/creature/squirrel.glb", "speed": 3.6 * 1.3,
-		"nervous": 1.0,
+		"nervous": 1.0, "runs": true,
 		"eye": Vector3(0.66, 0.85, 1.27), "eye_size": 0.42, "eye_color": Color(1.0, 0.98, 0.8),
 		"lid_color": Color(0.8, 0.36, 0.13), "lid_y": [0.5, 0.62], "lid_tilt": [-0.3, -0.5], "pupil": [0.62, 0.42],
 		"mouth": [0.55, -0.02, 1.8, 0.2], "frown": [0.1, 0.18],
@@ -73,8 +83,8 @@ const SPECIES := {
 	"raven": {
 		"name": "Raven", "model": "res://assets/creature/raven.glb", "speed": 3.6,
 		"nervous": 0.25, "flies": true,
-		# Blank eyes that glow, and a beak in place of a drawn mouth.
-		"eye": Vector3(0.63, 0.62, 1.18), "eye_size": 0.3, "eye_color": Color(0.82, 0.9, 1.0), "eye_glow": 1.5,
+		# Blank pale eyes, and a beak in place of a drawn mouth.
+		"eye": Vector3(0.63, 0.62, 1.18), "eye_size": 0.3, "eye_color": Color(0.9, 0.93, 0.96), "blank_eyes": true,
 		"lid_color": Color(0.105, 0.12, 0.21), "lid_y": [0.34, 0.2], "lid_tilt": [0.2, 0.55], "pupil": [1.0, 1.0],
 		"jaw_rest": -0.1,
 		"arm": Vector3(0.3, -1.0, 0.12), "elbow": -0.25,
@@ -109,6 +119,8 @@ const STRIKE_LANDS := 0.6
 const SHORT_HOP := 8.0
 ## Arms held out in front, for carrying a tree or a boulder.
 const CARRY_POSE := Vector3(0.25, 0.15, 1.0)
+## Arms reaching for the ground in front, for running on all fours.
+const RUN_POSE := Vector3(0.14, -0.5, 0.95)
 
 enum Action { NONE, STOMP, GRAB, STRIKE }
 
@@ -133,6 +145,17 @@ var hostile := false
 var flying := false
 ## Hurt and keeping away from enemies until it has healed (the raven).
 var fleeing := false
+## On all fours and going fast (the squirrel).
+var running := false
+## Pulled into its shell (the tortoise).
+var hiding := false
+## Stamina (for running and flying) and the magicko its spells cost.
+var stamina := 100.0
+var max_stamina := 100.0
+var magicko := 100.0
+var max_magicko := 100.0
+## How many times each has levelled up.
+var levels := {"stamina": 0, "magicko": 0}
 ## Knowledge, likes and dislikes, and what it does when left alone.
 var mind: CreatureMind
 ## A tree, boulder or sheaf the creature is carrying in its arms.
@@ -222,6 +245,18 @@ var _flight_length := 0.0
 var _flee_until := 0.0
 var _flee_again_at := 0.0
 var _struck := false
+## Too tired to run or fly until some stamina is back.
+var _tired := false
+## How many times each bar has been run down since its last level, and
+## whether it has come back up far enough for the next time to count.
+var _drains := {"stamina": 0, "magicko": 0}
+var _armed := {"stamina": true, "magicko": true}
+var _run := 0.0
+var _gallop := 0.0
+var _shell := 0.0
+var _hid_at := 0.0
+var _last_hit_at := -100.0
+var _shell_think_at := 0.0
 
 
 func _ready() -> void:
@@ -231,6 +266,10 @@ func _ready() -> void:
 	_arm_want = _spec.arm
 	_build()
 	_grow(0.0)
+	max_stamina = Balance.num("creature_stamina")
+	stamina = max_stamina
+	max_magicko = Balance.num("creature_magicko")
+	magicko = max_magicko
 	mind = CreatureMind.new()
 	mind.name = "Mind"
 	add_child(mind)
@@ -269,6 +308,89 @@ func _rival() -> Creature:
 ## True if this giant is out to hurt the village right now (the Balrog).
 func is_threat() -> bool:
 	return false
+
+
+# --- Stamina and magicko ------------------------------------------------------
+
+## Stamina drains while it runs or flies and comes back otherwise; magicko
+## comes back all the time.
+func _update_stats(delta: float) -> void:
+	if hostile:
+		return
+	if flying or running:
+		stamina -= Balance.num("fly_stamina_per_second" if flying else "run_stamina_per_second") * delta
+		if stamina <= 0.0:
+			stamina = 0.0
+			_tired = true
+			running = false
+	elif not knocked_out:
+		stamina = minf(max_stamina, stamina + Balance.num("creature_stamina_regen") * pow(1.0 + Balance.num("level_regen_gain"), levels.stamina) * delta)
+	if _tired and stamina >= max_stamina * 0.3:
+		_tired = false
+	if not knocked_out:
+		magicko = minf(max_magicko, magicko + Balance.num("creature_magicko_regen") * pow(1.0 + Balance.num("level_regen_gain"), levels.magicko) * delta)
+	_note_drain("stamina", stamina / max_stamina)
+	_note_drain("magicko", magicko / max_magicko)
+
+
+## Counts the times a bar is run down to a quarter (it must come back to
+## half before the next time counts). The first level takes 2 such times,
+## the next 3, then 4, and 5 from then on. A level makes the bar 10%
+## bigger and 20% quicker to refill.
+func _note_drain(stat: String, share: float) -> void:
+	if _armed[stat]:
+		if share > 1.0 - Balance.num("level_drain_share"):
+			return
+		_armed[stat] = false
+		_drains[stat] += 1
+		if _drains[stat] < drains_needed(stat):
+			return
+		_drains[stat] = 0
+		levels[stat] += 1
+		var gain := 1.0 + Balance.num("level_max_gain")
+		if stat == "stamina":
+			max_stamina *= gain
+		else:
+			max_magicko *= gain
+		say("The %s's %s grew! Level %d" % [species_name().to_lower(), stat, levels[stat] + 1], Color(0.6, 1.0, 0.7))
+	elif share >= 0.5:
+		_armed[stat] = true
+
+
+## How many times `stat` must be run down for its next level.
+func drains_needed(stat: String) -> int:
+	return mini(2 + int(levels[stat]), 5)
+
+
+func drains_done(stat: String) -> int:
+	return _drains[stat]
+
+
+## Pays for one of its own spells. False if it has not the magicko.
+func spend_magicko(cost: float) -> bool:
+	if magicko < cost:
+		return false
+	magicko -= cost
+	return true
+
+
+# --- The shell (the tortoise) ---------------------------------------------------
+
+## "shell_low", "shell_mid" or "shell_high": hiding counts as a different
+## thing to Bless or Curse depending on how hurt the tortoise is.
+func shell_action() -> String:
+	var share := hp / maxf(max_hp, 1.0)
+	return "shell_low" if share < 0.34 else ("shell_mid" if share < 0.67 else "shell_high")
+
+
+func _hide() -> void:
+	hiding = true
+	_hid_at = Game.now
+	_cancel_action()
+	_turning = false
+	running = false
+	var how: String = {"shell_low": "badly hurt", "shell_mid": "hurt", "shell_high": "barely hurt"}[shell_action()]
+	mind.did(shell_action(), "The %s hid in its shell, %s (%d%% health)" % [species_name().to_lower(), how, roundi(100.0 * hp / maxf(max_hp, 1.0))])
 
 
 ## True while it is too high for anything on the ground to reach.
@@ -310,16 +432,26 @@ func _grow(delta: float) -> void:
 func take_hit(amount: float, _from: Node3D) -> void:
 	if knocked_out:
 		return
+	if hiding:
+		amount *= Balance.num("shell_damage_share")
 	hp -= amount
 	_hurt_timer = 6.0
+	_last_hit_at = Game.now
 	_cast_timer = maxf(_cast_timer, 0.25)
 	if hp > 0.0:
 		if _spec.get("flies", false) and not fleeing and hp < max_hp * Balance.num("raven_flee_health"):
 			_flee()
+		if _spec.get("shell", false) and not hiding and Game.now >= _shell_think_at:
+			# Hurt in a fight: into the shell, if it is that way inclined.
+			_shell_think_at = Game.now + Balance.num("shell_think_seconds")
+			if randf() * 100.0 < mind.weight(shell_action()):
+				_hide()
 		return
 	hp = 0.0
 	knocked_out = true
 	fleeing = false
+	hiding = false
+	running = false
 	_ko_timer = Balance.num("creature_knockout_seconds")
 	_cancel_action()
 	has_target = false
@@ -357,8 +489,8 @@ func move_to(pos: Vector3) -> void:
 	_look_at = pos
 	mind.player_moved(pos)
 	_flight_length = _flat(pos, global_position)
-	if _should_fly(pos, true):
-		_take_off()
+	if _should_hurry(pos, true):
+		_hurry()
 
 
 ## The creature goes somewhere of its own accord. (Chasing enemies and the
@@ -369,25 +501,35 @@ func auto_move(pos: Vector3) -> void:
 	_auto = true
 	_look_at = pos
 	_flight_length = _flat(pos, global_position)
-	if _should_fly(pos):
-		_take_off()
+	if _should_hurry(pos):
+		_hurry()
 
 
-# --- Flying (the raven) -------------------------------------------------------
+# --- Flying (the raven) and running (the squirrel) ------------------------------
 
-## True if the raven would rather fly to `pos` than walk: it is a long
-## way, the ground climbs steeply on the way, or it is running from a
-## fight (by itself, or because the player has `ordered` it away).
-func _should_fly(pos: Vector3, ordered := false) -> bool:
-	if flying:
+## "fly", "run" or "": the fast way this creature has of getting about.
+func haste() -> String:
+	return "fly" if _spec.get("flies", false) else ("run" if _spec.get("runs", false) else "")
+
+
+## True if the raven would rather fly to `pos` than walk (or the squirrel
+## run): it is a long way, the ground climbs steeply on the way, or it is
+## getting out of a fight (by itself, or because the player has `ordered`
+## it away). How keen it is on flying or running (Bless and Curse) counts:
+## keener, and shorter journeys are worth it; less keen, and it often
+## walks; not keen at all, and it always does.
+func _should_hurry(pos: Vector3, ordered := false) -> bool:
+	var how := haste()
+	if how == "" or flying or running or _tired or hiding:
 		return false
-	if not _spec.get("flies", false) or knocked_out or Game.now < snared_until:
+	if knocked_out or Game.now < snared_until or (how == "run" and is_instance_valid(carrying)):
 		return false
+	var keen := mind.weight(how) / 50.0
 	var d := _flat(pos, global_position)
-	if d > Balance.num("raven_fly_distance"):
-		return true
-	if d < SHORT_HOP:
+	if keen <= 0.0 or d < SHORT_HOP or randf() > keen:
 		return false
+	if d > Balance.num("raven_fly_distance" if how == "fly" else "squirrel_run_distance") / keen:
+		return true
 	if fleeing or (ordered and (_alert or _action != Action.NONE)):
 		return true
 	# Look for a climb on the way.
@@ -401,6 +543,17 @@ func _should_fly(pos: Vector3, ordered := false) -> bool:
 			return true
 		last = h
 	return false
+
+
+## Takes to the air, or drops to all fours and runs.
+func _hurry() -> void:
+	mind.did(haste())
+	if haste() == "fly":
+		_take_off()
+		return
+	_cancel_action()
+	running = true
+	_turning = false
 
 
 func _take_off() -> void:
@@ -461,7 +614,8 @@ func _flee() -> void:
 	_auto = true
 	_look_at = best
 	_flight_length = _flat(best, global_position)
-	if not flying and Game.now >= snared_until and _flat(best, global_position) > 2.0:
+	if not flying and not _tired and Game.now >= snared_until and _flat(best, global_position) > 2.0:
+		mind.did("fly")
 		_take_off()
 
 
@@ -475,12 +629,13 @@ func _update_flight(delta: float) -> void:
 	var dist := to.length()
 	var desired_speed := 0.0
 	# It starts down a little way short of the target (half way, on a short hop).
-	var landing := knocked_out or not has_target or dist < maxf(minf(cruise * 1.3, _flight_length * 0.5), 3.0)
+	# (Out of stamina, it comes down wherever it is and walks the rest.)
+	var landing := knocked_out or _tired or not has_target or dist < maxf(minf(cruise * 1.3, _flight_length * 0.5), 3.0)
 	if has_target and not knocked_out:
 		if dist < 0.8:
 			has_target = false
 			_auto = false
-		else:
+		elif not _tired:
 			var want := atan2(to.x, to.z)
 			heading = rotate_toward(heading, want, turn_speed * 2.2 * delta)
 			var facing := cos(angle_difference(heading, want))
@@ -589,7 +744,14 @@ func _process(delta: float) -> void:
 	_time += delta
 	_cast_timer = maxf(0.0, _cast_timer - delta)
 	_grow(delta)
-	if not knocked_out and not flying:
+	_update_stats(delta)
+	if hiding and (Game.now - _last_hit_at > Balance.num("shell_calm_seconds") or Game.now - _hid_at > Balance.num("shell_max_seconds")):
+		# Nothing has hit it for a while (or it cannot stay in for ever).
+		hiding = false
+		_shell_think_at = Game.now + Balance.num("shell_think_seconds")
+	if running and (not has_target or knocked_out or Game.now < snared_until):
+		running = false
+	if not knocked_out and not flying and not running and not hiding:
 		_update_attacks(delta)
 	if flying:
 		_update_flight(delta)
@@ -600,7 +762,7 @@ func _process(delta: float) -> void:
 	_update_legs()
 	_update_face(delta)
 	if _action == Action.NONE:
-		_arm_want = CARRY_POSE if is_instance_valid(carrying) else _spec.arm
+		_arm_want = CARRY_POSE if is_instance_valid(carrying) else (RUN_POSE if _run > 0.3 else _spec.arm)
 	if is_instance_valid(carrying):
 		carrying.global_position = (_hand_pos(0) + _hand_pos(1)) * 0.5 + Vector3.UP * 0.4 * size
 		carrying.rotation.y = heading
@@ -622,20 +784,23 @@ func _update_locomotion(delta: float) -> void:
 			heading = rotate_toward(heading, want, turn_speed * (COMBAT_TURN if _alert else 1.0) * delta)
 			var facing := cos(angle_difference(heading, want))
 			desired_speed = _top_speed() * clampf(facing, 0.0, 1.0) * clampf(dist / 5.0, 0.25, 1.0)
+			if running:
+				desired_speed *= Balance.num("squirrel_run_speed")
 	if _action != Action.NONE or _turning:
 		# Stand still and face the goblins.
 		desired_speed = 0.0
 		var facing_to := _action_point - global_position
 		heading = rotate_toward(heading, atan2(facing_to.x, facing_to.z), turn_speed * 1.6 * COMBAT_TURN * delta)
-	if Game.now < snared_until or knocked_out:
+	if Game.now < snared_until or knocked_out or hiding:
 		desired_speed = 0.0
 		speed = 0.0
-	# Uphill is slow going for a creature too.
-	var ahead := Vector3(sin(heading), 0.0, cos(heading)) * 2.0 * maxf(size, 0.3)
-	var rise := (Game.terrain.get_height(global_position.x + ahead.x, global_position.z + ahead.z)
-		- Game.terrain.get_height(global_position.x, global_position.z)) / ahead.length()
-	desired_speed *= lerpf(1.0, Balance.num("slope_slowest"), clampf((rise - Balance.num("slope_slow_from")) / 0.6, 0.0, 1.0))
-	speed = move_toward(speed, desired_speed, 3.0 * delta)
+	# Uphill is slow going for a creature too (but not for one on all fours).
+	if not running:
+		var ahead := Vector3(sin(heading), 0.0, cos(heading)) * 2.0 * maxf(size, 0.3)
+		var rise := (Game.terrain.get_height(global_position.x + ahead.x, global_position.z + ahead.z)
+			- Game.terrain.get_height(global_position.x, global_position.z)) / ahead.length()
+		desired_speed *= lerpf(1.0, Balance.num("slope_slowest"), clampf((rise - Balance.num("slope_slow_from")) / 0.6, 0.0, 1.0))
+	speed = move_toward(speed, desired_speed, (6.0 if running else 3.0) * delta)
 	rotation.y = heading
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
 	var p := global_position + fwd * speed * delta
@@ -827,13 +992,13 @@ func _update_attacks(delta: float) -> void:
 		# Nothing in reach: go after raiders, unless the player sent us somewhere.
 		# (A little one stays out of it.)
 		if hunting and size >= 0.35 and (not has_target or _auto) and Game.now >= snared_until:
-			if _should_fly(hunt_pos):
-				auto_move(hunt_pos)
-				return
 			target = hunt_pos
 			has_target = true
 			_auto = true
 			_look_at = target
+			_flight_length = _flat(hunt_pos, global_position)
+			if _should_hurry(hunt_pos):
+				_hurry()
 		return
 	if _auto:
 		has_target = false
@@ -1120,9 +1285,19 @@ func _update_body(delta: float) -> void:
 	if aloft > 0.0:
 		pace = minf(pace, 1.0) * (1.0 - aloft)
 		stoop *= 1.0 - aloft
-	_bob = lerpf(_bob, swing * 0.3 - 0.3 * pace - 0.12 + breath * 0.03 - stoop * 0.9, blend)
-	_sway = lerpf(_sway, sway_target, blend)
-	_lean = lerpf(_lean, pace * 0.14 + stoop * 0.42 + aloft * 1.2, blend)
+	# On all fours the body is low and level, and bounds along.
+	_run = move_toward(_run, 1.0 if running and speed > 0.3 * max_speed * size else 0.0, delta * 3.0)
+	var prone := smoothstep(0.0, 1.0, _run)
+	_gallop += delta * (6.0 + 5.0 * minf(pace, 2.0)) * (1.5 - 0.5 * size)
+	var bound := sin(_gallop) * prone
+	# In its shell the body sits on the ground.
+	_shell = move_toward(_shell, 1.0 if hiding else 0.0, delta * 2.5)
+	var tucked := smoothstep(0.0, 1.0, _shell)
+	pace = minf(pace, 1.3)
+	_bob = lerpf(_bob, swing * 0.3 * (1.0 - tucked) - 0.3 * pace - 0.12 + breath * 0.03 - stoop * 0.9
+		- prone * (float(_spec.get("run_drop", 1.9)) + 0.25 * bound) - tucked * float(_spec.get("shell_drop", 2.3)), blend)
+	_sway = lerpf(_sway, sway_target * (1.0 - tucked), blend)
+	_lean = lerpf(_lean, pace * 0.14 + stoop * 0.42 + aloft * 1.2 + prone * (0.72 + 0.1 * bound), blend)
 
 	# A nervous creature shivers, and its head jerks about.
 	var shiver := Vector3(sin(_time * 31.0), sin(_time * 37.0), 0.0) * 0.035 * nervous
@@ -1142,8 +1317,14 @@ func _update_body(delta: float) -> void:
 	_look_yaw = lerpf(_look_yaw, want_yaw + sin(_time * 0.6) * 0.08, 1.0 - exp(-4.0 * delta))
 	var casting := _cast_timer > 0.0
 	# The tortoise hangs its head, and lifts it when something startles it.
-	var nod := 0.16 - _bob * 0.12 - (0.3 if casting else 0.0) - _lean * 0.8 + (0.6 if knocked_out else 0.0)
+	var nod := 0.16 - (_bob + prone * float(_spec.get("run_drop", 1.9))) * 0.12 * (1.0 - tucked) - (0.3 if casting else 0.0) - _lean * 0.8 + (0.6 if knocked_out else 0.0)
 	_skel.set_bone_pose_rotation(_bone["neck"], Quaternion.from_euler(Vector3(nod * 0.5, _look_yaw * 0.5, 0.0)))
+	# Head, arms and tail shrink away into the shell.
+	var pulled := Vector3.ONE * lerpf(1.0, 0.08, tucked)
+	_skel.set_bone_pose_scale(_bone["neck"], pulled)
+	_skel.set_bone_pose_scale(_bone["tail1"], pulled)
+	_skel.set_bone_pose_scale(_bone["arm_upper_l"], pulled)
+	_skel.set_bone_pose_scale(_bone["arm_upper_r"], pulled)
 	_skel.set_bone_pose_rotation(_bone["head"], Quaternion.from_euler(Vector3(nod * 0.5, _look_yaw * 0.5 + _twitch, _sway * 0.5)))
 	_jaw = lerpf(_jaw, maxf(0.4 if casting else 0.03 + 0.02 * breath, _jaw_want), 1.0 - exp(-14.0 * delta))
 	_skel.set_bone_pose_rotation(_bone["jaw"], Quaternion(Vector3.RIGHT, _jaw + float(_spec.get("jaw_rest", 0.0))))
@@ -1156,6 +1337,9 @@ func _update_body(delta: float) -> void:
 	# (The nervous one wrings its paws.)
 	var swing_targets: Array[float] = [stride * 0.16 / size + sin(_time * 7.0) * 0.08 * nervous,
 		-stride * 0.16 / size + sin(_time * 7.0 + 2.1) * 0.08 * nervous]
+	if prone > 0.0:
+		# Both front paws reach and pull together, one a little behind.
+		swing_targets = [lerpf(swing_targets[0], 0.75 * sin(_gallop + 1.6), prone), lerpf(swing_targets[1], 0.75 * sin(_gallop + 2.1), prone)]
 	_arm_pose = _arm_pose.lerp(_arm_want, 1.0 - exp(-9.0 * delta))
 	_fore_blend = lerpf(_fore_blend, 1.0 if _arm_want == _spec.arm else 0.0, blend)
 	for k in 2:
@@ -1165,7 +1349,7 @@ func _update_body(delta: float) -> void:
 		var hang := Vector3(_side(k) * _arm_pose.x, _arm_pose.y, _arm_pose.z).normalized()
 		var upper := Quaternion(Vector3.RIGHT, _arm_swing[k]) * Quaternion(rest_dir, hang)
 		_skel.set_bone_pose_rotation(_bone["arm_upper_" + side], upper)
-		var bend: float = _spec.elbow - 0.3 * maxf(-_arm_swing[k], 0.0) - 0.1 * pace
+		var bend: float = _spec.elbow * (1.0 - 0.6 * prone) - 0.3 * maxf(-_arm_swing[k], 0.0) - 0.1 * pace
 		var lower := Quaternion(Vector3.RIGHT, bend) * Quaternion(Vector3.BACK, _side(k) * 0.2)
 		if _spec.has("fore"):
 			# Point the forearm where the species holds it at rest, whatever
@@ -1222,6 +1406,13 @@ func _update_legs() -> void:
 		var hip: Vector3 = pelvis * (_rest["thigh_" + side] - _rest["pelvis"])
 		var sole := _foot_pos(k)
 		var ankle: Vector3 = to_skel * (sole + Vector3.UP * ANKLE_HEIGHT * size)
+		var small := lerpf(1.0, 0.1, smoothstep(0.0, 1.0, _shell))
+		if small < 1.0:
+			# Drawn up into the shell.
+			_skel.set_bone_global_pose(_bone["thigh_" + side], Transform3D(Basis().scaled(Vector3.ONE * small), hip))
+			_skel.set_bone_global_pose(_bone["shin_" + side], Transform3D(Basis().scaled(Vector3.ONE * small), hip + Vector3(0, -0.2, 0.05)))
+			_skel.set_bone_global_pose(_bone["foot_" + side], Transform3D(Basis().scaled(Vector3.ONE * small), hip + Vector3(0, -0.4, 0.05)))
+			continue
 		if flying or aloft > 0.0:
 			# Legs trail under the body, knees a little bent.
 			var tucked: Vector3 = pelvis * Vector3(_side(k) * _foot_spread * 0.85, -(_thigh_length + _shin_length) * 0.84, 0.9)
@@ -1302,6 +1493,7 @@ func _build() -> void:
 	attach.bone_name = "head"
 	var paint := Art.paint("plaster", 0.25)
 	var glowing: bool = _spec.has("eye_glow")
+	var blank: bool = _spec.get("blank_eyes", false)
 	var whites := MeshBuilder.new()
 	whites.color = Color.WHITE if glowing else _spec.eye_color
 	var e: float = _spec.eye_size
@@ -1311,6 +1503,13 @@ func _build() -> void:
 		var centre := Vector3(s * eye.x, eye.y, eye.z)
 		_eye_centres.append(centre)
 		whites.add_blob(Vector3(e, e, e * 0.88), Transform3D(Basis(), centre), null, 0.0, 8, 12)
+		if blank:
+			# No pupils: only the lids move.
+			var cover := MeshBuilder.new()
+			cover.color = _spec.lid_color
+			cover.add_blob(Vector3(1.24, 0.88, 1.12) * e, Transform3D.IDENTITY, null, 0.0, 6, 10)
+			_lids.append(_face_part(attach, cover.commit(), paint))
+			continue
 		# Glowing eyes are blank: only a faint brighter spot looks about.
 		var pupil := MeshBuilder.new()
 		if glowing:
@@ -1408,15 +1607,16 @@ func _update_face(delta: float) -> void:
 		_blink_timer = randf_range(2.5, 6.0) / (1.0 + 1.5 * nervous)
 		_blink = 0.14
 	_blink = maxf(0.0, _blink - delta)
-	var shut := 1.0 if _blink > 0.0 or knocked_out else 0.0
+	var shut := 1.0 if _blink > 0.0 or knocked_out or hiding else 0.0
 	var lid_y: Array = _spec.lid_y
 	var lid_tilt: Array = _spec.lid_tilt
 	var pupil: Array = _spec.pupil
 	for k in 2:
 		var s := _side(k)
 		var c := _eye_centres[k]
-		_pupils[k].position = c + Vector3(_gaze.x - s * 0.04, _gaze.y - 0.04, 0.25 - 1.2 * _gaze.length_squared()) * e
-		_pupils[k].scale = Vector3.ONE * lerpf(pupil[0], pupil[1], _anger)
+		if k < _pupils.size():
+			_pupils[k].position = c + Vector3(_gaze.x - s * 0.04, _gaze.y - 0.04, 0.25 - 1.2 * _gaze.length_squared()) * e
+			_pupils[k].scale = Vector3.ONE * lerpf(pupil[0], pupil[1], _anger)
 		# The tortoise's sad lids droop outwards, and when it is angry they
 		# slant down to the nose and sit lower. The squirrel's lift in fright.
 		_lids[k].rotation.z = s * lerpf(lid_tilt[0], lid_tilt[1], _anger)

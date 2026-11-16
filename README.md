@@ -139,11 +139,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    and go home in the morning. Every cave that was there when the game
    began keeps spawning goblins (1 a minute at first, half a goblin more
    per minute every night; both in the dev menu).
-   Once a raid has 15 goblins an **ogre** with a spiked club joins it, and another for
-   every 15 more: ten times a goblin's health, three times its damage, too
-   big to pick up or throw, and only singed by fire.
-   During a raid a **giant bat** flies out of a cave, snatches one of
-   your villagers at random and carries it back to the cave for good. A
+   **Ogres and giant bats come from goblin buildings.** Every **war hut**
+   the goblins finish adds an **ogre** with a spiked club (ten times a
+   goblin's health, three times its damage, too big to pick up or throw,
+   and only singed by fire); if it dies, the hut sends another at the next
+   midnight. Every **watchtower** sends a **giant bat** with each raid,
+   which snatches one of
+   your villagers at random and carries it back to a cave for good. Knock
+   the building down and no more come. A
    fireball or chain lightning brings it down, and a villager it was
    carrying drops and lives.
    The goblins have a giant of their own, the **balrog**: a horned demon
@@ -184,6 +187,16 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    it). It stops growing while the village has no food. Goblins attack a
    creature that comes close; at no health it is knocked out for 45
    seconds and then gets up with half its health. Left alone it heals.
+   **Health, stamina and magicko.** Three bars to the right of the spell
+   bar show the creature's own. The squirrel **runs** on all fours (long
+   journeys, steep slopes, getting out of a fight): half as fast again,
+   and no slope slows it. Running and the raven's flying use stamina, and
+   stop when it runs out. The tortoise can do neither, but when it is hit
+   it may pull into its **shell**, where blows do a fifth of the harm,
+   until nothing has hit it for 5 seconds. Each time a bar is run down to
+   a quarter counts towards its next **level** (2 times for the first, 3
+   for the next, then 4, then 5 every time): 10% more of it, refilling 20%
+   faster.
    **What it does by itself.** It wanders a little way from where you last
    sent it and comes back. When goblins raid, or hang about within 50 m of
    the village, it chases them, turning 30% faster in a fight. A line of
@@ -194,8 +207,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    learned it and casts it by itself when it suits (fireball at a knot of
    enemies away from your buildings, roots on a crowd of raiders, rain on a
    fire in the village, a blood sacrifice when magicko has run dry and
-   there are a dozen or more villagers). Each of its spells then rests for
-   3 minutes. Its fireball does your own villagers and buildings only a
+   there are a dozen or more villagers, and rain on growing wheat as well).
+   Each spell costs the creature its own magicko (25 to 35) and then rests
+   for half a minute. Its fireball does your own villagers and buildings only a
    tenth of the harm. For every 100 lumber, stone or food your villagers
    carry into the store it gains 25 knowledge of harvesting that; once
    learned it pulls up a tree or a boulder (or reaps ripe wheat) and
@@ -205,7 +219,13 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    press the key again, or click the creature, within 30 seconds of that
    action and it becomes keener on doing it again. **Curse** (red and
    creepy, 10 magicko) works the same way and makes it less keen. Every action starts at 50 out of 100 and moves 10 a time; at
-   0 it never does it. The creature cannot learn these two.
+   0 it never does it. The creature cannot learn these two. Running,
+   flying and raining on the crops can be blessed and cursed too (a
+   creature cursed for flying walks more; one blessed for it flies even
+   short trips). So can the tortoise's hiding, and that is judged
+   separately for when it is badly hurt, hurt, or barely hurt: bless it
+   for hiding at low health and curse it for hiding at full health, and
+   it learns when to.
 9. **Cast spells** from the spell bar at the bottom (keys 1 to 7, then click): **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while (and makes wheat under the cloud grow three
@@ -263,6 +283,8 @@ In the game, press **Esc** and **Show controls** for this list.
 | Goblin spawn rise | How much faster the caves spawn after every night |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
+| Goblin build speed | How many times as fast the goblins start and finish buildings |
+| Villager detail within | Villagers nearer the camera than this are drawn in full detail (default 60 m; lower it on a slow machine) |
 | Give 100 of everything | For testing |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; `[` and `]` change the brush size |
 | New random world (N) | Generate a brand-new island of the same size |

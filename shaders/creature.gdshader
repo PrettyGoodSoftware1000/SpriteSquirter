@@ -32,7 +32,9 @@ void fragment() {
 	// max() matters: at polygon edges the interpolated colour can dip below zero.
 	ALBEDO = pow(max(COLOR.rgb, vec3(0.0)), vec3(2.2)) * line * tone;
 	float lit = clamp(glow, 0.0, 1.0);
-	EMISSION = ALBEDO * lit * 1.3 + crack_glow * (1.0 - smoothstep(0.3, 0.4, d.r)) * scaly * (1.0 - lit);
+	// The glow breathes, like embers in a draught.
+	float ember = 0.75 + 0.25 * sin(TIME * 2.6 + rest_pos.y * 1.7 + rest_pos.x * 2.3);
+	EMISSION = ALBEDO * lit * 1.3 * ember + crack_glow * ember * (1.0 - smoothstep(0.3, 0.42, d.r)) * scaly * (1.0 - lit);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 }

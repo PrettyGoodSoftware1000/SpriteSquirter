@@ -112,6 +112,8 @@ func work_spot(index: int, count: int) -> Vector3:
 func add_work(villager_seconds: float) -> void:
 	if progress >= 1.0:
 		return
+	if goblin:
+		villager_seconds *= Game.settings.goblin_build_speed
 	progress = minf(1.0, progress + villager_seconds / work_needed)
 	_busy = 0.5
 	_update_visual()
@@ -158,6 +160,7 @@ func _complete() -> void:
 	b.global_position = global_position
 	b.rotation.y = rotation.y
 	b.add_to_group("goblin_buildings" if goblin else "player_buildings")
+	b.set_meta("kind", kind)
 	if bridge == null:
 		Game.terrain.add_bare(b.global_position, footprint + 1.5, 0.9)
 	Game.effects.spawn_dust(b.global_position, clampf(footprint * 0.6, 0.8, 2.5))

@@ -17,7 +17,9 @@ func count() -> int:
 	return _fires.size()
 
 
-func start_fire(pos: Vector3, generation := 0, size := 1.0) -> void:
+## A `tame` fire burns out in a few seconds without spreading or setting
+## anything alight (the Balrog's footprints).
+func start_fire(pos: Vector3, generation := 0, size := 1.0, tame := false) -> void:
 	if _fires.size() >= MAX_GROUND_FIRES:
 		return
 	var terrain := Game.terrain
@@ -29,16 +31,16 @@ func start_fire(pos: Vector3, generation := 0, size := 1.0) -> void:
 	var ground := Vector3(pos.x, h, pos.z)
 	for f in _fires:
 		var other: Vector3 = f.pos
-		if other.distance_to(ground) < 2.2:
+		if other.distance_to(ground) < (1.0 if tame else 2.2):
 			return
 	var emitter := FireEmitter.new()
 	emitter.size = size * randf_range(0.7, 1.0)
 	emitter.with_light = randf() < 0.35
 	add_child(emitter)
 	emitter.global_position = ground
-	_fires.append({"node": emitter, "pos": ground, "life": randf_range(6.0, 12.0),
-		"gen": generation, "timer": randf_range(0.6, 1.4)})
-	terrain.add_scorch(ground, 2.5, 0.4)
+	_fires.append({"node": emitter, "pos": ground, "life": randf_range(2.5, 4.5) if tame else randf_range(6.0, 12.0),
+		"gen": generation, "timer": randf_range(0.6, 1.4), "tame": tame})
+	terrain.add_scorch(ground, 2.5 * maxf(size, 0.4), 0.4)
 
 
 ## Soaks an area: puts out every fire in it and keeps it from burning
@@ -96,7 +98,7 @@ func _process(delta: float) -> void:
 		f.life -= delta
 		f.timer -= delta
 		var pos: Vector3 = f.pos
-		if f.timer <= 0.0:
+		if f.timer <= 0.0 and not f.tame:
 			f.timer = randf_range(1.2, 2.2)
 			ignite_near(pos, 3.5, 1.0)
 			var gen: int = f.gen

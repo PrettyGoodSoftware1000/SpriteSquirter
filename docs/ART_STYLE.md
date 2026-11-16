@@ -48,7 +48,7 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 |---|---|---|
 | Cel shading | `shaders/toon.gdshaderinc` | One light function shared by every lit shader: sunlight on or off, halftone dots where they meet. Shadow colour and darkness come from `ambient_color` / `ambient_energy` in `Atmosphere.MOODS`. |
 | Terrain inking | `shaders/terrain.gdshader` | Flat patches of colour, hatched pen strokes, an ink line where grass meets rock, dirt or sand. |
-| Characters | `scripts/units/villager.gd` (`_villager_near`, `_goblin_near`, ...) | Two meshes per look: simple far away, detailed within `LOD_NEAR`. Small black shapes (`INK`) draw eyes, brows, mouths and seams. |
+| Characters | `scripts/units/villager.gd` (`_villager_near`, `_goblin_near`, `_leg_parts`, `_arm_parts`, `_head`, ...) | Two sets of meshes per look: simple far away, detailed within the dev menu's villager detail distance. Legs and arms are each two meshes, hinged at the knee and the elbow. Small black shapes (`INK`) draw brows, mouths and seams. |
 | Tortoise face | `scripts/units/creature.gd` (`_update_face`, `_draw_mouth`) | Pupils, lids and the mouth line are separate pieces moved by code. |
 | Fire | `shaders/particle.gdshader` | Each particle is a flame tongue drawn by the shader, in hard bands of colour. |
 | Outlines | `shaders/outline.gdshader` | Second material pass: back faces pushed outwards, drawn black. |

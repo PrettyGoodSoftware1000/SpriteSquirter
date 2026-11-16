@@ -6,20 +6,27 @@ extends Node
 ## time, at Game.settings.goblin_rate per minute, and the rate goes up by
 ## goblin_rate_growth every night. Halfway through each night every goblin
 ## leaves its cave and marches on the village; in the morning the survivors
-## go home. Once a raid has GOBLINS_PER_OGRE goblins an ogre joins it, and
-## another for every GOBLINS_PER_OGRE more, and Balance "bats_per_raid"
-## giant bats fly out to carry villagers off. Call setup() with the DayCycle.
+## go home. Call setup() with the DayCycle.
+##
+## Ogres and giant bats come from what the goblins have built. Every war
+## hut (OGRE_HOME) keeps Balance "ogres_per_war_hut" ogres: they appear when
+## it is finished, and any that have died are replaced at the next
+## midnight. Every watchtower (BAT_HOME) sends "bats_per_watchtower" giant
+## bats with each raid to carry villagers off. No hut, no ogres; no tower,
+## no bats.
 ##
 ## The goblins have a giant of their own, the Balrog (Balance "balrogs" of
 ## them). It hatches at a cave soon after the village is founded, guards the
 ## cave while it grows, and marches with the raids once it is full grown.
 ## When one dies the next hatches "balrog_respawn_minutes" later.
 ##
-## The goblins build, too. Every Balance "goblin_build_minutes" they mark
+## The goblins build, too. Every Balance "goblin_build_minutes" (divided by
+## the dev menu's goblin build speed, which also hurries the builders) they mark
 ## out one of BuildingFactory.GOBLIN_KINDS near one of their caves, and up
 ## to BUILDERS goblins put it up, going back to the cave now and then for
 ## what they build with (the goblins' resources are not counted). They stop
-## at "goblin_buildings_max" buildings.
+## at "goblin_buildings_max" buildings. They build one of each kind, in a
+## random order, before starting on the kinds again.
 
 signal raid_started(goblins: int, ogres: int)
 signal raid_ended
@@ -29,7 +36,9 @@ signal balrog_came
 signal balrog_grown
 signal balrog_died
 
-const GOBLINS_PER_OGRE := 15
+## The goblin buildings that ogres and giant bats come from.
+const OGRE_HOME := "goblin_war_hut"
+const BAT_HOME := "goblin_watchtower"
 const BUILDERS := 3
 ## How near a painted path's ends must be to the goblin's cave and to the village.
 const PATH_SNAP := 45.0
@@ -47,6 +56,8 @@ var _build_timer := 0.0
 var _site_timer := 0.0
 ## Seconds until the next balrog hatches (if there is room for one).
 var _balrog_timer := 3.0
+## The kinds of building the goblins have yet to put up in this round.
+var _kinds_left: Array[String] = []
 ## Balrogs that set out with the raid that is on.
 var marching := 0
 
@@ -83,7 +94,7 @@ func _process(delta: float) -> void:
 			_balrog_timer = Balance.num("balrog_respawn_minutes") * 60.0
 			hatch_balrog()
 	_build_timer += delta
-	if _build_timer >= Balance.num("goblin_build_minutes") * 60.0:
+	if _build_timer >= Balance.num("goblin_build_minutes") * 60.0 / maxf(Game.settings.goblin_build_speed, 0.01):
 		_build_timer = 0.0
 		start_building()
 	_site_timer -= delta
@@ -114,9 +125,10 @@ func hatch_balrog() -> Balrog:
 
 # --- Building ---------------------------------------------------------------------
 
-## Marks out a new goblin building near a cave. Returns its site, or null
-## if the goblins have enough or there is no room.
-func start_building() -> ConstructionSite:
+## Marks out a new goblin building near a cave (`kind`, or one picked at
+## random). Returns its site, or null if the goblins have enough or there
+## is no room.
+func start_building(kind := "") -> ConstructionSite:
 	var tree := get_tree()
 	var have := tree.get_nodes_in_group("goblin_buildings").size() + tree.get_nodes_in_group("goblin_sites").size()
 	var caves: Array[Node3D] = []
@@ -125,7 +137,12 @@ func start_building() -> ConstructionSite:
 			caves.append(cave)
 	if caves.is_empty() or have >= roundi(Balance.num("goblin_buildings_max")):
 		return null
-	var kind: String = BuildingFactory.GOBLIN_KINDS[randi() % BuildingFactory.GOBLIN_KINDS.size()]
+	if kind == "":
+		# Each kind once, in a random order, before any comes round again.
+		if _kinds_left.is_empty():
+			_kinds_left.assign(BuildingFactory.GOBLIN_KINDS)
+			_kinds_left.shuffle()
+		kind = _kinds_left.back()
 	var footprint := 3.4
 	var terrain := Game.terrain
 	for attempt in 40:
@@ -143,12 +160,52 @@ func start_building() -> ConstructionSite:
 		var site := ConstructionSite.new()
 		site.setup(kind, randi(), {"resources": Balance.num(kind + "_resources")}, true)
 		site.set_meta("cave", cave)
+		site.completed.connect(_on_built)
 		Game.world_root.add_child(site)
 		site.global_position = Vector3(p.x, h, p.z)
 		# The door looks back towards the cave, more or less.
 		site.rotation.y = a + PI + randf_range(-0.6, 0.6)
+		_kinds_left.erase(kind)
 		return site
 	return null
+
+
+## A goblin building is finished. A war hut's ogres move in at once.
+func _on_built(building: Node3D) -> void:
+	if building.get_meta("kind", "") == OGRE_HOME:
+		_fill_hut(building)
+
+
+## The goblins' finished buildings of one kind that still stand.
+func standing(kind: String) -> Array[Destructible]:
+	var out: Array[Destructible] = []
+	for node in get_tree().get_nodes_in_group("goblin_buildings"):
+		var b := node as Destructible
+		if b != null and not b.destroyed and b.get_meta("kind", "") == kind:
+			out.append(b)
+	return out
+
+
+## Brings a war hut's ogres up to strength.
+func _fill_hut(hut: Node3D) -> void:
+	var living: Array = []
+	for node: Variant in hut.get_meta("ogres", []):
+		if is_instance_valid(node) and (node as Villager).is_alive():
+			living.append(node)
+	while living.size() < roundi(Balance.num("ogres_per_war_hut")):
+		var a := hut.rotation.y + PI * 0.5 + randf_range(-0.6, 0.6)
+		var front := Vector3(sin(a), 0.0, cos(a))
+		var ogre := Villager.new()
+		ogre.goblin = true
+		ogre.ogre = true
+		ogre.home = hut.global_position + front * 8.0
+		ogre.home_radius = 6.0
+		Game.world_root.add_child(ogre)
+		var door := hut.global_position + front * 5.0
+		ogre.global_position = Vector3(door.x, Game.terrain.get_height(door.x, door.z), door.z)
+		ogre.rotation.y = a
+		living.append(ogre)
+	hut.set_meta("ogres", living)
 
 
 func _site_ok(p: Vector3, footprint: float) -> bool:
@@ -239,7 +296,8 @@ func start_raid() -> void:
 	var village := Game.village
 	if village == null or not village.founded:
 		return
-	_muster_ogres()
+	for hut in standing(OGRE_HOME):
+		_fill_hut(hut)
 	var count := 0
 	var ogres := 0
 	for node in get_tree().get_nodes_in_group("goblins"):
@@ -260,12 +318,16 @@ func start_raid() -> void:
 	raiding = count + ogres + marching > 0
 	if raiding:
 		raid_started.emit(count, ogres)
-		for k in roundi(Balance.num("bats_per_raid")):
-			get_tree().create_timer(6.0 + 9.0 * k + randf() * 4.0, false).timeout.connect(launch_bat)
+		var k := 0
+		for tower in standing(BAT_HOME):
+			for n in roundi(Balance.num("bats_per_watchtower")):
+				get_tree().create_timer(6.0 + 9.0 * k + randf() * 4.0, false).timeout.connect(launch_bat.bind(tower))
+				k += 1
 
 
-## A giant bat flies out of one of the caves to carry off a villager.
-func launch_bat() -> GiantBat:
+## A giant bat flies off `from` (a watchtower, or else one of the caves) to
+## carry a villager off to a cave.
+func launch_bat(from: Node3D = null) -> GiantBat:
 	var caves: Array[Node3D] = []
 	for cave in _caves:
 		if is_instance_valid(cave):
@@ -275,7 +337,7 @@ func launch_bat() -> GiantBat:
 	var bat := GiantBat.new()
 	bat.cave = caves[randi() % caves.size()]
 	Game.world_root.add_child(bat)
-	bat.global_position = bat.cave.global_position + Vector3.UP * 7.0
+	bat.global_position = (from.global_position + Vector3.UP * 12.0) if is_instance_valid(from) else (bat.cave.global_position + Vector3.UP * 7.0)
 	bat.took.connect(func(_victim: Villager) -> void: bat_took.emit())
 	return bat
 
@@ -305,30 +367,6 @@ func _route_for(from: Vector3) -> PackedVector3Array:
 		var p := path[k] + aside
 		out.append(Vector3(p.x, 0.0, p.y))
 	return out
-
-
-## One ogre for every GOBLINS_PER_OGRE goblins in the raid. New ones come
-## out of the caves in turn.
-func _muster_ogres() -> void:
-	var caves := get_tree().get_nodes_in_group("caves")
-	if caves.is_empty():
-		return
-	var have := get_tree().get_nodes_in_group("ogres").size()
-	@warning_ignore("integer_division")
-	var wanted := (get_tree().get_nodes_in_group("goblins").size() - have) / GOBLINS_PER_OGRE
-	for k in range(have, wanted):
-		var cave := caves[k % caves.size()] as Node3D
-		var facing: float = cave.get_meta("facing", 0.0)
-		var front := Vector3(sin(facing), 0.0, cos(facing))
-		var ogre := Villager.new()
-		ogre.goblin = true
-		ogre.ogre = true
-		ogre.home = cave.global_position + front * 10.0
-		ogre.home_radius = 9.0
-		Game.world_root.add_child(ogre)
-		var mouth := cave.global_position + front * 5.0
-		ogre.global_position = Vector3(mouth.x, Game.terrain.get_height(mouth.x, mouth.z), mouth.z)
-		ogre.rotation.y = facing
 
 
 func end_raid() -> void:

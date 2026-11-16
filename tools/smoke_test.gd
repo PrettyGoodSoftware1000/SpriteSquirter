@@ -31,8 +31,10 @@ func _run() -> void:
 	# fetching food or casting spells in the middle of the others.
 	for id: String in CreatureMind.SPELLS + CreatureMind.HARVESTS:
 		Balance.values["knowledge_" + id] = 1.0e9
-	# No balrog until its own checks at the end.
+	# No balrog until its own checks at the end, and the tortoise keeps
+	# out of its shell until then too.
 	Balance.values["balrogs"] = 0.0
+	Balance.values["shell_max_seconds"] = 0.0
 
 	# 1. The menu.
 	await _open(game, "menu", "", 384)
@@ -267,16 +269,33 @@ func _run() -> void:
 		var k := roundi(dry.z + Terrain.HALF) * Terrain.N + roundi(dry.x + Terrain.HALF)
 		_check(terrain.water_depth(dry.x, dry.z) == 0.0 and terrain.rock[k] > 0.5, "a crater away from water is dry stone")
 
-	# One ogre joins the raid for every 15 goblins.
-	var cave := get_tree().get_nodes_in_group("caves")[0] as Node3D
-	# (Counting only the goblins: an ogre may be left from an earlier night.)
-	while get_tree().get_nodes_in_group("goblins").size() - get_tree().get_nodes_in_group("ogres").size() < GoblinRaids.GOBLINS_PER_OGRE:
-		play.raids.spawn_at(cave)
+	# Ogres come from the goblins' war huts, and giant bats from their
+	# watchtowers: none of either until those are built.
 	play.raids.start_raid()
+	await _wait(14.0)
+	_check(get_tree().get_nodes_in_group("ogres").is_empty() and get_tree().get_nodes_in_group("bats").is_empty(), "no ogres or bats without the goblin buildings for them")
+	play.raids.end_raid()
+	var hut_site: ConstructionSite = null
+	var tower_site: ConstructionSite = null
+	for attempt in 6:
+		if hut_site == null:
+			hut_site = play.raids.start_building(GoblinRaids.OGRE_HOME)
+		if tower_site == null:
+			tower_site = play.raids.start_building(GoblinRaids.BAT_HOME)
+	_check(hut_site != null and tower_site != null, "the goblins mark out a war hut and a watchtower")
+	if hut_site != null:
+		hut_site.add_work(1.0e9)
+	if tower_site != null:
+		tower_site.add_work(1.0e9)
+	await _wait(0.5)
 	var ogres := get_tree().get_nodes_in_group("ogres")
-	@warning_ignore("integer_division")
-	var expected_ogres := (get_tree().get_nodes_in_group("goblins").size() - ogres.size()) / GoblinRaids.GOBLINS_PER_OGRE
-	_check(ogres.size() == expected_ogres and ogres.size() >= 1, "an ogre joins the raid for every 15 goblins (%d)" % ogres.size())
+	_check(ogres.size() == 1 and play.raids.standing(GoblinRaids.OGRE_HOME).size() == 1, "a finished war hut adds an ogre (%d)" % ogres.size())
+	play.raids.start_raid()
+	await _wait(14.0)
+	_check(get_tree().get_nodes_in_group("ogres").size() == 1 and get_tree().get_nodes_in_group("bats").size() == 1, "the raid has the hut's ogre and the watchtower's bat (%d, %d)"
+		% [get_tree().get_nodes_in_group("ogres").size(), get_tree().get_nodes_in_group("bats").size()])
+	for node in get_tree().get_nodes_in_group("bats"):
+		node.queue_free()
 	if not ogres.is_empty():
 		var ogre := ogres[0] as Villager
 		_check(is_equal_approx(ogre.max_hp, Balance.num("ogre_health")) and is_equal_approx(ogre.damage, Balance.num("ogre_damage")),
@@ -307,6 +326,21 @@ func _run() -> void:
 	game.settings.creature_food = 0.0
 	_check(is_equal_approx(Creature.SPECIES.squirrel.speed, Creature.SPECIES.tortoise.speed * 1.3)
 		and is_equal_approx(Balance.num("tortoise_health"), Balance.num("squirrel_health") * 2.0), "the squirrel is 30% faster, the tortoise has twice the health")
+	# The tortoise's shell: a fifth of the harm, and something to bless or curse.
+	Balance.values["shell_max_seconds"] = Balance.DEFAULTS["shell_max_seconds"]
+	beast.hp = beast.max_hp
+	beast.mind.behavior["shell_high"] = 100.0
+	beast._shell_think_at = 0.0
+	beast.take_hit(10.0, null)
+	_check(beast.hiding and beast.mind.last_action == "shell_high", "the tortoise hides in its shell when it is hit (and that can be blessed or cursed)")
+	var before_blow := beast.hp
+	beast.take_hit(100.0, null)
+	_check(is_equal_approx(before_blow - beast.hp, 100.0 * Balance.num("shell_damage_share")), "in its shell it takes a fifth of the damage (%.0f)" % (before_blow - beast.hp))
+	beast.hp = beast.max_hp * 0.2
+	_check(beast.shell_action() == "shell_low", "hiding when badly hurt is a different thing to bless")
+	await _wait(Balance.num("shell_calm_seconds") + 1.0)
+	_check(not beast.hiding, "the tortoise comes out when nothing has hit it for a while")
+	Balance.values["shell_max_seconds"] = 0.0
 	beast.take_hit(beast.max_hp * 2.0, null)
 	_check(beast.knocked_out, "the creature is knocked out at no health")
 
@@ -586,6 +620,33 @@ func _run() -> void:
 	if rain_at != null:
 		mind._cast("rain", rain_at)
 		_check(mind.last_action == "rain", "the creature casts rain")
+	# Rain on growing wheat is its own thing to do, and spells cost it magicko.
+	var crop := get_tree().get_nodes_in_group("fields")[0] as CropField
+	crop.stage = CropField.Stage.GROWING
+	crop.progress = 0.0
+	crop._wet = 0.0
+	game.fire._wet.clear()
+	_check(mind._spell_target("water") != null, "the creature sees growing wheat to rain on")
+	mind.behavior["rain"] = 0.0
+	mind.behavior["water"] = 100.0
+	mind._ready_at.clear()
+	beast.magicko = 0.0
+	_check(not mind._try_spells(), "the creature cannot cast without magicko")
+	beast.magicko = beast.max_magicko
+	_check(mind._try_spells() and mind.last_action == "water" and is_equal_approx(beast.magicko, beast.max_magicko - Balance.num("creature_cost_rain")),
+		"it casts rain on the crops, and that costs it magicko (%d left)" % roundi(beast.magicko))
+	mind.behavior["rain"] = Balance.num("behavior_start")
+	mind.behavior["water"] = Balance.num("behavior_start")
+	# Running a bar down twice levels it up.
+	_check(beast.levels.magicko == 0 and beast.drains_needed("magicko") == 2, "the first level takes two drains")
+	for k in 2:
+		beast.magicko = beast.max_magicko
+		await _wait(0.2)
+		beast.magicko = beast.max_magicko * 0.2
+		await _wait(0.2)
+	_check(beast.levels.magicko == 1 and is_equal_approx(beast.max_magicko, Balance.num("creature_magicko") * 1.1) and beast.drains_needed("magicko") == 3,
+		"using up 75%% of its magicko twice makes the bar 10%% bigger (%.0f); the next level takes three" % beast.max_magicko)
+	_check(play.hud._creature_bars.size() == 3, "the creature's health, stamina and magicko bars are on the HUD")
 	# Its fireball only singes the player's own people.
 	var bystander := village.people()[0]
 	bystander.hp = bystander.max_hp
@@ -602,6 +663,8 @@ func _run() -> void:
 	mind.behavior.explore = 0.0
 	mind._idle_timer = 0.0
 	mind._away = false
+	# (Standing still, so it is at home when it next thinks.)
+	beast.has_target = false
 	mind.home = beast.global_position
 	var fetched := false
 	for k in 30:
@@ -742,6 +805,25 @@ func _run() -> void:
 	squirrel.move_to(squirrel.global_position + Vector3(6, 0, 6))
 	await _wait(60.0)
 	_check(squirrel.size > 0.17 and squirrel.size < 0.2, "the squirrel grows towards full size over 30 minutes (%.3f after 1 minute)" % squirrel.size)
+	# A long way is run, on all fours, and that uses stamina.
+	squirrel.mind.process_mode = Node.PROCESS_MODE_DISABLED
+	var run_to := squirrel.global_position
+	for k in 24:
+		var a := TAU * k / 24.0
+		var p := squirrel.global_position + Vector3(cos(a), 0, sin(a)) * 45.0
+		if game.terrain.is_inside(p.x, p.z) and game.terrain.is_dry(p.x, p.z):
+			run_to = p
+			break
+	squirrel.move_to(run_to)
+	await _wait(3.0)
+	var walk_speed := squirrel._top_speed()
+	_check(squirrel.running and squirrel.speed > walk_speed * 1.2 and squirrel.mind.last_action == "run",
+		"the squirrel runs a long journey, half as fast again (%.1f against %.1f)" % [squirrel.speed, walk_speed])
+	_check(squirrel.stamina < squirrel.max_stamina, "running uses stamina (%.0f left)" % squirrel.stamina)
+	squirrel.stamina = 0.2
+	await _wait(1.0)
+	_check(not squirrel.running and squirrel.has_target, "out of stamina, it drops back to a walk")
+	squirrel.has_target = false
 
 	# 6. The raven, which flies, and the goblins' balrog.
 	game.creature_kind = "raven"
@@ -783,6 +865,7 @@ func _run() -> void:
 		if not raven.flying and not raven.has_target:
 			break
 		await _wait(1.0)
+	_check(raven.stamina < raven.max_stamina and raven.mind.last_action == "fly", "flying uses stamina (%.0f left)" % raven.stamina)
 	up = raven.global_position.y - game.terrain.get_height(raven.global_position.x, raven.global_position.z)
 	_check(not raven.flying and up < 0.5 and Vector2(raven.global_position.x - flight_to.x, raven.global_position.z - flight_to.z).length() < 3.0, "the raven lands where it was sent")
 	# Badly hurt, it flees by air.

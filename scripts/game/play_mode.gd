@@ -965,6 +965,7 @@ func _update_ring() -> void:
 func _update_ui() -> void:
 	hud.set_resources(village, day_cycle.clock_text() if not _choosing else "")
 	hud.update_spells(village.amount("magicko"), _cooldowns, not _choosing)
+	hud.update_creature(creature)
 	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():
 		hud.update_build_menu(village)

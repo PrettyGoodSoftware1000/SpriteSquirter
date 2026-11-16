@@ -42,7 +42,10 @@ const SETTING_SLIDERS := [
 	["goblin_rate_growth", "Goblin spawn rise", 0.0, 10.0, 0.5, "/night"],
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
+	["goblin_build_speed", "Goblin build speed", 0.25, 10.0, 0.25, "x"],
+	["villager_detail", "Villager detail within", 0.0, 300.0, 10.0, "m"],
 ]
+const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.66, 0.26), "magicko": Color(0.5, 0.34, 0.86)}
 ## role -> [name in the jobs row, the building that trains it]
 const ROLES := {
 	"warrior": ["Warriors", "Town guard"],
@@ -62,6 +65,8 @@ var _research_rows := {}
 var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_bars: Array[ProgressBar] = []
+## The creature's bars: stat -> [bar, label]
+var _creature_bars := {}
 var _build_panel: PanelContainer
 var _build_buttons := {}
 var _prompt_panel: PanelContainer
@@ -267,6 +272,49 @@ func _build_spell_bar(root: Control) -> void:
 		slot.add_child(bar)
 		_spell_buttons.append(b)
 		_spell_bars.append(bar)
+	# The creature's health, stamina and magicko, to the right of the spells.
+	var stats := VBoxContainer.new()
+	stats.add_theme_constant_override("separation", 3)
+	stats.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(stats)
+	for stat: String in ["health", "stamina", "magicko"]:
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(190, 19)
+		bar.max_value = 1.0
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = BAR_COLORS[stat]
+		fill.set_corner_radius_all(3)
+		bar.add_theme_stylebox_override("fill", fill)
+		var back := StyleBoxFlat.new()
+		back.bg_color = Color(0.08, 0.07, 0.1, 0.85)
+		back.set_corner_radius_all(3)
+		bar.add_theme_stylebox_override("background", back)
+		var label := _text("", 12)
+		label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_constant_override("outline_size", 4)
+		label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+		bar.add_child(label)
+		stats.add_child(bar)
+		_creature_bars[stat] = [bar, label]
+
+
+## The creature's bars. Stamina and magicko show their level, and how many
+## times the bar has been run down towards the next one.
+func update_creature(beast: Creature) -> void:
+	if not is_instance_valid(beast):
+		return
+	var values := {"health": [beast.hp, beast.max_hp], "stamina": [beast.stamina, beast.max_stamina], "magicko": [beast.magicko, beast.max_magicko]}
+	for stat: String in values:
+		var now: float = values[stat][0]
+		var most: float = maxf(values[stat][1], 1.0)
+		(_creature_bars[stat][0] as ProgressBar).value = clampf(now / most, 0.0, 1.0)
+		var text := "%s %d / %d" % [stat.capitalize(), roundi(now), roundi(most)]
+		if stat != "health":
+			text += "   Lv %d (%d/%d)" % [int(beast.levels[stat]) + 1, beast.drains_done(stat), beast.drains_needed(stat)]
+		(_creature_bars[stat][1] as Label).text = text
 
 
 func _build_build_menu(root: Control) -> void:

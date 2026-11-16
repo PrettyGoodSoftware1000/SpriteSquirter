@@ -18,6 +18,8 @@ const DEFAULT_SETTINGS := {
 	"goblin_rate_growth": 0.5, # added to goblin_rate every night
 	"creature_food": 20.0, # food a full-grown creature eats per minute
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size
+	"goblin_build_speed": 1.0, # how many times as fast the goblins start and finish buildings
+	"villager_detail": 60.0, # metres from the camera within which villagers are drawn in full detail
 }
 
 ## The creature the player chose in the main menu: a key of Creature.SPECIES.

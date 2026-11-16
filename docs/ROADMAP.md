@@ -86,6 +86,13 @@ stage.
 - The balrog, the goblins' giant: guards its cave while it grows, then joins the raids; casts fireball from half size
 - Giants fight each other with their fists; glowing parts on creature models
 
+## Version 0.14: Stamina, shells and jointed villagers ✅
+- Villagers of every kind rebuilt: elbows and knees that bend, hands, boots, faces, aprons, beards, armour
+- Creature health, stamina and magicko bars; stats level up with use; the creature's spells cost its own magicko
+- The squirrel runs on all fours; the tortoise hides in its shell; both, and flying, can be blessed and cursed
+- Ogres come from goblin war huts and giant bats from watchtowers; goblin build speed in the dev menu
+- The balrog: slimmer, horns rooted in the skull, an open jaw of teeth, smoke, sparks and burning footprints
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

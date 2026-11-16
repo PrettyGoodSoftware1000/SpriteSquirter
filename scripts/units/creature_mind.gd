@@ -5,9 +5,11 @@ extends Node
 ##
 ## Knowledge: watching the player cast a spell, or the villagers store
 ## resources, adds knowledge towards doing it itself. With enough, the
-## creature casts the spell when it suits (each spell has its own
+## creature casts the spell when it suits (each spell costs the creature
+## its own magicko, Balance "creature_cost_...", and has a short
 ## cooldown) or fetches trees, boulders and food for the storehouse.
-## Bless and Curse are never learned.
+## Rain is two things to do: putting out fires ("rain") and watering
+## growing wheat ("water"). Bless and Curse are never learned.
 ##
 ## Behaviour: every action has a number from 0 (never) to 100 (always
 ## keen). The Bless spell raises the number for whatever the creature did
@@ -20,12 +22,18 @@ extends Node
 
 const SPELLS := ["fireball", "rain", "roots", "lightning", "blood"]
 const HARVESTS := ["lumber", "stone", "food"]
-const ACTIONS := ["stomp", "throw", "eat", "fireball", "rain", "roots", "lightning", "blood", "lumber", "stone", "food", "explore"]
+## What it may cast, in the order it thinks of them: fighting first.
+const CASTS := ["fireball", "lightning", "roots", "rain", "blood", "water"]
+const ACTIONS := ["stomp", "throw", "eat", "fireball", "rain", "water", "roots", "lightning", "blood", "lumber", "stone", "food", "explore",
+	"run", "fly", "shell_low", "shell_mid", "shell_high"]
 ## How each action reads in "blessed for ...".
 const DOING := {
 	"stomp": "stomping", "throw": "throwing enemies", "eat": "eating enemies",
 	"fireball": "casting fireball", "rain": "casting rain", "roots": "casting roots", "lightning": "casting chain lightning", "blood": "its blood sacrifice",
 	"lumber": "fetching a tree", "stone": "fetching a boulder", "food": "fetching food", "explore": "exploring",
+	"water": "casting rain on the crops", "run": "running", "fly": "flying",
+	"shell_low": "hiding in its shell when badly hurt", "shell_mid": "hiding in its shell when hurt",
+	"shell_high": "hiding in its shell when barely hurt",
 }
 const SPELL_NAMES := {"fireball": "fireball", "rain": "rain", "roots": "roots", "lightning": "chain lightning", "blood": "blood sacrifice"}
 const LEARNED := {
@@ -135,7 +143,7 @@ func player_moved(pos: Vector3) -> void:
 # --- Deciding -------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	if creature.knocked_out or creature.fleeing:
+	if creature.knocked_out or creature.fleeing or creature.hiding:
 		_drop_task()
 		return
 	_update_task()
@@ -207,15 +215,22 @@ func _explore() -> void:
 func _try_spells() -> bool:
 	if not is_instance_valid(Game.village) or not Game.village.founded:
 		return false
-	for id: String in SPELLS:
-		if not learned(id) or Game.now < _ready_at.get(id, 0.0) or randf() * 100.0 >= weight(id):
+	if creature.flying or creature.running:
+		return false
+	for id: String in CASTS:
+		# (Watering the crops is the rain spell, put to another use.)
+		var spell := "rain" if id == "water" else id
+		if not learned(spell) or Game.now < _ready_at.get(id, 0.0) or creature.magicko < Balance.num("creature_cost_" + spell):
+			continue
+		if randf() * 100.0 >= weight(id):
 			continue
 		var target: Variant = _spell_target(id)
 		if target == null:
 			continue
-		_ready_at[id] = Game.now + Balance.num("cooldown_" + id)
-		_cast(id, target)
-		return true
+		_ready_at[id] = Game.now + Balance.num("cooldown_" + spell)
+		if creature.spend_magicko(Balance.num("creature_cost_" + spell)):
+			_cast(id, target)
+			return true
 	return false
 
 
@@ -241,6 +256,12 @@ func _spell_target(id: String) -> Variant:
 				var p: Vector3 = f.pos
 				if p.distance_to(village.center) < 45.0:
 					return p
+		"water":
+			# Growing wheat that is not wet already.
+			for node in tree.get_nodes_in_group("fields"):
+				var field := node as CropField
+				if field.stage == CropField.Stage.GROWING and not field.is_wet() and not Game.fire.is_wet(field.global_position):
+					return field.global_position
 		"blood":
 			# Only when magicko has run dry and there are people to spare.
 			if village.amount("magicko") < 10 and village.population() >= 12 and not village.blood_active():
@@ -298,6 +319,11 @@ func _cast(id: String, target: Vector3) -> void:
 			Game.world_root.add_child(cloud)
 			cloud.cast(target)
 			did(id, "The creature cast rain")
+		"water":
+			var shower := RainCloud.new()
+			Game.world_root.add_child(shower)
+			shower.cast(target)
+			did(id, "The creature cast rain on the crops")
 		"roots":
 			var patch := RootPatch.new()
 			Game.world_root.add_child(patch)

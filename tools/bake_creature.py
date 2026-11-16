@@ -152,20 +152,20 @@ BALROG_BONES = {
     "chest": ("spine", (0.0, 7.0, 0.3)),
     "neck": ("chest", (0.0, 8.6, 0.9)),
     "head": ("neck", (0.0, 9.5, 1.4)),
-    "jaw": ("head", (0.0, 9.2, 1.9)),
-    "tail1": ("pelvis", (0.0, 3.8, -1.6)),
+    "jaw": ("head", (0.0, 9.3, 1.6)),
+    "tail1": ("pelvis", (0.0, 3.9, -1.0)),
     "tail2": ("tail1", (0.0, 2.9, -3.0)),
     "tail3": ("tail2", (0.0, 1.9, -4.3)),
     "tail4": ("tail3", (0.0, 1.2, -5.6)),
 }
 for side, sx in (("l", -1.0), ("r", 1.0)):
-    BALROG_BONES[f"arm_upper_{side}"] = ("chest", (sx * 3.0, 7.9, 0.4))
-    BALROG_BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 4.1, 5.9, 0.6))
-    BALROG_BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 4.5, 4.1, 1.1))
-    BALROG_BONES[f"thigh_{side}"] = ("pelvis", (sx * 1.5, 4.0, 0.1))
-    BALROG_BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.7, 2.2, 0.7))
-    BALROG_BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.7, 0.75, 0.0))
-    BALROG_BONES[f"wing_{side}"] = ("chest", (sx * 1.3, 8.4, -1.5))
+    BALROG_BONES[f"arm_upper_{side}"] = ("chest", (sx * 2.75, 7.9, 0.4))
+    BALROG_BONES[f"arm_lower_{side}"] = (f"arm_upper_{side}", (sx * 3.6, 5.9, 0.5))
+    BALROG_BONES[f"hand_{side}"] = (f"arm_lower_{side}", (sx * 3.9, 4.2, 1.0))
+    BALROG_BONES[f"thigh_{side}"] = ("pelvis", (sx * 1.3, 4.0, 0.1))
+    BALROG_BONES[f"shin_{side}"] = (f"thigh_{side}", (sx * 1.5, 2.3, 0.7))
+    BALROG_BONES[f"foot_{side}"] = (f"shin_{side}", (sx * 1.5, 0.75, 0.0))
+    BALROG_BONES[f"wing_{side}"] = ("chest", (sx * 1.2, 8.4, -1.0))
 BONES = {"tortoise": BONES, "squirrel": SQUIRREL_BONES, "raven": RAVEN_BONES, "balrog": BALROG_BONES}[SPECIES]
 BONE_NAMES = list(BONES)
 
@@ -418,111 +418,173 @@ def build_raven():
 
 
 def build_balrog():
-    """A horned demon as broad as it is tall: cracked dark hide, a glowing
-    scar on its chest, iron and purple armour, hooves, a heavy tail and two
-    little wings that will never lift it."""
-    # Trunk: a barrel chest over a narrower waist, hunched at the shoulders.
-    ellipsoid((0, 4.5, 0.0), (2.1, 1.5, 1.6), "pelvis", HIDE)
-    ellipsoid((0, 5.7, 0.3), (2.1, 1.7, 1.6), "spine", HIDE)
-    ellipsoid((0, 7.3, 0.5), (3.0, 1.9, 2.0), "chest", HIDE)
-    ellipsoid((0, 8.4, -0.4), (2.2, 1.0, 1.4), "chest", HIDE_DARK)
-    ellipsoid((0, 5.9, 1.6), (1.3, 1.3, 0.5), "spine", HIDE_LIGHT, 0.3)
+    """A horned demon: wide shoulders over a narrow waist, cracked dark hide
+    that glows from within, ram's horns, a gaping jaw full of teeth, iron
+    and purple armour, hooves, a long tail and two little wings that will
+    never lift it."""
+    # Trunk: a deep ribcage tapering to the waist, with the muscles showing.
+    ellipsoid((0, 4.4, 0.0), (1.55, 1.2, 1.2), "pelvis", HIDE, 0.35)
+    ellipsoid((0, 5.6, 0.2), (1.3, 1.5, 1.05), "spine", HIDE, 0.35)
+    ellipsoid((0, 7.3, 0.4), (2.25, 1.5, 1.4), "chest", HIDE, 0.35)
+    for sx in (-1.0, 1.0):
+        ellipsoid((sx * 1.0, 7.65, 1.5), (1.05, 0.78, 0.5), "chest", HIDE_LIGHT, 0.18)
+        ellipsoid((sx * 1.15, 8.5, -0.1), (1.05, 0.55, 0.9), "chest", HIDE_DARK, 0.3)
+        for i in range(3):
+            ellipsoid((sx * 0.45, 6.55 - 0.72 * i, 1.22 - 0.07 * i), (0.42, 0.33, 0.26), "spine", HIDE_LIGHT, 0.1)
     # A glowing scar across the breastbone.
-    for a, reach in ((0.7, 1.4), (2.3, 0.8), (3.6, 1.2), (5.3, 0.7), (4.6, 1.0)):
+    for a, reach in ((0.7, 1.3), (2.3, 0.8), (3.6, 1.1), (5.3, 0.7), (4.6, 0.9)):
         d = np.array((np.cos(a), np.sin(a), 0.0))
-        cone((0.1, 7.5, 2.6), np.array((0.1, 7.5, 2.48)) + d * reach, 0.16, 0.03, "chest", LAVA, 0.05)
+        cone((0.05, 7.55, 1.98), np.array((0.05, 7.55, 1.9)) + d * reach, 0.15, 0.03, "chest", LAVA, 0.05)
     # Bony plates down the spine.
     for i in range(6):
         y = 5.0 + 0.75 * i
-        z = -1.55 - 0.45 * np.sin((y - 4.6) / 4.6 * np.pi)
-        cone((0, y, z + 0.3), (0, y + 0.25, z - 0.55), 0.3, 0.04, "spine" if i < 3 else "chest", BONE, 0.08)
+        z = -1.05 - 0.4 * np.sin((y - 4.6) / 4.6 * np.pi)
+        cone((0, y, z + 0.3), (0, y + 0.25, z - 0.6), 0.28, 0.04, "spine" if i < 3 else "chest", BONE, 0.08)
 
-    # Head: low between the shoulders, a heavy muzzle and a jaw full of fangs.
-    cone((0, 8.2, 0.8), (0, 9.3, 1.3), 1.25, 1.05, "neck", HIDE)
-    ellipsoid((0, 9.95, 1.5), (1.25, 1.15, 1.35), "head", HIDE)
-    ellipsoid((0, 9.6, 2.5), (0.98, 0.68, 0.8), "head", HIDE, 0.35)
-    ellipsoid((0, 9.0, 2.2), (0.92, 0.42, 0.98), "jaw", HIDE_DARK, 0.25)
-    for x in (-0.62, -0.25, 0.25, 0.62):
-        cone((x, 9.3, 3.12 - 0.3 * abs(x)), (x, 8.82, 3.2 - 0.3 * abs(x)), 0.13, 0.02, "head", BONE, 0.04)
-    for sx in (-1.0, 1.0):
-        cone((sx * 0.5, 9.15, 2.98), (sx * 0.52, 9.75, 3.12), 0.15, 0.02, "jaw", BONE, 0.04)
+    # Head: low between the shoulders. The mouth hangs open on a throat
+    # full of fire, with a row of teeth in each jaw and four long fangs.
+    cone((0, 8.3, 0.7), (0, 9.2, 1.2), 0.95, 0.85, "neck", HIDE)
+    ellipsoid((0, 10.05, 1.45), (1.2, 1.05, 1.3), "head", HIDE)
+    ellipsoid((0, 9.88, 2.55), (0.9, 0.48, 0.85), "head", HIDE, 0.3)
+    ellipsoid((0, 8.95, 1.95), (0.66, 0.6, 0.8), "head", LAVA, 0.06)
+    ellipsoid((0, 8.1, 2.3), (0.86, 0.34, 0.92), "jaw", HIDE_DARK, 0.2)
+    cone((0, 7.87, 3.0), (0, 7.3, 3.3), 0.2, 0.03, "jaw", BONE, 0.06)
+    for i in range(9):
+        a = (i - 4) / 4.0 * 1.25
+        x, z = np.sin(a) * 0.74, 2.55 + np.cos(a) * 0.72
+        fang = i in (1, 7)
+        if i % 2 == 0 or fang:
+            cone((x, 9.5, z), (x * 1.03, 8.6 if fang else 8.98, z + 0.04), 0.19 if fang else 0.13, 0.02, "head", BONE, 0.02)
+    for i in range(8):
+        a = (i - 3.5) / 3.5 * 1.15
+        x, z = np.sin(a) * 0.7, 2.3 + np.cos(a) * 0.78
+        tusk = i in (2, 5)
+        if i % 2 == 1 or tusk:
+            cone((x, 8.32, z), (x * 1.02, 9.15 if tusk else 8.72, z + 0.03), 0.18 if tusk else 0.13, 0.02, "jaw", BONE, 0.02)
+    hole((-0.26, 9.98, 3.36), 0.1, 0.05)
+    hole((0.26, 9.98, 3.36), 0.1, 0.05)
 
-    # Tail: thick, dragging on the ground, with a blade at the tip.
-    joints = [(0, 3.9, -1.3), (0, 2.9, -3.0), (0, 1.9, -4.3), (0, 1.2, -5.6), (0, 1.05, -6.2)]
-    radii = [1.0, 0.8, 0.6, 0.42, 0.3]
+    # Tail: long, dragging on the ground, with a blade at the tip.
+    joints = [(0, 3.9, -1.0), (0, 2.9, -3.0), (0, 1.9, -4.3), (0, 1.2, -5.6), (0, 1.0, -6.2)]
+    radii = [0.72, 0.56, 0.42, 0.3, 0.22]
     for i in range(4):
-        cone(joints[i], joints[i + 1], radii[i], radii[i + 1], f"tail{i + 1}", HIDE, 0.35)
+        cone(joints[i], joints[i + 1], radii[i], radii[i + 1], f"tail{i + 1}", HIDE, 0.3)
         mid = (np.array(joints[i]) + np.array(joints[i + 1])) * 0.5
-        cone(mid + np.array((0, radii[i] * 0.7, 0)), mid + np.array((0, radii[i] + 0.55, -0.35)), 0.24, 0.03, f"tail{i + 1}", BONE, 0.06)
-    blade((0, 1.05, -6.1), (0, 1.5, -7.5), 0.7, 0.05, "tail4", RAM_HORN, (0.0, 1.0, 0.3), 3.0, 0.12)
+        cone(mid + np.array((0, radii[i] * 0.7, 0)), mid + np.array((0, radii[i] + 0.55, -0.35)), 0.2, 0.03, f"tail{i + 1}", BONE, 0.06)
+        _ember(joints[i], joints[i + 1], radii[i], radii[i + 1], f"tail{i + 1}", 1.2 + i)
+    blade((0, 1.0, -6.1), (0, 1.45, -7.5), 0.62, 0.05, "tail4", RAM_HORN, (0.0, 1.0, 0.3), 3.0, 0.12)
 
     # A belt with a skull for a buckle, and rags of purple cloth.
-    ellipsoid((0, 4.95, 0.1), (2.3, 0.42, 1.85), "pelvis", IRON, 0.12)
-    ellipsoid((0, 4.95, 1.95), (0.5, 0.56, 0.32), "pelvis", BONE, 0.08)
-    for x, drop in ((-0.75, 2.5), (0.0, 3.1), (0.75, 2.3)):
-        blade((x, 4.7, 1.85), (x * 1.25, 4.7 - drop, 2.1), 0.5, 0.26, "pelvis", CLOTH, (0.0, 0.1, 1.0), 3.0)
-    for x, drop in ((-0.6, 2.2), (0.6, 2.6)):
-        blade((x, 4.7, -1.6), (x * 1.3, 4.7 - drop, -1.9), 0.5, 0.26, "pelvis", CLOTH, (0.0, -0.1, 1.0), 3.0)
+    ellipsoid((0, 4.9, 0.1), (1.72, 0.36, 1.42), "pelvis", IRON, 0.1)
+    ellipsoid((0, 4.9, 1.5), (0.45, 0.5, 0.3), "pelvis", BONE, 0.08)
+    for x, drop in ((-0.6, 2.4), (0.0, 3.0), (0.6, 2.2)):
+        blade((x, 4.7, 1.4), (x * 1.25, 4.7 - drop, 1.7), 0.44, 0.22, "pelvis", CLOTH, (0.0, 0.1, 1.0), 3.0)
+    for x, drop in ((-0.5, 2.1), (0.5, 2.5)):
+        blade((x, 4.7, -1.25), (x * 1.3, 4.7 - drop, -1.6), 0.44, 0.22, "pelvis", CLOTH, (0.0, -0.1, 1.0), 3.0)
 
     for side, sx in (("l", -1.0), ("r", 1.0)):
-        # Brows, eye sockets, and purple fire streaming back from the eyes.
-        ellipsoid((sx * 0.7, 10.45, 2.3), (0.66, 0.25, 0.5), "head", HIDE_DARK, 0.25)
-        hole((sx * 0.68, 10.05, 2.6), 0.34)
-        cone((sx * 1.0, 10.25, 2.35), (sx * 1.75, 11.0, 1.7), 0.2, 0.03, "head", PURPLE, 0.05)
+        # Brows, cheekbones, eye sockets, and purple fire streaming back
+        # from the eyes. A strap of muscle joins the jaw to the skull.
+        ellipsoid((sx * 0.62, 10.5, 2.3), (0.62, 0.22, 0.5), "head", HIDE_DARK, 0.2)
+        ellipsoid((sx * 0.95, 9.9, 1.95), (0.42, 0.38, 0.6), "head", HIDE_DARK, 0.25)
+        cone((sx * 0.85, 9.6, 1.45), (sx * 0.8, 8.25, 1.9), 0.4, 0.3, "jaw", HIDE_DARK, 0.2)
+        hole((sx * 0.62, 10.12, 2.5), 0.3)
+        cone((sx * 0.95, 10.3, 2.3), (sx * 1.7, 11.0, 1.6), 0.18, 0.03, "head", PURPLE, 0.05)
 
-        # Ram's horns: out from the temples, back, down and round to the front.
-        centre = np.array((sx * 1.15, 10.3, 0.2))
-        last = None
-        for i in range(13):
-            t = i / 12.0
-            a = 0.95 + t * 4.6
-            reach = 1.55 - 0.45 * t
-            p = centre + np.array((sx * (0.25 + 2.3 * t ** 1.3), np.sin(a) * reach, np.cos(a) * reach))
-            if last is not None:
-                cone(last, p, 0.66 * (1.0 - t) + 0.14, 0.66 * (1.0 - t) + 0.07, "head", RAM_RIDGE if i % 2 else RAM_HORN, 0.1)
+        # Ram's horns. Each grows out of the skull at the temple and winds
+        # round a line that points out and up from the head.
+        axis = np.array((sx * 1.0, 0.62, -0.12))
+        axis /= np.linalg.norm(axis)
+        up = np.array((0.0, 1.0, 0.0)) - axis * axis[1]
+        up /= np.linalg.norm(up)
+        back = np.cross(axis, up)
+        if back[2] > 0:
+            back = -back
+        base = np.array((sx * 0.8, 10.55, 1.15))
+        turn0 = 0.55
+        centre = base - 1.25 * (np.cos(turn0) * up + np.sin(turn0) * back)
+        last = base - np.array((sx * 0.3, 0.3, 0.0))
+        for i in range(15):
+            t = i / 14.0
+            turn = turn0 + 4.3 * t
+            reach = 1.25 - 0.4 * t
+            p = centre + axis * (2.5 * t ** 1.15) + reach * (np.cos(turn) * up + np.sin(turn) * back)
+            thick = 0.6 * (1.0 - t) ** 0.8
+            cone(last, p, thick + 0.14, thick + 0.07, "head", RAM_RIDGE if i % 2 else RAM_HORN, 0.1)
             last = p
 
-        # Arms like tree trunks. A spiked plate on each shoulder and a
-        # glowing band on each forearm.
-        ellipsoid((sx * 3.0, 7.9, 0.4), (1.3, 1.25, 1.3), f"arm_upper_{side}", HIDE)
-        cone((sx * 3.0, 7.9, 0.4), (sx * 4.1, 5.9, 0.6), 1.08, 0.88, f"arm_upper_{side}", HIDE, 0.4)
-        cone((sx * 4.1, 5.9, 0.6), (sx * 4.5, 4.1, 1.1), 0.92, 0.78, f"arm_lower_{side}", HIDE, 0.3)
-        ellipsoid((sx * 4.6, 3.55, 1.25), (0.82, 0.76, 0.82), f"hand_{side}", HIDE_DARK, 0.3)
-        for dz in (-0.42, 0.0, 0.42):
-            base = np.array((sx * 4.65, 3.05, 1.45 + dz))
-            cone(base, base + np.array((-sx * 0.1, -0.7, 0.25)), 0.2, 0.03, f"hand_{side}", BONE, 0.06)
-        ellipsoid((sx * 3.25, 8.85, 0.4), (1.5, 0.75, 1.45), f"arm_upper_{side}", IRON, 0.15)
-        ellipsoid((sx * 3.45, 9.2, 1.0), (0.7, 0.3, 0.55), f"arm_upper_{side}", PURPLE, 0.06)
-        for dz, tall in ((0.5, 1.5), (-0.6, 1.2)):
-            cone((sx * 3.7, 9.2, dz), (sx * 4.5, 9.2 + tall, dz - 0.15), 0.3, 0.03, f"arm_upper_{side}", BONE, 0.06)
-        elbow = np.array((sx * 4.1, 5.9, 0.6))
-        wrist = np.array((sx * 4.5, 4.1, 1.1))
-        cone(elbow + (wrist - elbow) * 0.2, elbow + (wrist - elbow) * 0.85, 1.08, 0.98, f"arm_lower_{side}", IRON, 0.08)
-        cone(elbow + (wrist - elbow) * 0.47, elbow + (wrist - elbow) * 0.6, 1.1, 1.06, f"arm_lower_{side}", PURPLE, 0.04)
-        for f in (0.3, 0.75):
+        # Long arms, corded with muscle. A spiked plate on each shoulder
+        # and a glowing band on each forearm.
+        shoulder = np.array((sx * 2.75, 7.9, 0.4))
+        elbow = np.array((sx * 3.6, 5.9, 0.5))
+        wrist = np.array((sx * 3.9, 4.2, 1.0))
+        ellipsoid(shoulder, (0.98, 0.95, 0.98), f"arm_upper_{side}", HIDE, 0.35)
+        cone(shoulder, elbow, 0.8, 0.6, f"arm_upper_{side}", HIDE, 0.3)
+        ellipsoid(shoulder + (elbow - shoulder) * 0.45 + np.array((0, 0, 0.42)), (0.5, 0.8, 0.45), f"arm_upper_{side}", HIDE_LIGHT, 0.2)
+        cone(elbow, wrist, 0.68, 0.5, f"arm_lower_{side}", HIDE, 0.25)
+        _ember(shoulder, elbow, 0.8, 0.6, f"arm_upper_{side}", 0.4 + sx)
+        ellipsoid((sx * 3.98, 3.72, 1.14), (0.6, 0.58, 0.6), f"hand_{side}", HIDE_DARK, 0.25)
+        for dz in (-0.34, 0.0, 0.34):
+            claw = np.array((sx * 4.02, 3.3, 1.3 + dz))
+            cone(claw, claw + np.array((-sx * 0.12, -0.85, 0.3)), 0.17, 0.02, f"hand_{side}", BONE, 0.05)
+        ellipsoid((sx * 2.9, 8.75, 0.4), (1.15, 0.5, 1.1), f"arm_upper_{side}", IRON, 0.12)
+        ellipsoid((sx * 3.0, 9.05, 0.85), (0.45, 0.2, 0.4), f"arm_upper_{side}", PURPLE, 0.05)
+        for dz, tall in ((0.45, 1.3), (-0.5, 1.05)):
+            cone((sx * 3.3, 9.0, dz), (sx * 4.0, 9.0 + tall, dz - 0.15), 0.26, 0.03, f"arm_upper_{side}", BONE, 0.06)
+        cone(elbow + (wrist - elbow) * 0.25, elbow + (wrist - elbow) * 0.82, 0.74, 0.62, f"arm_lower_{side}", IRON, 0.07)
+        cone(elbow + (wrist - elbow) * 0.48, elbow + (wrist - elbow) * 0.6, 0.74, 0.7, f"arm_lower_{side}", PURPLE, 0.04)
+        for f in (0.32, 0.72):
             p = elbow + (wrist - elbow) * f
-            cone(p + np.array((sx * 0.8, 0, -0.3)), p + np.array((sx * 1.7, 0.35, -0.9)), 0.26, 0.03, f"arm_lower_{side}", BONE, 0.06)
+            cone(p + np.array((sx * 0.55, 0, -0.25)), p + np.array((sx * 1.35, 0.3, -0.8)), 0.22, 0.03, f"arm_lower_{side}", BONE, 0.06)
 
-        # Legs: huge thighs, and shins that end in cloven hooves.
-        cone((sx * 1.5, 4.0, 0.1), (sx * 1.7, 2.2, 0.7), 1.42, 1.02, f"thigh_{side}", HIDE, 0.5)
-        cone((sx * 1.7, 2.2, 0.7), (sx * 1.7, 1.0, 0.05), 0.98, 0.74, f"shin_{side}", HIDE, 0.35)
-        ellipsoid((sx * 1.7, 0.5, 0.25), (0.86, 0.56, 0.9), f"foot_{side}", HOOF, 0.2)
-        for dx in (-0.36, 0.36):
-            ellipsoid((sx * 1.7 + dx, 0.4, 1.0), (0.36, 0.42, 0.6), f"foot_{side}", HOOF, 0.1)
+        # Legs: lean thighs, thin shins with a tuft of hair, cloven hooves.
+        hip = np.array((sx * 1.3, 4.0, 0.1))
+        knee = np.array((sx * 1.5, 2.3, 0.7))
+        ankle = np.array((sx * 1.5, 1.0, 0.0))
+        cone(hip, knee, 1.05, 0.7, f"thigh_{side}", HIDE, 0.4)
+        ellipsoid(hip + (knee - hip) * 0.4 + np.array((0, 0, 0.5)), (0.6, 0.85, 0.5), f"thigh_{side}", HIDE_LIGHT, 0.2)
+        cone(knee, ankle, 0.66, 0.42, f"shin_{side}", HIDE, 0.3)
+        _ember(hip, knee, 1.05, 0.7, f"thigh_{side}", 2.0 + sx)
+        for i in range(6):
+            a = i / 6.0 * 2.0 * np.pi
+            tuft((sx * 1.5 + np.sin(a) * 0.3, 1.25, np.cos(a) * 0.3), (np.sin(a) * 0.5, -1.0, np.cos(a) * 0.5), 0.7, 0.26, f"shin_{side}", HIDE_DARK)
+        ellipsoid((sx * 1.5, 0.48, 0.25), (0.62, 0.5, 0.72), f"foot_{side}", HOOF, 0.15)
+        for dx in (-0.27, 0.27):
+            ellipsoid((sx * 1.5 + dx, 0.38, 0.85), (0.27, 0.38, 0.5), f"foot_{side}", HOOF, 0.08)
 
         # The wings: three thin fingers with skin stretched between them.
-        root = np.array((sx * 1.3, 8.4, -1.5))
-        knuckle = np.array((sx * 2.5, 10.3, -2.6))
-        tips = [np.array((sx * 4.6, 11.2, -3.3)), np.array((sx * 4.7, 9.5, -3.6)), np.array((sx * 3.5, 8.0, -3.4))]
+        root = np.array((sx * 1.2, 8.4, -1.0))
+        knuckle = np.array((sx * 2.3, 10.2, -2.1))
+        tips = [np.array((sx * 4.2, 11.0, -2.8)), np.array((sx * 4.3, 9.4, -3.1)), np.array((sx * 3.2, 8.0, -2.9))]
         normal = np.cross(tips[0] - knuckle, tips[2] - knuckle)
-        cone(root, knuckle, 0.34, 0.24, f"wing_{side}", HIDE_DARK, 0.2)
-        cone(knuckle, knuckle + np.array((sx * 0.1, 0.75, 0.1)), 0.2, 0.03, f"wing_{side}", BONE, 0.06)
+        cone(root, knuckle, 0.3, 0.22, f"wing_{side}", HIDE_DARK, 0.2)
+        cone(knuckle, knuckle + np.array((sx * 0.1, 0.7, 0.1)), 0.18, 0.03, f"wing_{side}", BONE, 0.06)
         for tip in tips:
-            cone(knuckle, tip, 0.22, 0.07, f"wing_{side}", HIDE_DARK, 0.1)
+            cone(knuckle, tip, 0.2, 0.07, f"wing_{side}", HIDE_DARK, 0.1)
         for a, b in ((0, 1), (1, 2)):
             for f in (0.2, 0.5, 0.8):
                 edge = tips[a] + (tips[b] - tips[a]) * f
-                blade(knuckle, knuckle + (edge - knuckle) * 0.86, 0.3, 0.42, f"wing_{side}", MEMBRANE, normal, 4.0, 0.1)
+                blade(knuckle, knuckle + (edge - knuckle) * 0.86, 0.28, 0.4, f"wing_{side}", MEMBRANE, normal, 4.0, 0.1)
+
+
+def _ember(a, b, r1, r2, bone, turn):
+    """A jagged glowing crack in the hide of a limb that runs from a to b."""
+    a, b = np.array(a, float), np.array(b, float)
+    d = (b - a) / np.linalg.norm(b - a)
+    u = np.cross(d, (0.0, 0.0, 1.0))
+    if np.linalg.norm(u) < 0.2:
+        u = np.cross(d, (1.0, 0.0, 0.0))
+    u /= np.linalg.norm(u)
+    v = np.cross(d, u)
+    last = None
+    for i in range(5):
+        t = 0.2 + 0.15 * i
+        angle = turn + (0.35 if i % 2 else -0.3) + 0.12 * i
+        r = r1 + (r2 - r1) * t + 0.03
+        p = a + (b - a) * t + (u * np.cos(angle) + v * np.sin(angle)) * r
+        if last is not None:
+            cone(last, p, 0.13, 0.09, bone, LAVA, 0.04)
+        last = p
 
 
 # --- Distance functions -------------------------------------------------------
@@ -647,6 +709,9 @@ def paint_and_skin(verts, normals):
     wg = np.exp(-(per - nearest) / 0.025)
     wg /= wg.sum(axis=1, keepdims=True)
     glow = wg @ np.array([s["colour"][4] for s in shapes])
+    # ...and neither does their colour.
+    near_glow = np.clip((wc @ np.array([s["colour"][4] for s in shapes])) * 6.0, 0.0, 1.0)[:, None]
+    rgb = rgb * (1.0 - near_glow) + (wg @ np.array([s["colour"][:3] for s in shapes])) * near_glow
     # Darker along the back and under the body, lighter where the sun hits.
     # Cel shading wants flat colour, so only the underside is darkened a little.
     shade = 1.0 - 0.15 * np.clip(-normals[:, 1], 0, 1)

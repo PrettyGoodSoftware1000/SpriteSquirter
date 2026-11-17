@@ -45,7 +45,7 @@ extends Node3D
 ## again, and no slope slows it. Both use up stamina, and must stop when it
 ## is gone. The tortoise can do neither, but when it is hurt it may pull
 ## into its shell, where blows do a fifth of their harm. Hiding is a thing
-## the player can Bless or Curse (separately for each of four states of
+## the player can Bless or Condemn (separately for each of four states of
 ## health: see CreatureMind); flying and running are not.
 ##
 ## Stamina, the magicko the creature's own spells cost, and health each
@@ -390,8 +390,8 @@ func spend_magicko(cost: float) -> bool:
 # --- The shell (the tortoise) ---------------------------------------------------
 
 ## "shell_unharmed", "shell_slightly", "shell_badly" or "shell_near_death":
-## hiding counts as a different thing to Bless or Curse depending on how
-## hurt the tortoise is (the same four states as running from battle).
+## the action for hiding in its shell as hurt as it is now (the same four
+## states as running from battle).
 func shell_action() -> String:
 	return "shell_" + mind.health_word()
 
@@ -402,7 +402,7 @@ func _hide() -> void:
 	_cancel_action()
 	_turning = false
 	running = false
-	mind.did(shell_action(), Texts.line("hid_in_shell", {"creature": species_name().to_lower(), "health": roundi(100.0 * health_share())}))
+	mind.did("shell", [mind.health_word()], Texts.line("hid_in_shell", {"creature": species_name().to_lower(), "health": roundi(100.0 * health_share())}))
 
 
 ## True while it is too high for anything on the ground to reach.
@@ -450,7 +450,7 @@ func take_hit(amount: float, _from: Node3D) -> void:
 		if _spec.get("shell", false) and not hiding and Game.now >= _shell_think_at and Balance.num("shell_damage_share") < 1.0:
 			# Hurt in a fight: into the shell, if it is that way inclined.
 			_shell_think_at = Game.now + Balance.num("shell_think_seconds")
-			if randf() * 100.0 < mind.weight(shell_action()):
+			if mind.likely("shell", [mind.health_word()]):
 				_hide()
 		return
 	hp = 0.0
@@ -1168,7 +1168,7 @@ func _on_stomp(pos: Vector3) -> void:
 	_action = Action.NONE
 	_action_cooldown = 1.4
 	if not hit.is_empty() and not hostile:
-		mind.did("stomp", Texts.line("stomped", {"them": _name_them(hit)}))
+		mind.did("stomp", [], Texts.line("stomped", {"them": _name_them(hit)}))
 
 
 ## "a goblin", "3 goblins and an ogre", ...
@@ -1211,7 +1211,7 @@ func _start_grab(near: Array[Villager]) -> void:
 	_action = Action.GRAB
 	_action_t = 0.0
 	_released = 0
-	_eating = randf() * (mind.weight("eat") + mind.weight("throw")) < mind.weight("eat")
+	_eating = CreatureMind.pick({true: mind.weight("eat"), false: mind.weight("throw")})
 
 
 ## Reach down, pick the goblins up, then eat them one by one or hurl them.
@@ -1243,7 +1243,7 @@ func _update_grab(delta: float) -> void:
 				g.eaten()
 			_released += 1
 		if t > 1.9 + 0.25 * _held.size():
-			mind.did("eat", Texts.line("ate", {"them": _name_them(_held)}))
+			mind.did("eat", [], Texts.line("ate", {"them": _name_them(_held)}))
 			_end_grab()
 			return
 	else:
@@ -1256,7 +1256,7 @@ func _update_grab(delta: float) -> void:
 				if is_instance_valid(g) and g.state == Villager.State.HELD:
 					g.toss((fwd * randf_range(15.0, 22.0) + Vector3.UP * randf_range(9.0, 13.0) + right * randf_range(-5.0, 5.0)) * lerpf(0.5, 1.0, size))
 			_released = _held.size()
-			mind.did("throw", Texts.line("threw", {"them": _name_them(_held)}))
+			mind.did("throw", [], Texts.line("threw", {"them": _name_them(_held)}))
 		if t > 2.5:
 			_end_grab()
 			return

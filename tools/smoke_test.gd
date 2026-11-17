@@ -133,6 +133,41 @@ func _run() -> void:
 				break
 			await _wait(5.0)
 		_check(built[0], "the villagers finish a building (%d adults, ~%d s expected)" % [adults, int(expected)])
+		# Gnomish Subcontractors: five gnomes come running and build it.
+		# (No villagers work on it, so only the gnomes do.)
+		Balance.values["builders_per_building"] = 0.0
+		var gnome_site := ConstructionSite.new()
+		gnome_site.setup("treehouse", 99, home_cost)
+		game.world_root.add_child(gnome_site)
+		gnome_site.global_position = spot
+		var gnomes := SpellBook.index_of("gnomes")
+		village.give("magicko", 100.0)
+		var magicko_before := village.amount("magicko")
+		play._spell_key(gnomes)
+		play._cursor_hit = spot
+		play._click_spell()
+		var crew_g := get_tree().get_nodes_in_group("gnomes")
+		_check(crew_g.size() == 5 and magicko_before - village.amount("magicko") == 20, "Gnomish Subcontractors: 5 gnomes for 20 magicko")
+		var far := 0.0
+		for g in crew_g:
+			far = maxf(far, (g as Node3D).global_position.distance_to(spot))
+		_check(far > 40.0, "they appear about 50 m from the building (%.0f m)" % far)
+		await _wait(8.0)
+		var near := 0
+		for g in get_tree().get_nodes_in_group("gnomes"):
+			if (g as Node3D).global_position.distance_to(spot) < gnome_site.footprint + 3.0:
+				near += 1
+		_check(near == 5 and gnome_site.progress > 0.0, "they run to it and build (%d there, %.0f%% built)" % [near, gnome_site.progress * 100.0])
+		gnome_site.add_work(gnome_site.work_needed)
+		await _wait(0.5)
+		_check(get_tree().get_nodes_in_group("gnomes").is_empty(), "and vanish when it is finished")
+		Balance.values["builders_per_building"] = Balance.DEFAULTS["builders_per_building"]
+		# The dev menu's ruler measures between two clicks.
+		play._set_mode(PlayMode.Mode.RULER)
+		play._ruler_click(village.center)
+		play._ruler_click(village.center + Vector3(30, 0, 40))
+		_check(play._ruler.visible and play._ruler._label.text.begins_with("50.0 m"), "the ruler measures a distance (%s)" % play._ruler._label.text)
+		play._set_mode(PlayMode.Mode.COMMAND)
 
 	# Warriors: the player asks for them; a Town guard trains one a minute.
 	# (The day was stopped above, so no raid gets in the way: recruits stop
@@ -377,10 +412,12 @@ func _run() -> void:
 	# The tortoise's shell: a fifth of the harm, and something to bless or curse.
 	Balance.values["shell_damage_share"] = Balance.DEFAULTS["shell_damage_share"]
 	beast.hp = beast.max_hp
+	beast.mind.behavior["shell"] = 100.0
 	beast.mind.behavior["shell_unharmed"] = 100.0
 	beast._shell_think_at = 0.0
 	beast.take_hit(10.0, null)
-	_check(beast.hiding and beast.mind.last_action == "shell_unharmed", "the tortoise hides in its shell when it is hit (and that can be blessed or cursed)")
+	_check(beast.hiding and beast.mind.last_action == "shell" and beast.mind.last_flags == ["unharmed"], "the tortoise hides in its shell when it is hit (and that can be blessed or condemned)")
+	beast.mind.behavior["shell"] = 0.0
 	var before_blow := beast.hp
 	beast.take_hit(100.0, null)
 	_check(is_equal_approx(before_blow - beast.hp, 100.0 * Balance.num("shell_damage_share")), "in its shell it takes a fifth of the damage (%.0f)" % (before_blow - beast.hp))
@@ -710,8 +747,7 @@ func _run() -> void:
 	_check(village.amount("magicko") == magicko_then, "spells cannot be cast outside the village's influence")
 	play._disarm()
 	_check(is_equal_approx(Balance.num("lightning_jumps"), 12.0), "chain lightning jumps twice as many times")
-	_check(is_equal_approx(CreatureMind.nudge(0.0, 10.0), 10.0) and is_equal_approx(CreatureMind.nudge(90.0, -10.0), 80.0)
-		and CreatureMind.nudge(90.0, 10.0) < 92.0 and CreatureMind.nudge(-90.0, -10.0) > -92.0, "past 50 or -50 a blessing or curse counts for less")
+	_check(SpellBook.SPELLS[SpellBook.index_of("condemn")].name == "Condemn" and SpellBook.index_of("curse") == -1, "Curse is now called Condemn")
 	# The soft cooldown: a spell cast recently costs more.
 	var fire_k := SpellBook.index_of("fireball")
 	var fire_cost := play.spell_cost(fire_k)
@@ -735,10 +771,38 @@ func _run() -> void:
 	_check(is_equal_approx(mind.knowledge.lumber, lumber_known + Balance.num("knowledge_per_lesson")), "storing 100 lumber teaches it a little about lumber")
 	mind.did("eat")
 	mind.judge(1)
-	_check(is_equal_approx(mind.behavior.eat, Balance.num("behavior_start") + Balance.num("bless_points")), "bless makes it keener on what it just did")
+	_check(is_equal_approx(mind.behavior.eat, Balance.num("affinity_start") + 10.0), "Bless adds 10 affinity for what it just did")
 	mind.did("eat")
 	mind.judge(-1)
-	_check(is_equal_approx(mind.behavior.eat, Balance.num("behavior_start")), "curse makes it less keen")
+	_check(is_equal_approx(mind.behavior.eat, Balance.num("affinity_start") + 10.0), "the same action cannot be judged again within a minute")
+	mind._judged_at.eat = game.now - 61.0
+	mind.judge(-1)
+	_check(is_equal_approx(mind.behavior.eat, Balance.num("affinity_start")), "a minute later, Condemn takes 10 away")
+	mind.behavior.eat = 30.0
+	_check(is_equal_approx(mind.cooldown("eat"), 180.0), "at 30 affinity the wait is 3 minutes")
+	mind.behavior.eat = -60.0
+	_check(is_equal_approx(mind.cooldown("eat"), 360.0), "at -60 it is 6 minutes")
+	mind.behavior.eat = 85.0
+	_check(is_equal_approx(mind.cooldown("eat"), 720.0), "at 80 or more it is 12 minutes")
+	mind.behavior.eat = 0.0
+	# With an action cooling down, the next one down its column whose
+	# condition held is judged instead.
+	mind._judged_at.clear()
+	mind.did("lumber", ["lowest", "day"])
+	_check(mind.judge_target() == "lumber", "first the action itself is judged")
+	mind.judge(1)
+	_check(mind.judge_target() == "lumber_lowest", "then, while it cools, the next one down whose condition held (%s)" % mind.judge_target())
+	mind.judge(1)
+	_check(mind.judge_target() == "lumber_day" and is_equal_approx(mind.behavior.lumber_lowest, 10.0), "and the next after that, skipping the ones that did not hold")
+	_check(mind.score("lumber", ["lowest", "day"]) > mind.score("lumber", ["highest"]) and mind.weight("lumber", ["lowest", "day"]) > mind.weight("lumber", []),
+		"what it is blessed for makes it likelier to do it")
+	var picks := {"a": 0, "b": 0}
+	for k in 400:
+		picks[CreatureMind.pick({"a": exp(1.0), "b": 1.0})] += 1
+	_check(picks.a > picks.b and picks.b > 0, "choices are made at random, weighted by affinity (%d to %d)" % [picks.a, picks.b])
+	for key: String in ["lumber", "lumber_lowest"]:
+		mind.behavior[key] = 0.0
+	mind._judged_at.clear()
 	_check(mind.behavior.has("food_none") and mind.behavior.has("food_plenty") and mind.behavior.has("lumber_battle") and mind.behavior.has("flee_near_death"),
 		"fetching and running away depend on what was going on")
 	# Rain when the village burns.
@@ -755,16 +819,16 @@ func _run() -> void:
 	crop._wet = 0.0
 	game.fire._wet.clear()
 	_check(mind._spell_target("water") != null, "the creature sees growing wheat to rain on")
-	mind.behavior["rain"] = -100.0
-	mind.behavior["water"] = 100.0
+	mind.behavior["rain_fire"] = -100.0
+	mind.behavior["rain_crops"] = 100.0
 	mind._ready_at.clear()
 	beast.magicko = 0.0
 	_check(not mind._try_spells(), "the creature cannot cast without magicko")
 	beast.magicko = beast.max_magicko
-	_check(mind._try_spells() and mind.last_action == "water" and is_equal_approx(beast.magicko, beast.max_magicko - Balance.num("creature_cost_rain")),
+	_check(mind._try_spells() and mind.last_action == "rain" and mind.last_flags == ["crops"] and is_equal_approx(beast.magicko, beast.max_magicko - Balance.num("creature_cost_rain")),
 		"it casts rain on the crops, and that costs it magicko (%d left)" % roundi(beast.magicko))
-	mind.behavior["rain"] = Balance.num("behavior_start")
-	mind.behavior["water"] = Balance.num("behavior_start")
+	mind.behavior["rain_fire"] = Balance.num("affinity_start")
+	mind.behavior["rain_crops"] = Balance.num("affinity_start")
 	# Using a stat levels it up: 100 used for the first level, 200 more for the next.
 	var start_level: int = beast.levels.magicko
 	beast.used.magicko = 0.0

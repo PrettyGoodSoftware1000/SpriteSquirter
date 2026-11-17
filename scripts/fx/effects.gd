@@ -314,7 +314,7 @@ func _spawn_dirt(pos: Vector3, radius: float) -> void:
 
 
 ## Bless: a fountain of golden sparkles and a warm flash round the creature.
-## Curse: a sinking swirl of dark red wisps under a blood-red light.
+## Condemn: a sinking swirl of dark red wisps under a blood-red light.
 func spawn_judgement(pos: Vector3, size: float, blessing: bool) -> void:
 	var colors := [Color(1.0, 0.85, 0.2, 0.0), Color(1.0, 0.8, 0.1, 1.0), Color(1.0, 0.6, 0.05, 0.0)]
 	if not blessing:

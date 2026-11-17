@@ -29,6 +29,13 @@
   owner writes it. New announcement text gets a line there (and a default
   in `scripts/core/texts.gd`), never a string in the code.
 
+## Creature actions
+
+- `Actions.csv` is the owner's table of the creature's actions: row 1
+  names each category, the actions go below it, most general first. A
+  new action gets a cell there and a sentence in `Announcements.txt`
+  (`action_<id>`), never a string in the code.
+
 ## Branches
 
 - Never create a branch, or choose a name for one, without asking the

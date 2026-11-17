@@ -22,6 +22,7 @@ signal regenerate_requested
 signal mood_selected(index: int)
 signal palette_selected(index: int)
 signal grass_requested
+signal ruler_requested
 signal setting_changed(key: String, value: float)
 signal resources_requested
 signal jobs_changed(role: String, change: int)
@@ -581,6 +582,10 @@ func _build_dev_menu(root: Control) -> void:
 		palettes.add_child(b)
 		_palette_buttons.append(b)
 
+	var ruler := _button("Ruler: measure a distance")
+	ruler.tooltip_text = "Click a point, then move the mouse: the line shows the distance. Click again to keep it; right-click or Esc to put the ruler away."
+	ruler.pressed.connect(func() -> void: ruler_requested.emit())
+	dev.add_child(ruler)
 	_grass_button = _button("Grass")
 	_grass_button.pressed.connect(func() -> void: grass_requested.emit())
 	dev.add_child(_grass_button)

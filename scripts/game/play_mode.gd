@@ -5,13 +5,13 @@ extends Node3D
 ## building orders and tortoise moves, while the PlayerVillage gathers,
 ## builds and grows and the DayCycle turns day into night.
 ##
-## Spells are cast by their number key, where the mouse points: there is
-## no spell in hand. Bless and Curse take two taps: the first shows what the
-## creature last did, the second casts. A spell cast in the last Balance
+## A spell's number key (or its square on the spell bar) takes it in hand
+## and the pointer changes; a click casts it. Bless and Condemn show what
+## the creature last did and are cast with a click anywhere. A spell cast in the last Balance
 ## "spell_recent_seconds" costs "spell_recent_extra" more for each time
 ## (the soft cooldown); the spell bar sparkles blue as it gets dearer.
 
-enum Mode { COMMAND, PLACE, SCULPT, FIELD, BRIDGE }
+enum Mode { COMMAND, PLACE, SCULPT, FIELD, BRIDGE, RULER }
 
 const BRUSH_MIN := 3.0
 const BRUSH_MAX := 30.0
@@ -21,7 +21,6 @@ const PICK_RADIUS := 9.0
 const BRIDGE_HINT := "The treehouses a rope bridge can join are lit up. Click one, then another.  Right-click or Esc to stop."
 const FIELD_HINT := "Hold the left mouse button and drag to draw the field, then let go. Villagers sow and reap it.  Shift keeps drawing,  right-click or Esc to stop."
 
-## How long after the first tap of Bless or Curse the second tap casts it.
 ## The shortest time between two casts of the same spell.
 const SPELL_DEBOUNCE := 0.25
 
@@ -56,6 +55,11 @@ var _ring: GroundRing
 ## The edge of the village's influence, shown while placing a building or
 ## with the mouse over a Storehouse.
 var _wall: InfluenceWall
+## The dev menu's ruler: where the line starts (null: not started yet), and
+## whether its far end is fixed.
+var _ruler: Ruler
+var _ruler_from: Variant = null
+var _ruler_fixed := false
 
 var _place_kind := ""
 var _place_seed := 0
@@ -76,7 +80,7 @@ var _field_center := Vector3.ZERO
 var _field_size := Vector2.ZERO
 var _field_problem_text := ""
 var _prompt_timer := 0.0
-## True while the prompt shows the creature's last action (Bless / Curse).
+## True while the prompt shows the creature's last action (Bless / Condemn).
 var _judge_prompt := false
 ## See-through copies of the treehouses a rope bridge can join.
 var _bridge_ghosts: Node3D
@@ -129,6 +133,8 @@ func _ready() -> void:
 	add_child(_ring)
 	_wall = InfluenceWall.new()
 	add_child(_wall)
+	_ruler = Ruler.new()
+	add_child(_ruler)
 	_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_ghost_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
@@ -152,6 +158,7 @@ func _ready() -> void:
 	hud.mood_selected.connect(_set_mood)
 	hud.palette_selected.connect(_set_palette)
 	hud.grass_requested.connect(_cycle_grass)
+	hud.ruler_requested.connect(func() -> void: _set_mode(Mode.COMMAND if mode == Mode.RULER else Mode.RULER))
 	hud.setting_changed.connect(func(key: String, value: float) -> void: Game.settings[key] = value)
 	hud.jobs_changed.connect(func(role: String, change: int) -> void:
 		village.set_wanted(role, village.wanted[role] + change))
@@ -205,6 +212,8 @@ func _process(delta: float) -> void:
 	_update_ring()
 	_update_ghost()
 	_update_wall()
+	if mode == Mode.RULER and _ruler_from != null and not _ruler_fixed and _cursor_hit != null:
+		_ruler.show_line(_ruler_from, _cursor_hit)
 	_ui_timer -= delta
 	if _ui_timer <= 0.0:
 		_ui_timer = 0.2
@@ -235,7 +244,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _armed >= 0:
 				_disarm()
 				_set_mode(mode)
-			elif mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE:
+			elif mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE or mode == Mode.RULER:
 				_set_mode(Mode.COMMAND)
 			elif _cursor_hit != null and not _choosing:
 				_command_move(_cursor_hit)
@@ -372,6 +381,9 @@ func _set_mode(m: Mode) -> void:
 	_field_dragging = false
 	_bridge_from = null
 	_disarm()
+	_ruler_from = null
+	_ruler_fixed = false
+	_ruler.clear()
 	_refresh_bridge_ghosts()
 	if m != Mode.PLACE and _ghost != null:
 		_ghost.queue_free()
@@ -389,6 +401,8 @@ func _set_mode(m: Mode) -> void:
 			hud.set_hint(FIELD_HINT)
 		Mode.BRIDGE:
 			hud.set_hint(BRIDGE_HINT)
+		Mode.RULER:
+			hud.set_hint("Ruler: click a point, then move the mouse to measure. Click again to keep the line, and again to start another.  Right-click or Esc to stop.")
 
 
 func _place_hint() -> String:
@@ -455,6 +469,8 @@ func _on_left_click() -> void:
 	match mode:
 		Mode.COMMAND:
 			_command_move(_cursor_hit)
+		Mode.RULER:
+			_ruler_click(_cursor_hit)
 		Mode.SCULPT:
 			_painting = true
 			_flatten_height = (_cursor_hit as Vector3).y
@@ -495,6 +511,17 @@ func resurrect() -> void:
 	Game.camera_rig.focus_on(creature.global_position)
 
 
+## A click with the ruler: start a line, fix its end, or start again.
+func _ruler_click(p: Vector3) -> void:
+	if _ruler_from == null or _ruler_fixed:
+		_ruler_from = p
+		_ruler_fixed = false
+		_ruler.show_line(p, p)
+	else:
+		_ruler.show_line(_ruler_from, p)
+		_ruler_fixed = true
+
+
 func _command_move(pos: Vector3) -> void:
 	if creature == null or not Game.terrain.is_inside(pos.x, pos.z):
 		return
@@ -506,7 +533,7 @@ func _command_move(pos: Vector3) -> void:
 
 func _is_judgement(index: int) -> bool:
 	var id: String = SpellBook.SPELLS[index].id
-	return id == "bless" or id == "curse"
+	return id == "bless" or id == "condemn"
 
 
 ## The extra share a spell costs now, for being cast recently: Balance
@@ -540,7 +567,7 @@ func _pay_for(index: int) -> bool:
 
 ## A spell's number key (or its button): takes the spell in hand, and the
 ## mouse pointer turns into its sign. A click then casts it (Bless and
-## Curse: a click anywhere). Pressing the same key again puts it away.
+## Condemn: a click anywhere). Pressing the same key again puts it away.
 func _spell_key(index: int) -> void:
 	if _choosing or index < 0 or index >= SpellBook.SPELLS.size():
 		return
@@ -568,7 +595,7 @@ func _on_spell_button(index: int) -> void:
 	_spell_key(index)
 
 
-## The mouse went over a spell button (-1: off it). Over Bless or Curse,
+## The mouse went over a spell button (-1: off it). Over Bless or Condemn,
 ## the top of the screen says what the creature last did.
 func _on_spell_hovered(index: int) -> void:
 	_hover_spell = index
@@ -607,7 +634,8 @@ func _click_spell() -> void:
 
 
 ## The top of the screen says what the creature last did, which is what
-## Bless or Curse would judge. `armed`: the spell is in hand.
+## Bless or Condemn would judge (see CreatureMind.judge_target()).
+## `armed`: the spell is in hand.
 func _show_last_action(index: int, armed: bool) -> void:
 	if creature == null:
 		return
@@ -618,16 +646,22 @@ func _show_last_action(index: int, armed: bool) -> void:
 	if mind.last_action == "" or ago > CreatureMind.JUDGE_SECONDS:
 		text = Texts.line("judge_nothing", {"creature": creature.species_name().to_lower(), "seconds": int(CreatureMind.JUDGE_SECONDS)})
 	else:
-		var fill := {"action": CreatureMind.describe(mind.last_action), "ago": int(ago), "key": index + 1,
+		var target := mind.judge_target()
+		var fill := {"action": CreatureMind.describe(target if target != "" else mind.last_action), "ago": int(ago), "key": index + 1,
 			"spell": (spell.name as String).to_lower(), "creature": creature.species_name().to_lower()}
-		text = Texts.line("judge_judged" if mind.last_judged else ("judge_prompt" if armed else "judge_hover"), fill)
+		if target == "":
+			var soonest := INF
+			for action in mind.applicable(mind.last_action, mind.last_flags):
+				soonest = minf(soonest, mind.cooling(action))
+			fill["seconds"] = ceili(soonest)
+		text = Texts.line("judge_cooling" if target == "" else ("judge_prompt" if armed else "judge_hover"), fill)
 	hud.set_prompt(text)
 	_prompt_timer = 0.0
 	_judge_prompt = true
 
 
-## Casts Bless or Curse on the creature, for what it last did. Each thing
-## it does can be blessed or cursed only once.
+## Casts Bless or Condemn on the creature, for what it last did (or the
+## next thing down its column, if that is cooling down).
 func _judge(index: int) -> void:
 	if _choosing or creature == null or _cooldowns[index] > 0.0:
 		return
@@ -654,6 +688,12 @@ func _cast(index: int) -> void:
 		hud.set_hint("Spells can only be cast inside your village's influence (the wall of light).")
 		_wall_flash = 1.5
 		return
+	var building_site: ConstructionSite = null
+	if spell.id == "gnomes":
+		building_site = _site_near(target)
+		if building_site == null:
+			hud.set_hint("Gnomish Subcontractors: click on one of your buildings under construction.")
+			return
 	if spell.id == "blood" and village.amount("magicko") >= spell_cost(index) and not village.sacrifice(target):
 		hud.set_hint("Blood Sacrifice needs one of your villagers within %d m of the mouse." % int(PlayerVillage.BLOOD_REACH))
 		return
@@ -681,8 +721,24 @@ func _cast(index: int) -> void:
 			patch.cast(target)
 		"lightning":
 			ChainLightning.cast(target)
+		"gnomes":
+			Gnome.summon(building_site)
+			_announce(Texts.line("gnomes_came"))
 	if creature:
 		creature.watch(target)
+
+
+## The village's building site nearest `p`, if `p` is on (or right by) one.
+func _site_near(p: Vector3) -> ConstructionSite:
+	var best: ConstructionSite = null
+	var best_d := INF
+	for node in get_tree().get_nodes_in_group("construction_sites"):
+		var site := node as ConstructionSite
+		var d := Vector2(site.global_position.x - p.x, site.global_position.z - p.z).length()
+		if d < site.footprint + 6.0 and d < best_d:
+			best_d = d
+			best = site
+	return best
 
 
 # --- Influence ------------------------------------------------------------------

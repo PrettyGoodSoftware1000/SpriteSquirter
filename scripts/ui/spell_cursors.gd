@@ -3,8 +3,9 @@ extends RefCounted
 ## The mouse pointers for aiming spells, drawn in code (SIZE pixels square,
 ## the hot spot in the middle): a flame for Fireball, sparks for Chain
 ## Lightning, a cloud dripping water for Rain, a tangle of roots for Roots,
-## a skull dripping blood for Blood Sacrifice, and a golden or a red star
-## for Bless and Curse. Each is drawn once and kept.
+## a skull dripping blood for Blood Sacrifice, a golden or a red star for
+## Bless and Condemn, and a gnome's hat and beard for Gnomish
+## Subcontractors. Each is drawn once and kept.
 
 const SIZE := 48
 const OUTLINE := Color(0.07, 0.05, 0.05)
@@ -75,10 +76,20 @@ static func _draw(id: String) -> Image:
 				var trickle := func(p: Vector2) -> float:
 					return minf(_segment(p, Vector2(drip.x, 33), Vector2(drip.x, drip.y - 3.0)) - 1.6, _flame(p, Vector2(drip.x, drip.y), 2.6, 0.5, 5.0))
 				_shape(img, trickle, Color(0.82, 0.05, 0.08))
+		"gnomes":
+			# A gnome's tall red hat over a white beard.
+			var hat := func(p: Vector2) -> float: return _flame(Vector2(p.x, p.y), Vector2(24, 26), 13.0, 1.0, 22.0)
+			_shape(img, hat, Color(0.85, 0.12, 0.1))
+			var brim := func(p: Vector2) -> float: return _box(p, Vector2(24, 27), Vector2(15.0, 2.5)) - 1.0
+			_shape(img, brim, Color(0.7, 0.08, 0.08))
+			var beard := func(p: Vector2) -> float: return _flame(Vector2(p.x, 2.0 * 30.0 - p.y), Vector2(24, 30), 11.0, 1.0, 16.0)
+			_shape(img, beard, Color(0.97, 0.97, 0.97))
+			var nose := func(p: Vector2) -> float: return p.distance_to(Vector2(24, 32)) - 3.5
+			_shape(img, nose, Color(0.98, 0.7, 0.6))
 		"bless":
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 20.0, 5.0), Color(1.0, 0.85, 0.25))
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 9.0, 3.0), Color(1.0, 0.98, 0.8), false)
-		"curse":
+		"condemn":
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 20.0, 5.0), Color(0.75, 0.06, 0.1))
 			_shape(img, func(p: Vector2) -> float: return p.distance_to(Vector2(24, 24)) - 4.5, Color(0.2, 0.0, 0.05), false)
 	return img

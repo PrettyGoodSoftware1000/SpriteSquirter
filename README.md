@@ -247,32 +247,40 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    carry into the store it gains 25 knowledge of harvesting that; once
    learned it pulls up a tree or a boulder (or reaps ripe wheat) and
    carries it to the Storehouse, 25 at a time when full grown.
-   **Bless and Curse.** Press the **Bless** key or square (golden
+   **Bless and Condemn.** Press the **Bless** key or square (golden
    sparkles, 10 magicko): the pointer becomes a golden star and the top of
    the screen says what the creature last did (holding the mouse over the
-   Bless or Curse square shows it too). Click anywhere, within 30 seconds
-   of that action, and the creature becomes keener on doing it again;
-   press the key again to put the spell away. **Curse** (red and creepy, 10 magicko) works
-   the same way and makes it less keen. Each thing the creature does can
-   be blessed or cursed once. Every action has a keenness from -100
-   (never) to 100 (always), starting at 0 and moving 10 a time; past 50
-   or -50 each blessing or curse counts for less and less. The creature
-   cannot learn these two.
-   **Actions in context.** What the creature did depends on what was going
-   on, and each has its own keenness. Fetching lumber, stone or food is
-   one action when battle raged, another when there was none of it,
-   another when there was plenty (over 200), and otherwise one by day and
-   one by night: so "The creature gathered food when there was none." can
-   be blessed while "The creature gathered food when there was plenty."
-   is cursed. Running from battle is four actions: when it was unharmed,
-   slightly injured, badly injured or near death. The tortoise's hiding in
-   its shell is judged by the same four states, so it can be blessed for
-   hiding when near death and cursed for hiding when unharmed. A raven
-   that runs from battle flies, and a squirrel runs on all fours (running
-   and flying themselves are not blessed or cursed). Raining on the crops
-   is an action too. Only a long trip away from where you sent it counts
-   as exploring: the keener it is on that, the more often it goes.
-9. **Cast spells** with keys 1 to 7 or the squares on the spell bar (each
+   Bless or Condemn square shows it too). Click anywhere, within 30 seconds
+   of that action, and its **affinity** for it goes up 10; press the key
+   again to put the spell away. **Condemn** (red and creepy, 10 magicko)
+   works the same way and takes 10 away. Every action has an affinity from
+   -100 to 100, starting at 0. The creature cannot learn these two.
+   **Waiting between judgements.** The same action can be blessed or
+   condemned only once a minute; once its affinity is 30 or more (or -30 or
+   less) the wait is 3 minutes, at 60 it is 6 minutes, and at 80 it is 12.
+   **The action table.** `Actions.csv`, next to `project.godot` (a
+   spreadsheet saved as CSV), lists the actions. Row 1 names each
+   category; under it, from row 2 down, are its actions, most general
+   first: under "Gathering wood" come `lumber` (the creature gathered some
+   wood), `lumber_highest` (it gathered wood when wood was the resource the
+   village had most of), `lumber_lowest` (when it had least), and others
+   for none, plenty, a battle, day and night. Stone, food, running from
+   battle (by how hurt it was), hiding in its shell (the same), rain (on a
+   fire or on the crops), each kind of attack, each spell and exploring
+   have their own columns. Bless and Condemn judge the first action down
+   the column of what the creature last did whose condition held then and
+   that is not still waiting; if every one is waiting, they say how long.
+   The sentence for each action is in `Announcements.txt`
+   (`action_<id> = ...`).
+   **How it chooses.** Every choice the creature makes is made at random,
+   weighted by its affinities: the higher the affinity, the likelier, and a
+   low one makes a thing unlikely but never impossible. What it does under
+   a condition counts the affinities of the category and of each condition
+   that holds, added up. A raven that runs from battle flies, and a
+   squirrel runs on all fours (running and flying themselves are not
+   judged). Only a long trip away from where you sent it counts as
+   exploring: the higher its affinity for that, the more often it goes.
+9. **Cast spells** with keys 1 to 8 or the squares on the spell bar (each
    shows the first letter of its spell for now). The spell goes into your
    hand and the pointer changes: a flame for Fireball, sparks for Chain
    Lightning, a cloud dripping water for Rain, roots for Roots, a skull
@@ -297,6 +305,12 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    they die, and magicko comes in twice as fast for 30 seconds (the counter
    turns red and drips while it lasts). A fireball crater is bare stone; it
    only fills with water when it breaks into water nearby.
+   **Gnomish Subcontractors** (20 magicko; a gnome's hat for a pointer):
+   click one of your buildings under construction and five gnomes, a
+   third of a villager's height, pop up in sparkles about 50 m away, run
+   to it very fast, bouncing as they go, and build it like five more
+   villagers, moving round it every 1 to 3 seconds. They vanish when it
+   is finished.
 
 Days turn from dawn to daytime, evening and night.
 
@@ -312,8 +326,8 @@ In the game, press **Esc** and **Show controls** for this list.
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
-| 1–7 (or a spell's square) | Take a spell in hand (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Curse); the same key again puts it away |
-| Click with a spell in hand | Cast it (Bless and Curse: click anywhere); Shift+click keeps it in hand |
+| 1–8 (or a spell's square) | Take a spell in hand (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Condemn, Gnomish Subcontractors); the same key again puts it away |
+| Click with a spell in hand | Cast it (Bless and Condemn: click anywhere); Shift+click keeps it in hand |
 | B / Backspace | Open or close the build menu (1–9 pick the field, the bridge or a building) |
 | U | Open or close the research menu (needs a Blacksmith) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
@@ -347,6 +361,7 @@ In the game, press **Esc** and **Show controls** for this list.
 | Weather (L) | Meadow day, golden hour, dawn, night (until the next part of the day) |
 | Nature palette (P) | Recolour grass, trees, rocks and water instantly |
 | Grass detail (G) | High / Medium / Low / Off, for slower machines |
+| Ruler | Click a point, move the mouse: a line shows the distance (straight across, and the rise or fall). Click to keep it, click again for another; right-click or Esc to stop |
 
 The dev menu also shows the FPS and object counts. The gameplay settings are
 kept until you quit, even when you start a new world.
@@ -414,9 +429,8 @@ the game again. Each line reads `name = number`, with a note after `#`.
 `Announcements.txt`, next to `project.godot`, holds every line of text
 the game announces: the messages in the middle of the screen (the raid,
 the morning, the bat, research, the creature dying and coming back), what Bless
-and Curse show at the top, the lines that float up from the creature,
-and the sentence for each thing the creature can be blessed or cursed
-for. Each line reads `name = text`; rewrite the text after the `=`, save,
+and Condemn show at the top, the lines that float up from the creature,
+and the sentence for each action in `Actions.csv`. Each line reads `name = text`; rewrite the text after the `=`, save,
 and start the game again. Words in `{braces}` are filled in by the game.
 
 ## What's in the world

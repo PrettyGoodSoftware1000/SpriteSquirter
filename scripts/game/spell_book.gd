@@ -4,9 +4,9 @@ extends RefCounted
 ## 2, ... casts a spell where the mouse points; there is no spell in hand.
 ## A spell costs more for a while after it is cast (see PlayMode.spell_cost).
 ## The creature can learn the first five by watching (see CreatureMind).
-## Bless and Curse are cast on the creature itself and cannot be learned:
+## Bless and Condemn are cast on the creature itself and cannot be learned:
 ## the first tap of the key shows what the creature last did, the second
-## blesses or curses it for that.
+## blesses or condemns it for that.
 
 const SPELLS := [
 	{"id": "fireball", "name": "Fireball", "cost": 5,
@@ -20,9 +20,11 @@ const SPELLS := [
 	{"id": "blood", "name": "Blood Sacrifice", "cost": 0,
 		"hint": "Sacrifices the villager of yours nearest the mouse: magicko comes in twice as fast for 30 seconds."},
 	{"id": "bless", "name": "Bless", "cost": 10,
-		"hint": "Tap once to see what your creature last did, and again to bless it: it will be keener to do it again."},
-	{"id": "curse", "name": "Curse", "cost": 10,
-		"hint": "Tap once to see what your creature last did, and again to curse it: it will be less keen to do it again."},
+		"hint": "Take it in hand to see what your creature last did; click anywhere to bless it: its affinity for that goes up 10."},
+	{"id": "condemn", "name": "Condemn", "cost": 10,
+		"hint": "Take it in hand to see what your creature last did; click anywhere to condemn it: its affinity for that goes down 10."},
+	{"id": "gnomes", "name": "Gnomish Subcontractors", "cost": 20,
+		"hint": "Click a building under construction: five gnomes come running from 50 m away and help build it."},
 ]
 
 

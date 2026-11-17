@@ -1,0 +1,9 @@
+Gathering wood,Gathering stone,Gathering food,Stomping,Throwing,Eating,Fireball,Chain lightning,Roots,Rain,Blood sacrifice,Exploring,Running from battle,Hiding in shell
+lumber,stone,food,stomp,throw,eat,fireball,lightning,roots,rain,blood,explore,flee,shell
+lumber_highest,stone_highest,food_highest,,,,,,,rain_fire,,,flee_unharmed,shell_unharmed
+lumber_lowest,stone_lowest,food_lowest,,,,,,,rain_crops,,,flee_slightly,shell_slightly
+lumber_none,stone_none,food_none,,,,,,,,,,flee_badly,shell_badly
+lumber_plenty,stone_plenty,food_plenty,,,,,,,,,,flee_near_death,shell_near_death
+lumber_battle,stone_battle,food_battle,,,,,,,,,,,
+lumber_day,stone_day,food_day,,,,,,,,,,,
+lumber_night,stone_night,food_night,,,,,,,,,,,

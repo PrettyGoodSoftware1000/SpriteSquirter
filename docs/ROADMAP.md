@@ -107,6 +107,13 @@ stage.
 - Spells taken in hand with their own pointers; square spell slots; chain lightning jumps twice as far along
 - Stat levels by points used; the tortoise tires as it walks; exploring is a long trip; training halved
 
+## Version 0.17: Affinity, the action table and gnomes ✅
+- Curse is now Condemn; Bless and Condemn add or take away 10 affinity
+- Actions.csv: categories and their actions; judging falls through to the next action while one waits
+- A wait between judging the same action (1, 3, 6 or 12 minutes by affinity); weighted random choices
+- Gnomish Subcontractors: five little gnomes run in and help build
+- A ruler in the dev menu
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

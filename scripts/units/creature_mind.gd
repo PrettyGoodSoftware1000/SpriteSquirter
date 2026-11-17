@@ -8,46 +8,37 @@ extends Node
 ## creature casts the spell when it suits (each spell costs the creature
 ## its own magicko, Balance "creature_cost_...", and has a short
 ## cooldown) or fetches trees, boulders and food for the storehouse.
-## Rain is two things to do: putting out fires ("rain") and watering
-## growing wheat ("water"). Bless and Curse are never learned.
+## Rain is cast on fires and on growing wheat ("rain" with the condition
+## "fire" or "crops"). Bless and Condemn are never learned.
 ##
-## Behaviour: every action has a keenness from -100 (never) to 100
-## (always), starting at Balance "behavior_start". The Bless spell raises
-## it for whatever the creature did last, and Curse lowers it, once for
-## each thing the creature does. Past 50 (or -50) each blessing (or curse)
-## counts for less and less, so 100 and -100 are never quite reached. The
-## keenness decides between stomping, throwing and eating in a fight,
-## whether a spell is cast, whether it runs from a fight, how often it goes
-## exploring, and what it does with itself when left alone: wander a little
-## way from where it was last sent and come back, or fetch something.
+## Behaviour: every action (see ActionTable and Actions.csv) has an
+## affinity from -100 to 100, starting at Balance "affinity_start". Bless
+## adds Balance "bless_points" (10) to what the creature last did, and
+## Condemn takes "condemn_points" away. An action that has just been judged
+## cannot be judged again for a while: a minute, or longer the stronger
+## the affinity (see cooldown()). Bless and Condemn then judge the next
+## action down its column whose condition held (see judge_target()).
 ##
-## Some actions depend on what was going on. Fetching lumber, stone or food
-## is one action when a battle is on, another when the village has none of
-## it, another when it has plenty (over PLENTY), and otherwise one by day
-## and one by night. Running from battle is one action for each of four
-## states of health, and so is the tortoise's hiding in its shell.
-## Exploring is a long trip away from where it was sent: the keener it is,
-## the more often it goes. (The squirrel's running and the raven's flying
-## are not things to judge.) Texts "action_<name>" says what each one is.
+## Every choice the creature makes is made at random, weighted by its
+## affinities (see weight() and likely()): stomping, throwing or eating in
+## a fight, whether to cast a spell, whether to run from a fight or hide in
+## its shell, whether to go exploring, and what to fetch. The higher the
+## affinity, the likelier; a low one makes a thing unlikely, never
+## impossible. What it does under a condition (gathering wood when wood is
+## the resource the village has least of, say) counts the affinities of the
+## category and of each condition that holds, added up.
 ##
 ## All the amounts come from balancing.txt (see Balance).
 
 const SPELLS := ["fireball", "rain", "roots", "lightning", "blood"]
 const HARVESTS := ["lumber", "stone", "food"]
-const FIGHTS := ["stomp", "throw", "eat"]
-## What was going on while the creature fetched something (see _context()).
-const CONTEXTS := ["battle", "none", "plenty", "day", "night"]
-## Running from battle, by how hurt the creature was (see _flee_action()).
-const FLEES := ["flee_unharmed", "flee_slightly", "flee_badly", "flee_near_death"]
-## The tortoise hiding in its shell, by how hurt it was.
-const SHELLS := ["shell_unharmed", "shell_slightly", "shell_badly", "shell_near_death"]
 ## What it may cast, in the order it thinks of them: fighting first.
 ## ("water" is the rain spell, cast on growing wheat.)
 const CASTS := ["fireball", "lightning", "roots", "rain", "blood", "water"]
 ## More than this of a resource in store is plenty.
 const PLENTY := 200.0
 const SPELL_NAMES := {"fireball": "fireball", "rain": "rain", "roots": "roots", "lightning": "chain lightning", "blood": "blood sacrifice"}
-## Bless and Curse judge what the creature did in the last JUDGE_SECONDS.
+## Bless and Condemn judge what the creature did in the last JUDGE_SECONDS.
 const JUDGE_SECONDS := 30.0
 ## How often, in a fight, the creature thinks about running from it.
 const FLEE_CHECK_SECONDS := 5.0
@@ -56,15 +47,17 @@ const KNOW_COLOR := Color(0.6, 0.85, 1.0)
 var creature: Creature
 var knowledge := {}
 var behavior := {}
+## What it last did (an action category: see ActionTable), the conditions
+## that held, and when.
 var last_action := ""
+var last_flags: Array = []
 var last_action_time := -1000.0
-## True once the last action has been blessed or cursed: each thing the
-## creature does can be judged only once.
-var last_judged := false
 ## Where the player last left the creature. It never strays far from here.
 var home := Vector3.ZERO
 
 var _ready_at := {}
+## action -> when it was last blessed or condemned.
+var _judged_at := {}
 ## The fetching job under way: {"kind", "action", "node", "stage"}, or empty.
 var _task := {}
 var _think_timer := 1.0
@@ -73,18 +66,12 @@ var _flee_timer := FLEE_CHECK_SECONDS
 var _away := false
 
 
-## Every action the creature can be blessed or cursed for.
+## Every action the creature can be blessed or condemned for.
 static func all_actions() -> Array[String]:
-	var out: Array[String] = []
-	for id: String in FIGHTS + SPELLS + FLEES + SHELLS + ["explore", "water"]:
-		out.append(id)
-	for kind: String in HARVESTS:
-		for context: String in CONTEXTS:
-			out.append(kind + "_" + context)
-	return out
+	return ActionTable.all()
 
 
-## The sentence for an action, as Bless and Curse show it.
+## The sentence for an action, as Bless and Condemn show it.
 static func describe(action: String) -> String:
 	return Texts.line("action_" + action)
 
@@ -94,7 +81,7 @@ func _ready() -> void:
 	for id: String in SPELLS + HARVESTS:
 		knowledge[id] = 0.0
 	for action in all_actions():
-		behavior[action] = clampf(Balance.num("behavior_start"), -100.0, 100.0)
+		behavior[action] = clampf(Balance.num("affinity_start"), -100.0, 100.0)
 	if creature.hostile:
 		# The goblins' giant learns nothing and decides nothing here.
 		set_process(false)
@@ -136,54 +123,124 @@ func _learn(id: String, points: float, saw: String, fill: Dictionary) -> void:
 
 # --- Behaviour ------------------------------------------------------------------
 
-## How keen the creature is on `action`, from 0 (never) to 100 (always):
-## its keenness of -100 to 100 moved onto that scale.
-func weight(action: String) -> float:
-	return (behavior.get(action, 0.0) + 100.0) * 0.5
+## The creature's affinity for doing `category` under `flags` (the
+## conditions that hold: see ActionTable): the affinities of the category
+## and of each of those conditions in it, added up.
+func score(category: String, flags: Array = []) -> float:
+	var total := 0.0
+	for action in applicable(category, flags):
+		total += behavior.get(action, 0.0)
+	return total
 
 
-## Records what the creature just did, for Bless and Curse to judge, and
-## floats `text` up from its head.
-func did(action: String, text := "") -> void:
-	last_action = action
+## How much the creature leans towards `category` under `flags`: 1 at an
+## affinity of 0, growing steeply with a higher one and shrinking towards
+## (but never reaching) nothing with a lower one. Choices between things
+## to do are made at random, in proportion to these.
+func weight(category: String, flags: Array = []) -> float:
+	return exp(clampf(score(category, flags), -300.0, 300.0) / maxf(Balance.num("affinity_spread"), 1.0))
+
+
+## Yes or no to doing `category` now, at random: an even chance at an
+## affinity of 0, likelier the higher it is, never quite certain either way.
+func likely(category: String, flags: Array = []) -> bool:
+	var w := weight(category, flags)
+	return randf() < w / (1.0 + w)
+
+
+## Picks one of `options` (key -> weight) at random, in proportion to the weights.
+static func pick(options: Dictionary) -> Variant:
+	var total := 0.0
+	for key: Variant in options:
+		total += options[key]
+	var roll := randf() * total
+	for key: Variant in options:
+		roll -= options[key]
+		if roll <= 0.0:
+			return key
+	return options.keys().back() if not options.is_empty() else null
+
+
+## The actions in `category`'s column whose condition holds under `flags`.
+func applicable(category: String, flags: Array = []) -> Array[String]:
+	var out: Array[String] = []
+	for action in ActionTable.column(category):
+		var condition := ActionTable.condition(category, action)
+		if condition == "" or flags.has(condition):
+			out.append(action)
+	return out
+
+
+## Records what the creature just did (`category`, under the conditions in
+## `flags`) for Bless and Condemn to judge, and floats `text` up from its
+## head.
+func did(category: String, flags: Array = [], text := "") -> void:
+	last_action = category
+	last_flags = flags.duplicate()
 	last_action_time = Game.now
-	last_judged = false
 	if text != "":
 		creature.say(text)
 
 
-## True if Bless or Curse would have something to judge.
+## How long after being blessed or condemned an action must wait before it
+## can be again: longer the stronger the creature's affinity for it.
+func cooldown(action: String) -> float:
+	var strength := absf(behavior.get(action, 0.0))
+	if strength >= 80.0:
+		return Balance.num("judge_cooldown_80")
+	if strength >= 60.0:
+		return Balance.num("judge_cooldown_60")
+	if strength >= 30.0:
+		return Balance.num("judge_cooldown_30")
+	return Balance.num("judge_cooldown")
+
+
+## Seconds until `action` can be blessed or condemned again (0: now).
+func cooling(action: String) -> float:
+	if not _judged_at.has(action):
+		return 0.0
+	return maxf(0.0, float(_judged_at[action]) + cooldown(action) - Game.now)
+
+
+## What Bless or Condemn would judge now: the first action in the column of
+## what the creature last did whose condition held then and that is not
+## cooling down. "" if there is none (or it did nothing lately).
+func judge_target() -> String:
+	if last_action == "" or Game.now - last_action_time > JUDGE_SECONDS:
+		return ""
+	for action in applicable(last_action, last_flags):
+		if cooling(action) <= 0.0:
+			return action
+	return ""
+
+
+## True if Bless or Condemn would have something to judge.
 func can_judge() -> bool:
-	return last_action != "" and Game.now - last_action_time <= JUDGE_SECONDS and not last_judged
+	return judge_target() != ""
 
 
-## Moves a keenness by `points`: in full between -50 and 50, and for less
-## and less the further past them it goes.
-static func nudge(value: float, points: float) -> float:
-	const STEPS := 20
-	var v := value
-	for k in STEPS:
-		var p := points / STEPS
-		if absf(v) > 50.0 and signf(p) == signf(v):
-			p *= (100.0 - absf(v)) / 50.0
-		v = clampf(v + p, -100.0, 100.0)
-	return v
-
-
-## Bless (sign +1) or Curse (sign -1). Returns what to tell the player.
+## Bless (sign +1) or Condemn (sign -1): Balance "bless_points" (or
+## "condemn_points") more (or less) affinity for judge_target(). Returns
+## what to tell the player.
 func judge(sign_value: int) -> String:
+	var who := creature.species_name().to_lower()
 	if last_action == "" or Game.now - last_action_time > JUDGE_SECONDS:
 		creature.say(Texts.line("creature_confused"), Color(0.8, 0.8, 0.8))
-		return Texts.line("judge_nothing", {"creature": creature.species_name().to_lower(), "seconds": int(JUDGE_SECONDS)})
-	if last_judged:
-		return Texts.line("judge_judged", {"action": describe(last_action), "ago": int(Game.now - last_action_time)})
-	var points := Balance.num("bless_points") if sign_value > 0 else -Balance.num("curse_points")
-	behavior[last_action] = nudge(behavior.get(last_action, 0.0), points)
-	last_judged = true
-	var value := roundi(behavior[last_action])
-	creature.say(Texts.line("creature_blessed" if sign_value > 0 else "creature_cursed", {"value": value}),
+		return Texts.line("judge_nothing", {"creature": who, "seconds": int(JUDGE_SECONDS)})
+	var target := judge_target()
+	if target == "":
+		var soonest := INF
+		for action in applicable(last_action, last_flags):
+			soonest = minf(soonest, cooling(action))
+		return Texts.line("judge_cooling", {"creature": who, "action": describe(last_action), "seconds": ceili(soonest)})
+	var points := Balance.num("bless_points") if sign_value > 0 else -Balance.num("condemn_points")
+	behavior[target] = clampf(behavior.get(target, 0.0) + points, -100.0, 100.0)
+	_judged_at[target] = Game.now
+	var value := roundi(behavior[target])
+	creature.say(Texts.line("creature_blessed" if sign_value > 0 else "creature_condemned", {"value": value}),
 		Color(1.0, 0.9, 0.3) if sign_value > 0 else Color(1.0, 0.25, 0.2))
-	return Texts.line("bless_result" if sign_value > 0 else "curse_result", {"action": describe(last_action), "value": value})
+	return Texts.line("bless_result" if sign_value > 0 else "condemn_result", {"action": describe(target), "value": value,
+		"seconds": roundi(cooldown(target))})
 
 
 ## The player sent the creature somewhere: that is its new home.
@@ -194,19 +251,32 @@ func player_moved(pos: Vector3) -> void:
 	_idle_timer = randf_range(8.0, 14.0)
 
 
-## What is going on, as it matters to fetching `kind`: a battle, none of it
-## in store, plenty of it, or else day or night.
-func _context(kind: String) -> String:
-	if _battle_raging():
-		return "battle"
+## The conditions that hold now for fetching `kind`: "highest" or "lowest"
+## (of lumber, stone and food in store), "none", "plenty", "battle", and
+## "day" or "night".
+func gather_flags(kind: String) -> Array[String]:
+	var flags: Array[String] = []
 	var village := Game.village
 	if is_instance_valid(village):
 		var have := village.amount(kind)
+		var most := true
+		var least := true
+		for other: String in HARVESTS:
+			if other != kind:
+				most = most and have >= village.amount(other)
+				least = least and have <= village.amount(other)
+		if most:
+			flags.append("highest")
+		if least:
+			flags.append("lowest")
 		if have <= 0:
-			return "none"
+			flags.append("none")
 		if have > PLENTY:
-			return "plenty"
-	return "night" if Game.day_cycle != null and is_instance_valid(Game.day_cycle) and Game.day_cycle.is_night() else "day"
+			flags.append("plenty")
+	if _battle_raging():
+		flags.append("battle")
+	flags.append("night" if Game.day_cycle != null and is_instance_valid(Game.day_cycle) and Game.day_cycle.is_night() else "day")
+	return flags
 
 
 ## True while the creature fights, goblins raid, or goblins prowl the village.
@@ -236,22 +306,18 @@ func health_word() -> String:
 	return "near_death"
 
 
-## The flee action for how hurt the creature is now.
-func _flee_action() -> String:
-	return "flee_" + health_word()
-
-
-## In a fight, now and then: run from it, as keen as it is.
+## In a fight, now and then: run from it, the likelier the more hurt it is
+## and the higher its affinity for running from battle (as hurt as it is).
 func _consider_fleeing() -> bool:
 	if creature.is_fleeing() or not _enemy_close():
 		return false
-	var action := _flee_action()
-	var chance := Balance.num("flee_chance_" + action.trim_prefix("flee_")) * weight(action) / 50.0
+	var hurt := health_word()
+	var chance := Balance.num("flee_chance_" + hurt) * weight("flee", [hurt])
 	if randf() >= chance or not creature.run_from_battle():
 		return false
 	_drop_task()
 	_away = true
-	did(action, Texts.line("fled"))
+	did("flee", [hurt], Texts.line("fled"))
 	return true
 
 
@@ -295,9 +361,10 @@ func _process(delta: float) -> void:
 		_choose_idle()
 
 
-## Left to itself: come home if it has strayed; now and then go exploring
-## (as keen as it is on that); otherwise wander a little way or fetch
-## something, whichever it is keenest on.
+## Left to itself: come home if it has strayed; otherwise pick at random,
+## weighted by its affinities, between a short wander, exploring (now and
+## then: Balance "explore_weight" of the weight it would have) and
+## fetching what it has learned to fetch.
 func _choose_idle() -> void:
 	_idle_timer = randf_range(6.0, 12.0)
 	var from_home := Vector2(creature.global_position.x - home.x, creature.global_position.z - home.z).length()
@@ -305,32 +372,22 @@ func _choose_idle() -> void:
 		_away = false
 		creature.auto_move(home)
 		return
-	if randf() < Balance.num("explore_chance") * weight("explore") / 50.0 and _explore():
-		return
-	# (A short wander is not keenly sought: anything it has learned to
-	# fetch comes first, as keen as it is on that.)
-	var options := {"wander": 20.0}
-	var actions := {}
+	var options := {"wander": Balance.num("wander_weight"), "explore": Balance.num("explore_weight") * weight("explore")}
+	var flags := {}
 	if creature.size >= 0.3:
 		for kind: String in HARVESTS:
-			var action: String = kind + "_" + _context(kind)
-			if learned(kind) and weight(action) > 0.0 and _harvest_target(kind) != null:
-				options[kind] = weight(action)
-				actions[kind] = action
-	var total := 0.0
-	for key: String in options:
-		total += options[key]
-	var roll := randf() * total
-	var choice := "wander"
-	for key: String in options:
-		roll -= options[key]
-		if roll <= 0.0:
-			choice = key
-			break
-	if choice == "wander":
-		_wander()
-	else:
-		_task = {"kind": choice, "action": actions[choice], "node": _harvest_target(choice), "stage": "go"}
+			if learned(kind) and _harvest_target(kind) != null:
+				flags[kind] = gather_flags(kind)
+				options[kind] = weight(kind, flags[kind])
+	var choice: String = pick(options)
+	match choice:
+		"wander":
+			_wander()
+		"explore":
+			if not _explore():
+				_wander()
+		_:
+			_task = {"kind": choice, "flags": flags[choice], "node": _harvest_target(choice), "stage": "go"}
 
 
 ## A short walk to somewhere near home. (This is not exploring.)
@@ -366,6 +423,17 @@ func _explore() -> bool:
 
 # --- Spells ---------------------------------------------------------------------
 
+## The conditions casting `id` comes under: rain is cast on a fire, or on
+## growing wheat ("water").
+func _cast_flags(id: String) -> Array:
+	match id:
+		"rain":
+			return ["fire"]
+		"water":
+			return ["crops"]
+	return []
+
+
 func _try_spells() -> bool:
 	if not is_instance_valid(Game.village) or not Game.village.founded:
 		return false
@@ -375,7 +443,7 @@ func _try_spells() -> bool:
 		var spell := "rain" if id == "water" else id
 		if not learned(spell) or Game.now < _ready_at.get(id, 0.0) or creature.magicko < Balance.num("creature_cost_" + spell):
 			continue
-		if randf() * 100.0 >= weight(id):
+		if not likely(spell, _cast_flags(id)):
 			continue
 		var target: Variant = _spell_target(id)
 		if target == null:
@@ -466,28 +534,28 @@ func _cast(id: String, target: Vector3) -> void:
 			fb.friendly = Balance.num("creature_friendly_fire")
 			Game.world_root.add_child(fb)
 			fb.launch(creature.mouth_position(), target)
-			did(id, Texts.line("cast_fireball"))
+			did(id, [], Texts.line("cast_fireball"))
 		"rain":
 			var cloud := RainCloud.new()
 			Game.world_root.add_child(cloud)
 			cloud.cast(target)
-			did(id, Texts.line("cast_rain"))
+			did("rain", ["fire"], Texts.line("cast_rain"))
 		"water":
 			var shower := RainCloud.new()
 			Game.world_root.add_child(shower)
 			shower.cast(target)
-			did(id, Texts.line("cast_water"))
+			did("rain", ["crops"], Texts.line("cast_water"))
 		"roots":
 			var patch := RootPatch.new()
 			Game.world_root.add_child(patch)
 			patch.cast(target)
-			did(id, Texts.line("cast_roots"))
+			did(id, [], Texts.line("cast_roots"))
 		"lightning":
 			ChainLightning.cast(target, Balance.num("creature_friendly_fire"))
-			did(id, Texts.line("cast_lightning"))
+			did(id, [], Texts.line("cast_lightning"))
 		"blood":
 			if Game.village.sacrifice_someone():
-				did(id, Texts.line("cast_blood"))
+				did(id, [], Texts.line("cast_blood"))
 
 
 # --- Fetching -------------------------------------------------------------------
@@ -563,13 +631,13 @@ func _update_task() -> void:
 	creature.has_target = false
 	var amount: float = _task.amount
 	village.give(kind, amount)
-	var action: String = _task.get("action", kind + "_day")
+	var task_flags: Array = _task.get("flags", [])
 	creature.drop_load()
 	Game.effects.spawn_dust(drop, 2.0 * creature.size)
 	_task = {}
 	_away = true
 	_idle_timer = randf_range(3.0, 6.0)
-	did(action, Texts.line("brought_" + kind, {"amount": roundi(amount)}))
+	did(kind, task_flags, Texts.line("brought_" + kind, {"amount": roundi(amount)}))
 
 
 func _amount() -> float:

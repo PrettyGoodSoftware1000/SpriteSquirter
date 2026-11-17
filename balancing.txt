@@ -220,23 +220,35 @@ shell_think_seconds = 8         # when it is hit, it decides whether to hide at 
 shell_calm_seconds = 5          # it comes out when nothing has hit it for this long...
 shell_max_seconds = 15          # ...or after this long whatever happens
 
-# --- Bless and curse ---------------------------------------------------------
-# Every action has a keenness from -100 (never) to 100 (always). Past 50
-# (or -50) a blessing (or curse) counts for less and less the further out it is.
-behavior_start = 0              # how keen the creature is on each thing to begin with
-bless_points = 10
-curse_points = 10
+# --- Bless and Condemn ---------------------------------------------------------
+# Every action in Actions.csv has an affinity from -100 to 100.
+affinity_start = 0              # the creature's affinity for each action to begin with
+bless_points = 10               # affinity Bless adds
+condemn_points = 10             # affinity Condemn takes away
+# The same action can only be judged again after this many seconds...
+judge_cooldown = 60
+judge_cooldown_30 = 180         # ...this many once its affinity is 30 or more (or -30 or less)...
+judge_cooldown_60 = 360         # ...60 or more...
+judge_cooldown_80 = 720         # ...80 or more.
+# Choices are made at random, weighted by affinity: each spread more makes
+# a thing e (2.7) times as likely, each spread less, e times less likely.
+affinity_spread = 25
 
-# Each second or so of a fight, the chance the creature runs from it, at a
-# keenness of 0. It doubles at 100 and is never at -100.
+# Each check in a fight (every 5 seconds), the chance the creature runs
+# from it, at an affinity of 0. It grows with a higher affinity and
+# shrinks with a lower one.
 flee_chance_unharmed = 0.05
 flee_chance_slightly = 0.1      # slightly injured: under 95% health
 flee_chance_badly = 0.2         # badly injured: under 60% health
 flee_chance_near_death = 0.4    # near death: under 25% health
 # Exploring: now and then, left alone, the creature sets off on a long
 # trip, up to half the map away, and then comes back. Only that counts as
-# exploring (for Bless and Curse); short walks round where it was sent do not.
-explore_chance = 0.15           # the chance each time it looks for something to do, at a keenness of 0 (twice that at 100, never at -100)
+# exploring (for Bless and Condemn); short walks round where it was sent do not.
+# Left alone, it picks what to do at random: a short wander (this weight),
+# exploring (this weight, times its affinity's weight), or fetching
+# something it has learned to fetch (its affinity's weight: 1 at 0).
+wander_weight = 1
+explore_weight = 0.25
 explore_least = 40              # metres: the shortest trip that counts as exploring
 
 # Spells

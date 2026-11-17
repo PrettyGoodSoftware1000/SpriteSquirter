@@ -31,6 +31,9 @@
 
 ## Branches
 
-- Do not create new branches without asking first.
-- Do not name branches. The project owner creates and names them.
+- Never create a branch, or choose a name for one, without asking the
+  project owner first and waiting for a yes. This applies locally and on
+  GitHub, including pushing to a branch name that does not exist yet
+  (that creates it).
+- The project owner creates and names branches.
 - Work on the branch you are given. `main` holds the merged game.

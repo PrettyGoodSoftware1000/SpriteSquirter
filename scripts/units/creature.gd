@@ -9,9 +9,11 @@ extends Node3D
 ## Game.settings.creature_grow_minutes (it stops growing while the village
 ## has no food). Its speed, reach, strength and health grow with it. It
 ## eats Game.settings.creature_food a minute when full grown, less while
-## small. Goblins can hurt it: at no health it is knocked out for
-## a while, then gets up with half its health. Health, stomp damage and the
-## knock-out time come from balancing.txt (see Balance).
+## small. Goblins can hurt it: at no health it is knocked out for a while
+## and shrinks by Balance "creature_shrink_on_knockout" of its size, then
+## gets up with "creature_getup_health" of its health. Health, stomp damage
+## and the knock-out time come from balancing.txt (see Balance). Its mind
+## may make it run from a fight (run_from_battle()).
 ##
 ## Each model (assets/creature/*.glb) is a single skinned mesh on a
 ## skeleton, sculpted by tools/bake_creature.py. All animation is procedural:
@@ -37,15 +39,14 @@ extends Node3D
 ## The raven flies (see _should_hurry): on any journey longer than Balance
 ## "raven_fly_distance", over ground that climbs steeply, and to get out of
 ## a fight. In the air nothing on the ground can reach it and it treads on
-## nothing. Hurt below "raven_flee_health" it flees a fight by itself, and
-## keeps out of trouble until it has healed to "raven_return_health".
+## nothing. When its mind makes it run from a fight, it flies.
 ##
 ## The squirrel runs on all fours where the raven would fly: half as fast
 ## again, and no slope slows it. Both use up stamina, and must stop when it
 ## is gone. The tortoise can do neither, but when it is hurt it may pull
 ## into its shell, where blows do a fifth of their harm. Flying, running
 ## and hiding are all things the player can Bless or Curse (the shell
-## separately at low, middling and high health: see CreatureMind).
+## separately for each of four states of health: see CreatureMind).
 ##
 ## Stamina, and the magicko the creature's own spells cost, each level up
 ## with use (see _note_drain): 10% more of it and 20% faster back.
@@ -143,8 +144,6 @@ var knocked_out := false
 var hostile := false
 ## In the air (the raven), from take-off until its feet are down again.
 var flying := false
-## Hurt and keeping away from enemies until it has healed (the raven).
-var fleeing := false
 ## On all fours and going fast (the squirrel).
 var running := false
 ## Pulled into its shell (the tortoise).
@@ -190,6 +189,8 @@ var _jaw := 0.0
 
 ## Cannot walk until Game.now passes this (the roots spell).
 var snared_until := 0.0
+## Running away from a fight until Game.now passes this: it does not attack.
+var fleeing_until := 0.0
 
 var _action := Action.NONE
 var _action_t := 0.0
@@ -242,8 +243,6 @@ var _fly := 0.0
 var _flap := 0.0
 ## How far the journey was when it began.
 var _flight_length := 0.0
-var _flee_until := 0.0
-var _flee_again_at := 0.0
 var _struck := false
 ## Too tired to run or fly until some stamina is back.
 var _tired := false
@@ -352,7 +351,7 @@ func _note_drain(stat: String, share: float) -> void:
 			max_stamina *= gain
 		else:
 			max_magicko *= gain
-		say("The %s's %s grew! Level %d" % [species_name().to_lower(), stat, levels[stat] + 1], Color(0.6, 1.0, 0.7))
+		say(Texts.line("stat_grew", {"creature": species_name().to_lower(), "stat": stat, "level": int(levels[stat]) + 1}), Color(0.6, 1.0, 0.7))
 	elif share >= 0.5:
 		_armed[stat] = true
 
@@ -376,11 +375,11 @@ func spend_magicko(cost: float) -> bool:
 
 # --- The shell (the tortoise) ---------------------------------------------------
 
-## "shell_low", "shell_mid" or "shell_high": hiding counts as a different
-## thing to Bless or Curse depending on how hurt the tortoise is.
+## "shell_unharmed", "shell_slightly", "shell_badly" or "shell_near_death":
+## hiding counts as a different thing to Bless or Curse depending on how
+## hurt the tortoise is (the same four states as running from battle).
 func shell_action() -> String:
-	var share := hp / maxf(max_hp, 1.0)
-	return "shell_low" if share < 0.34 else ("shell_mid" if share < 0.67 else "shell_high")
+	return "shell_" + mind.health_word()
 
 
 func _hide() -> void:
@@ -389,8 +388,7 @@ func _hide() -> void:
 	_cancel_action()
 	_turning = false
 	running = false
-	var how: String = {"shell_low": "badly hurt", "shell_mid": "hurt", "shell_high": "barely hurt"}[shell_action()]
-	mind.did(shell_action(), "The %s hid in its shell, %s (%d%% health)" % [species_name().to_lower(), how, roundi(100.0 * hp / maxf(max_hp, 1.0))])
+	mind.did(shell_action(), Texts.line("hid_in_shell", {"creature": species_name().to_lower(), "health": roundi(100.0 * health_share())}))
 
 
 ## True while it is too high for anything on the ground to reach.
@@ -421,7 +419,7 @@ func _grow(delta: float) -> void:
 		_ko_timer -= delta
 		if _ko_timer <= 0.0:
 			knocked_out = false
-			hp = max_hp * 0.5
+			hp = max_hp * Balance.num("creature_getup_health")
 			_crouch = 0.0
 			got_up.emit()
 	elif _hurt_timer <= 0.0 and not hungry:
@@ -439,9 +437,7 @@ func take_hit(amount: float, _from: Node3D) -> void:
 	_last_hit_at = Game.now
 	_cast_timer = maxf(_cast_timer, 0.25)
 	if hp > 0.0:
-		if _spec.get("flies", false) and not fleeing and hp < max_hp * Balance.num("raven_flee_health"):
-			_flee()
-		if _spec.get("shell", false) and not hiding and Game.now >= _shell_think_at:
+		if _spec.get("shell", false) and not hiding and Game.now >= _shell_think_at and Balance.num("shell_damage_share") < 1.0:
 			# Hurt in a fight: into the shell, if it is that way inclined.
 			_shell_think_at = Game.now + Balance.num("shell_think_seconds")
 			if randf() * 100.0 < mind.weight(shell_action()):
@@ -449,10 +445,12 @@ func take_hit(amount: float, _from: Node3D) -> void:
 		return
 	hp = 0.0
 	knocked_out = true
-	fleeing = false
 	hiding = false
 	running = false
 	_ko_timer = Balance.num("creature_knockout_seconds")
+	fleeing_until = 0.0
+	if not hostile:
+		shrink(Balance.num("creature_shrink_on_knockout"))
 	_cancel_action()
 	has_target = false
 	_auto = false
@@ -462,6 +460,66 @@ func take_hit(amount: float, _from: Node3D) -> void:
 	_jaw_want = 0.0
 	Game.effects.spawn_dust(global_position, 3.0 * size)
 	knocked_down.emit()
+
+
+## Makes the creature smaller by `share` of its size (never below
+## START_SIZE). It grows back over time like before.
+func shrink(share: float) -> void:
+	var minutes: float = maxf(Game.settings.creature_grow_minutes, 0.05)
+	var smaller := maxf(START_SIZE, size * (1.0 - clampf(share, 0.0, 1.0)))
+	age = inverse_lerp(START_SIZE, 1.0, smaller) * minutes * 60.0
+	_grow(0.0)
+
+
+## 0..1 of its health left.
+func health_share() -> float:
+	return clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
+
+
+## Runs away from the enemies around it, towards the village if that is
+## away from them. Returns false if there is nowhere to run to.
+func run_from_battle(seconds := 8.0) -> bool:
+	var middle := Vector3.ZERO
+	var n := 0
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g.is_alive() and _flat(g.global_position, global_position) < HUNT_RANGE * 0.3:
+			middle += g.global_position
+			n += 1
+	# The other giant counts for a crowd.
+	var rival := _rival()
+	if rival != null and _flat(rival.global_position, global_position) < HUNT_RANGE * 0.3:
+		middle += rival.global_position * 5.0
+		n += 5
+	if n == 0:
+		return false
+	middle /= n
+	var away := global_position - middle
+	away.y = 0.0
+	away = away.normalized() if away.length_squared() > 0.01 else Vector3(sin(heading), 0.0, cos(heading))
+	var village := Game.village
+	var tries: Array[Vector3] = [away, away.rotated(Vector3.UP, 0.8), away.rotated(Vector3.UP, -0.8)]
+	if is_instance_valid(village) and village.founded:
+		var home_way := village.center - global_position
+		home_way.y = 0.0
+		if home_way.length_squared() > 1.0 and home_way.normalized().dot(away) > 0.0:
+			tries.push_front(home_way.normalized())
+	for dir in tries:
+		var p := global_position + dir * (25.0 + 15.0 * size)
+		if Game.terrain.is_inside(p.x, p.z) and Game.terrain.is_dry(p.x, p.z):
+			# (A stomp under way finishes as an ordinary step.)
+			_cancel_action()
+			_turning = false
+			hiding = false
+			fleeing_until = Game.now + seconds
+			# The raven takes to the air to get away, and the squirrel runs.
+			auto_move(p)
+			return true
+	return false
+
+
+func is_fleeing() -> bool:
+	return Game.now < fleeing_until
 
 
 ## Puts the creature somewhere with both feet on the ground.
@@ -530,7 +588,7 @@ func _should_hurry(pos: Vector3, ordered := false) -> bool:
 		return false
 	if d > Balance.num("raven_fly_distance" if how == "fly" else "squirrel_run_distance") / keen:
 		return true
-	if fleeing or (ordered and (_alert or _action != Action.NONE)):
+	if is_fleeing() or (ordered and (_alert or _action != Action.NONE)):
 		return true
 	# Look for a climb on the way.
 	var terrain := Game.terrain
@@ -577,46 +635,6 @@ func _land() -> void:
 		_stepping[k] = false
 	Game.effects.spawn_dust(global_position, 2.0 * size)
 	_scan_timer = 0.0
-
-
-## Runs from the fight: flies to the safest spot it can find and keeps
-## away from enemies until it has healed (or a minute has gone by).
-func _flee() -> void:
-	fleeing = true
-	_flee_until = Game.now + 60.0
-	_flee_again_at = Game.now + 4.0
-	var enemies: Array[Vector3] = []
-	for node in get_tree().get_nodes_in_group("goblins"):
-		enemies.append((node as Node3D).global_position)
-	var rival := _rival()
-	if rival != null:
-		enemies.append(rival.global_position)
-	var terrain := Game.terrain
-	var best := global_position
-	var best_score := -INF
-	for reach: float in [70.0, 50.0, 30.0]:
-		for k in 12:
-			var a := k / 12.0 * TAU
-			var p := global_position + Vector3(sin(a), 0.0, cos(a)) * reach
-			if not terrain.is_inside(p.x, p.z) or not terrain.is_dry(p.x, p.z):
-				continue
-			var score := 80.0
-			for e in enemies:
-				score = minf(score, _flat(e, p))
-			# Of two safe places, the one nearer home.
-			score -= 0.1 * _flat(p, mind.home)
-			if score > best_score:
-				best_score = score
-				best = p
-	say("The %s flees!" % species_name().to_lower(), Color(1.0, 0.6, 0.4))
-	target = best
-	has_target = true
-	_auto = true
-	_look_at = best
-	_flight_length = _flat(best, global_position)
-	if not flying and not _tired and Game.now >= snared_until and _flat(best, global_position) > 2.0:
-		mind.did("fly")
-		_take_off()
 
 
 ## In the air: climbs to its cruising height (and over any hill ahead),
@@ -943,6 +961,11 @@ func _update_attacks(delta: float) -> void:
 	if _scan_timer > 0.0:
 		return
 	_scan_timer = 0.3
+	if is_fleeing():
+		# Running away: scared, and not stopping for anyone.
+		_alert = true
+		_jaw_want = 0.3
+		return
 	var near: Array[Villager] = []
 	var nearest: Villager = null
 	var nearest_d := INF
@@ -978,15 +1001,6 @@ func _update_attacks(delta: float) -> void:
 			hunt_pos = rival.global_position
 	_alert = focus != null or hunting
 	_jaw_want = 0.16 + 0.14 * float(_spec.nervous) if _alert else 0.0
-	if fleeing:
-		# Keeping out of it until the wounds have closed.
-		_turning = false
-		if hp >= max_hp * Balance.num("raven_return_health") or Game.now > _flee_until:
-			fleeing = false
-		elif focus != null and Game.now >= _flee_again_at and Game.now >= snared_until:
-			_flee()
-		if fleeing:
-			return
 	if focus == null:
 		_turning = false
 		# Nothing in reach: go after raiders, unless the player sent us somewhere.
@@ -1130,7 +1144,7 @@ func _on_stomp(pos: Vector3) -> void:
 	_action = Action.NONE
 	_action_cooldown = 1.4
 	if not hit.is_empty() and not hostile:
-		mind.did("stomp", "The creature stomped %s" % _name_them(hit))
+		mind.did("stomp", Texts.line("stomped", {"them": _name_them(hit)}))
 
 
 ## "a goblin", "3 goblins and an ogre", ...
@@ -1205,7 +1219,7 @@ func _update_grab(delta: float) -> void:
 				g.eaten()
 			_released += 1
 		if t > 1.9 + 0.25 * _held.size():
-			mind.did("eat", "The creature ate %s" % _name_them(_held))
+			mind.did("eat", Texts.line("ate", {"them": _name_them(_held)}))
 			_end_grab()
 			return
 	else:
@@ -1218,7 +1232,7 @@ func _update_grab(delta: float) -> void:
 				if is_instance_valid(g) and g.state == Villager.State.HELD:
 					g.toss((fwd * randf_range(15.0, 22.0) + Vector3.UP * randf_range(9.0, 13.0) + right * randf_range(-5.0, 5.0)) * lerpf(0.5, 1.0, size))
 			_released = _held.size()
-			mind.did("throw", "The creature threw %s" % _name_them(_held))
+			mind.did("throw", Texts.line("threw", {"them": _name_them(_held)}))
 		if t > 2.5:
 			_end_grab()
 			return

@@ -53,7 +53,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    nearest **Storehouse** (or to the middle of the village while you have
    none); it only counts once it arrives. Boulders come in small boulder
    fields dotted over the island. Trees and boulders run out, so the
-   workers move on. A worker carries a small load (2 units) home on its
+   workers move on; a boulder holds a lot of stone and crumbles away
+   slowly once it is used up. A worker carries a small load (2 units) home on its
    back. Once you have a **Blacksmith**, workers use wheelbarrows, which
    take three times as much.
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
@@ -61,8 +62,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    front and the villagers come and build it: up to 5 work on each
    building (your **Builders** first, then unassigned Workers), and a
    second building gets 5 of its own. The
-   more a building costs, the longer it takes: 10 seconds of one
-   villager's work for each unit of resource, so a Home (55) takes 10
+   more a building costs, the longer it takes: 5 seconds of one
+   villager's work for each unit of resource, so a Home (55) takes 5
    villagers just under a minute. The building rises out of the ground as
    they work.
    The buildings have jobs: a **Home** (or Mushroom cottage) adds housing, a
@@ -87,7 +88,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **Bones and necromancers.** Whenever a villager, goblin or ogre dies
    the village gets 2 to 4 **bones** (the bone counter in the top bar).
    Build a Necromancer tower (it costs bones too) and ask for
-   necromancers in the Jobs row: a wizard trains at the tower for 5
+   necromancers in the Jobs row: a wizard trains at the tower for 2½
    minutes and comes out in black robes. A necromancer still throws
    firebolts, and raises one dead villager or enemy lying nearby as a
    **skeleton** warrior or archer, for 2 bones. A skeleton fights for you
@@ -107,23 +108,29 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    and makes it a Lumberjack, Miner, Farmer or **Builder** at once (never
    a warrior, archer or wizard), and **-** sends one back to the Workers.
    Builders only build: they are first onto every building site and wait
-   when there is nothing to build.
+   when there is nothing to build. Farmers (and anyone foraging) gather
+   food twice as fast as other workers gather, and sow and reap fields
+   twice as fast too. No job's **+** works unless there is a free Worker
+   for it (one not already promised to a warrior, archer or wizard you
+   asked for); a necromancer needs a free wizard.
 4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
    in the **Jobs** row under the resource counter (the - and + buttons).
-   Each Town guard allows 4 warriors and trains one at a time, taking a
-   minute each; each Singing rocks allows 2 wizards and trains one at a
-   time, taking 3 minutes each. More buildings train side by side. A grey
+   Each Town guard allows 4 warriors and trains one at a time, taking
+   half a minute each; each Singing rocks allows 2 wizards and trains one
+   at a time, taking 90 seconds each. Recruits are taken from the
+   unassigned Workers. More buildings train side by side. A grey
    bar fills over the count while recruits train. Lower the number and
    warriors or wizards go straight back to work; they have to train again
    to return. **Wizards** make 5 magicko a minute each and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
    sometimes setting them alight. Once **Bows** are researched an Archers
-   count appears: each Town guard allows 2 **archers** (90 seconds each),
+   count appears: each Town guard allows 2 **archers** (45 seconds each),
    who shoot goblins from 22 m.
 5. **Feed everyone.** Each villager (children too) eats 1 food a minute,
    each warrior 3 and each archer or wizard 2; the counter shows how much
    is eaten. Your creature eats too: 20 food a minute when full grown, and
-   in proportion to its size before that (3 a minute at the start).
+   in proportion to its size before that, but only half that until it is
+   half grown (1.5 a minute at the start).
    With no food, no children are born, and after a minute without food
    someone starves every 30 seconds until there is food again.
 6. **Farm.** Pick **Wheat field** in the build menu, then hold the left
@@ -138,13 +145,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    swimming rivers on the way. They attack villagers first, then buildings,
    and go home in the morning. Every cave that was there when the game
    began keeps spawning goblins (1 a minute at first, half a goblin more
-   per minute every night; both in the dev menu).
+   per minute every night; both in the dev menu), and every goblin
+   building finished near a cave adds half a goblin a minute more there.
    **Ogres and giant bats come from goblin buildings.** Every **war hut**
    the goblins finish adds an **ogre** with a spiked club (ten times a
    goblin's health, three times its damage, too big to pick up or throw,
    and only singed by fire); if it dies, the hut sends another at the next
-   midnight. Every **watchtower** sends a **giant bat** with each raid,
-   which snatches one of
+   midnight. From the third night on, every **watchtower** sends a
+   **giant bat** with each raid, which snatches one of
    your villagers at random and carries it back to a cave for good. Knock
    the building down and no more come. A
    fireball or chain lightning brings it down, and a villager it was
@@ -179,14 +187,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    health. The raven **flies**: any journey longer than 30 m, any way that
    climbs steeply, and whenever you send it out of a fight. In the air it
    is two and a half times as fast, treads on nothing and cannot be reached from
-   the ground. Hurt below a quarter of its health it flees the fight by
-   itself and keeps away from enemies until it has healed. Shorter trips
-   on the flat it walks. Each starts at 15% of its full size and grows for 30 minutes,
+   the ground. When it runs from a battle (see Actions in context below)
+   it flies. Shorter trips on the flat it walks. Each starts at 15% of its full size and grows for 30 minutes,
    getting faster, stronger and tougher as it does (a small one cannot pick
    goblins up or flatten buildings, and stays out of raids unless you send
    it). It stops growing while the village has no food. Goblins attack a
    creature that comes close; at no health it is knocked out for 45
-   seconds and then gets up with half its health. Left alone it heals.
+   seconds and shrinks by a quarter of its size (it grows back), then gets
+   up with a quarter of its health. Left alone it heals.
    **Health, stamina and magicko.** Three bars to the right of the spell
    bar show the creature's own. The squirrel **runs** on all fours (long
    journeys, steep slopes, getting out of a fight): half as fast again,
@@ -201,7 +209,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    sent it and comes back. When goblins raid, or hang about within 50 m of
    the village, it chases them, turning 30% faster in a fight. A line of
    text floats up from its head when it does something ("The creature ate
-   2 goblins").
+   2 goblins"). In a fight it may **run from battle**, more readily the
+   more hurt it is.
    **What it learns.** Each time you cast Fireball, Rain, Roots, Chain
    Lightning or Blood Sacrifice the creature gains 25 knowledge of that spell; at 100 it has
    learned it and casts it by itself when it suits (fireball at a knot of
@@ -214,30 +223,46 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    carry into the store it gains 25 knowledge of harvesting that; once
    learned it pulls up a tree or a boulder (or reaps ripe wheat) and
    carries it to the Storehouse, 25 at a time when full grown.
-   **Bless and Curse.** Press the **Bless** key (golden sparkles, 10
-   magicko) and the top of the screen says what the creature last did;
-   press the key again, or click the creature, within 30 seconds of that
-   action and it becomes keener on doing it again. **Curse** (red and
-   creepy, 10 magicko) works the same way and makes it less keen. Every action starts at 50 out of 100 and moves 10 a time; at
-   0 it never does it. The creature cannot learn these two. Running,
-   flying and raining on the crops can be blessed and cursed too (a
-   creature cursed for flying walks more; one blessed for it flies even
-   short trips). So can the tortoise's hiding, and that is judged
-   separately for when it is badly hurt, hurt, or barely hurt: bless it
-   for hiding at low health and curse it for hiding at full health, and
-   it learns when to.
-9. **Cast spells** from the spell bar at the bottom (keys 1 to 7, then click): **Fireball** blows
+   **Bless and Curse.** Tap the **Bless** key (golden sparkles, 10
+   magicko) and the top of the screen says what the creature last did
+   (holding the mouse over the Bless or Curse button shows it too); tap it
+   again, within 30 seconds of that action, and the creature becomes
+   keener on doing it again. **Curse** (red and creepy, 10 magicko) works
+   the same way and makes it less keen. Each thing the creature does can
+   be blessed or cursed once. Every action has a keenness from -100
+   (never) to 100 (always), starting at 0 and moving 10 a time; past 50
+   or -50 each blessing or curse counts for less and less. The creature
+   cannot learn these two.
+   **Actions in context.** What the creature did depends on what was going
+   on, and each has its own keenness. Fetching lumber, stone or food is
+   one action when battle raged, another when there was none of it,
+   another when there was plenty (over 200), and otherwise one by day and
+   one by night: so "The creature gathered food when there was none." can
+   be blessed while "The creature gathered food when there was plenty."
+   is cursed. Running from battle is four actions: when it was unharmed,
+   slightly injured, badly injured or near death. The tortoise's hiding in
+   its shell is judged by the same four states, so it can be blessed for
+   hiding when near death and cursed for hiding when unharmed. A raven
+   that runs from battle flies, and a squirrel runs on all fours. Running,
+   flying and raining on the crops are actions too: a creature cursed for
+   flying walks more, and one blessed for it flies even short trips. The
+   keener it is on exploring, the further it wanders (up to three times as far).
+9. **Cast spells** with keys 1 to 7: each is cast at once, where the mouse
+   points (there is no spell to pick first). A spell cast in the last 10
+   seconds costs 50% more for each time, added up, and its square on the
+   spell bar fills with blue sparkles as it gets dearer (most at 300%
+   more). **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while (and makes wheat under the cloud grow three
    times as fast while it is wet), and **Roots** grows a glowing green patch
    of roots for 20 seconds: goblins and the tortoise in it are held where
    they stand, and your own people wade through at a quarter of their
    speed. The cost in magicko (the blue droplet) is under each spell.
-   **Chain Lightning** strikes whoever is nearest the click and jumps
+   **Chain Lightning** strikes whoever is nearest the mouse and jumps
    on through up to six things, each within 9 m of the last: goblins,
    ogres, bats and your own people alike. Anything wet (rained on in the
    last 20 seconds, or standing in a river or lake) takes double.
-   **Blood Sacrifice** costs none: click near one of your villagers and
+   **Blood Sacrifice** costs none: point at one of your villagers and
    they die, and magicko comes in twice as fast for 30 seconds (the counter
    turns red and drips while it lasts). A fireball crater is bare stone; it
    only fills with water when it breaks into water nearby.
@@ -259,15 +284,15 @@ In the game, press **Esc** and **Show controls** for this list.
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
-| 1–7 | Pick a spell (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Curse), then click to cast |
-| Bless or Curse key twice | Bless or curse what the creature last did (or click the creature) |
+| 1–7 | Cast a spell where the mouse points (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Curse) |
+| Bless or Curse key | Once: see what the creature last did. Twice: bless or curse it |
 | B / Backspace | Open or close the build menu (1–9 pick the field, the bridge or a building) |
 | U | Open or close the research menu (needs a Blacksmith) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
 | R / Shift+R | Rotate the building outline |
 | T | Another look for the building |
 | Shift+click | Place the building and keep placing |
-| Esc / right click | Cancel the spell or the building |
+| Esc / right click | Cancel the building |
 | Esc (with nothing to cancel) | Pause the game; Esc again resumes |
 | ~ | Show or hide the **dev menu** |
 
@@ -286,7 +311,7 @@ In the game, press **Esc** and **Show controls** for this list.
 | Goblin build speed | How many times as fast the goblins start and finish buildings |
 | Villager detail within | Villagers nearer the camera than this are drawn in full detail (default 60 m; lower it on a slow machine) |
 | Give 100 of everything | For testing |
-| Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; `[` and `]` change the brush size |
+| Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; Ctrl + mouse wheel (or `[` and `]`) changes the brush size |
 | New random world (N) | Generate a brand-new island of the same size |
 | Weather (L) | Meadow day, golden hour, dawn, night (until the next part of the day) |
 | Nature palette (P) | Recolour grass, trees, rocks and water instantly |
@@ -304,7 +329,7 @@ game, villagers build everything.
 
 | Tool (key) | Action |
 |---|---|
-| Raise, Lower, Flatten, Smooth (1–4) | Sculpt the terrain; `[` and `]` change the brush size |
+| Raise, Lower, Flatten, Smooth (1–4) | Sculpt the terrain; Ctrl + mouse wheel changes the brush size |
 | Expand island (5) | Hold and draw out over the sky to grow the island, in any shape |
 | Sand (6) | Paint sand |
 | Grass (7) | Paint grass; clears sand, stone and dirt, and fills in water |
@@ -316,6 +341,10 @@ game, villagers build everything.
 | Erase | Hold to remove trees, rocks, start locations and caves inside the brush |
 | Cut cliff | Click on low ground and drag into a hill: it is sliced down to that height, leaving a sheer cliff nobody can climb |
 | Goblin path | Draw from a goblin cave to a start location (or back): raiders from that cave loosely follow it. Several paths can join the same two; each has its own colour, shown only while this brush is picked. Shift+click removes one |
+
+**Ctrl+Z** undoes the last change (each click or stroke is one change).
+Pick the map's **colour palette** in the editor panel: the map is played
+in it.
 
 Water flows: lower the ground next to a river or lake and the water runs
 in, and wherever water reaches the edge of the island it pours over as a
@@ -341,11 +370,23 @@ numbers you may want to tune: the health and damage of villagers,
 warriors, archers, wizards, goblins, ogres and the creatures, building
 health, what every building costs and how long building takes, bones,
 necromancers and skeletons, how often the goblins build, chain
-lightning, the giant bat, the raven's flying, the balrog, how steep a slope slows or stops walkers,
-how many villagers build one building, fireball damage, how much knowledge the creature needs to learn
-each thing, the cooldown of each spell it casts, and the size of a bless
-or curse. Open it in any text editor, change a number, save, and start
+lightning, the giant bat, the raven's flying, the balrog, the creature's stamina and magicko, the tortoise's shell, how steep a slope slows or stops walkers,
+how many villagers build one building, training times, how fast farmers
+work, how much stone a boulder holds, fireball damage, how much knowledge the creature needs to learn
+each thing, the cost and cooldown of each spell it casts, the size of a bless
+or curse, how readily the creature runs from battle, and the soft
+cooldown of your spells. Open it in any text editor, change a number, save, and start
 the game again. Each line reads `name = number`, with a note after `#`.
+
+## Announcements
+
+`Announcements.txt`, next to `project.godot`, holds every line of text
+the game announces: the messages in the middle of the screen (the raid,
+the morning, the bat, research, the creature knocked out), what Bless
+and Curse show at the top, the lines that float up from the creature,
+and the sentence for each thing the creature can be blessed or cursed
+for. Each line reads `name = text`; rewrite the text after the `=`, save,
+and start the game again. Words in `{braces}` are filled in by the game.
 
 ## What's in the world
 
@@ -356,11 +397,13 @@ the game again. Each line reads `name = number`, with a note after `#`.
   crystal tower, the moon tower, the mushroom house, the singing rocks,
   the store-in-a-tree, the winged windmill and the skull-topped
   Necromancer tower. Your villagers build more from the build menu.
-- **Goblin buildings:** every 5 minutes the goblins start a building of
-  their own near a cave: a tent, war hut, forge, potion hut or
-  watchtower of planks, rags and bones. A few goblins build it, going
-  back to the cave for what they need. They have no use yet; a fireball
-  or the creature's feet knock them down.
+- **Goblin buildings:** every 5 minutes, once the last one is finished,
+  the goblins start a building of their own near a cave: a tent, war
+  hut, forge, potion hut or watchtower of planks, rags and bones. A few
+  goblins build it, going back to the cave for what they need, and they
+  stay behind when the others raid until it is finished. Each finished
+  one makes its cave spawn more goblins; a fireball or the creature's
+  feet knock them down.
 - **Villagers and goblins:** villagers wander their villages; goblins
   loiter around a cave and their huts, far from the villages, until the
   midnight raid. Both catch fire and get flung by explosions; the
@@ -412,7 +455,9 @@ scripts/
   game/building_catalog.gd   Build menu: names, costs and what each building is for
   game/crop_field.gd       A wheat field: sowing, growing, reaping
   game/goblin_raids.gd     Goblins spawning at the caves, the midnight raid, and what the goblins build
-  game/spell_book.gd       Spells: costs and cooldowns
+  game/spell_book.gd       Spells: names, costs and hints
+  core/texts.gd            Reads Announcements.txt
+  ui/spell_sparkles.gd     The blue sparkles on a spell that costs more for being cast recently
   editor/editor_mode.gd    The map editor's tools and saving
   world/terrain.gd         Island heightmap (any map size), land mask and rock skirt, water
                            layer that flows and pours off the edge, paint layers, sculpting

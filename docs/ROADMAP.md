@@ -81,12 +81,17 @@ stage.
 - Slopes slow walkers, cliffs stop them, and villagers and goblins find routes round both
 - Map editor: expand-island, cut-cliff and goblin-path brushes
 
-## Version 0.13: A raven and a balrog ✅
-- A third creature, the raven: flies long journeys and over climbs, flees when badly hurt
+## Version 0.13: Spells by number and a creature with context ✅
+- Spells cast by their number key where the mouse points; a soft cooldown makes repeats dearer
+- Creature actions judged in context (battle, none, plenty, day, night); it can run from battle
+- Announcements.txt holds every line of announcement text; editor undo and palettes
+
+## Version 0.14: A raven and a balrog ✅
+- A third creature, the raven: flies long journeys and over climbs, and when it runs from battle
 - The balrog, the goblins' giant: guards its cave while it grows, then joins the raids; casts fireball from half size
 - Giants fight each other with their fists; glowing parts on creature models
 
-## Version 0.14: Stamina, shells and jointed villagers ✅
+## Version 0.15: Stamina, shells and jointed villagers ✅
 - Villagers of every kind rebuilt: elbows and knees that bend, hands, boots, faces, aprons, beards, armour
 - Creature health, stamina and magicko bars; stats level up with use; the creature's spells cost its own magicko
 - The squirrel runs on all fours; the tortoise hides in its shell; both, and flying, can be blessed and cursed

@@ -59,6 +59,9 @@ func add_shake(amount: float, at: Vector3) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
 	if button:
+		if button.ctrl_pressed and (button.button_index == MOUSE_BUTTON_WHEEL_UP or button.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			# Ctrl + wheel is for brush sizes, not zoom.
+			return
 		match button.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
 				if button.pressed:

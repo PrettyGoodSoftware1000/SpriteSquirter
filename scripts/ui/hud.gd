@@ -12,6 +12,8 @@ extends CanvasLayer
 
 signal sculpt_selected(index: int)
 signal spell_selected(index: int)
+## The mouse went over spell button `index`, or off the spell buttons (-1).
+signal spell_hovered(index: int)
 signal build_selected(kind: String)
 signal build_menu_requested
 signal regenerate_requested
@@ -64,7 +66,8 @@ var _research_panel: PanelContainer
 var _research_rows := {}
 var _workers: Label
 var _spell_buttons: Array[Button] = []
-var _spell_bars: Array[ProgressBar] = []
+var _spell_costs: Array[Label] = []
+var _spell_sparkles: Array[SpellSparkles] = []
 ## The creature's bars: stat -> [bar, label]
 var _creature_bars := {}
 var _build_panel: PanelContainer
@@ -247,31 +250,27 @@ func _build_spell_bar(root: Control) -> void:
 	var research := _button("Research (U)")
 	research.pressed.connect(func() -> void: research_menu_requested.emit())
 	menus.add_child(research)
-	var group := ButtonGroup.new()
-	group.allow_unpress = true
 	for k in SpellBook.SPELLS.size():
 		var spell: Dictionary = SpellBook.SPELLS[k]
-		var slot := VBoxContainer.new()
-		slot.add_theme_constant_override("separation", 2)
-		row.add_child(slot)
 		var b := _button("")
-		b.toggle_mode = true
-		b.button_group = group
 		b.custom_minimum_size = Vector2(132, 58)
+		b.tooltip_text = "%s (key %d): %s" % [spell.name, k + 1, spell.hint]
 		var lines: Array[Control] = [_text("%d  %s" % [k + 1, spell.name], 15)]
+		var cost_label: Label = null
 		if spell.cost > 0:
-			lines.append(ResourceIcon.cost_row({"magicko": spell.cost}, 15))
+			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 15)
+			cost_label = cost_row.get_child(0) as Label
+			lines.append(cost_row)
 		b.add_child(_stacked(lines))
+		var sparkles := SpellSparkles.new()
+		b.add_child(sparkles)
 		b.pressed.connect(func() -> void: spell_selected.emit(k))
-		slot.add_child(b)
-		var bar := ProgressBar.new()
-		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(132, 5)
-		bar.max_value = 1.0
-		bar.value = 0.0
-		slot.add_child(bar)
+		b.mouse_entered.connect(func() -> void: spell_hovered.emit(k))
+		b.mouse_exited.connect(func() -> void: spell_hovered.emit(-1))
+		row.add_child(b)
 		_spell_buttons.append(b)
-		_spell_bars.append(bar)
+		_spell_costs.append(cost_label)
+		_spell_sparkles.append(sparkles)
 	# The creature's health, stamina and magicko, to the right of the spells.
 	var stats := VBoxContainer.new()
 	stats.add_theme_constant_override("separation", 3)
@@ -616,7 +615,7 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 	if is_instance_valid(beast):
 		var state := "%s %d%% grown" % [beast.species_name(), roundi(beast.grown() * 100.0)] if beast.grown() < 0.995 else beast.species_name()
 		state += ", knocked out" if beast.knocked_out else ", health %d%%" % roundi(100.0 * beast.hp / maxf(beast.max_hp, 1.0))
-		if beast.fleeing:
+		if beast.is_fleeing():
 			state += ", fleeing"
 		parts.append(state)
 	if kids > 0:
@@ -635,13 +634,14 @@ func _update_jobs(village: PlayerVillage) -> void:
 		var set_by_player: int = village.quota[kind]
 		(_gather[kind].count as Label).text = str(set_by_player)
 		(_gather[kind].less as Button).disabled = set_by_player <= 0
-		(_gather[kind].more as Button).disabled = spare <= 0
+		(_gather[kind].more as Button).disabled = village.free_workers() <= 0
 	for role: String in _jobs:
 		var w: Dictionary = _jobs[role]
 		var top := village.max_count(role)
 		var want: int = village.wanted[role]
 		(w.count as Label).text = "%d/%d" % [village.count(role), want]
-		(w.count as Label).tooltip_text = "Trained / wanted. Up to %d with your %s buildings." % [top, ROLES[role][1]]
+		(w.count as Label).tooltip_text = "Trained / wanted. Up to %d with your %s buildings, and only while %s free to train." % [top, ROLES[role][1],
+			"a wizard is" if role == "necromancer" else "an unassigned worker is"]
 		# Archers appear once bows have been researched, and necromancers
 		# once there is a tower for them.
 		var known := role != "archer" or village.has_research("bows")
@@ -649,7 +649,8 @@ func _update_jobs(village: PlayerVillage) -> void:
 			known = top > 0 or village.count(role) > 0
 		for part: String in ["count", "less", "more", "label"]:
 			(w[part] as Control).visible = known
-		(w.more as Button).disabled = want >= top
+		var free_now := village.free_wizards() if role == "necromancer" else village.free_workers()
+		(w.more as Button).disabled = want >= top or free_now <= 0
 		(w.less as Button).disabled = want <= 0
 		var progress := village.training_progress(role)
 		var bar := w.bar as ProgressBar
@@ -697,19 +698,15 @@ func _process(delta: float) -> void:
 	fall.chain().tween_callback(drop.queue_free)
 
 
-func set_spell(index: int) -> void:
+## `costs`: what each spell costs now. `extras`: the share more than usual
+## it costs for being cast recently, shown as blue sparkles.
+func update_spells(magicko: int, costs: Array[int], extras: Array[float], enabled: bool) -> void:
 	for k in _spell_buttons.size():
-		_spell_buttons[k].set_pressed_no_signal(k == index)
-
-
-## `cooldowns` holds the seconds left for each spell.
-func update_spells(magicko: int, cooldowns: Array, enabled: bool) -> void:
-	for k in _spell_buttons.size():
-		var spell: Dictionary = SpellBook.SPELLS[k]
-		var cool: float = cooldowns[k]
-		var ready_now: bool = enabled and magicko >= spell.cost and cool <= 0.0
+		var ready_now: bool = enabled and magicko >= costs[k]
 		_spell_buttons[k].modulate = Color.WHITE if ready_now else Color(1.0, 0.6, 0.6, 0.75)
-		_spell_bars[k].value = clampf(cool / maxf(spell.cooldown, 0.01), 0.0, 1.0)
+		if _spell_costs[k] != null:
+			_spell_costs[k].text = str(costs[k])
+		_spell_sparkles[k].set_extra(extras[k])
 
 
 func show_build_menu(shown: bool) -> void:
@@ -743,7 +740,7 @@ func set_sculpt(index: int) -> void:
 
 
 func set_brush(radius: float) -> void:
-	_brush.text = "Brush radius: %d m   ( [ ] )" % roundi(radius)
+	_brush.text = "Brush radius: %d m   ( Ctrl + wheel,  [ ] )" % roundi(radius)
 
 
 func set_mood(index: int) -> void:

@@ -37,13 +37,14 @@ creature_stomp_damage = 60      # in the middle of the stomp, half that at its e
 creature_strike_damage = 70     # a blow with the fists at the other giant (your creature against the balrog, and back)
 creature_knockout_seconds = 45  # how long it stays down at no health
 creature_gather_amount = 25     # lumber, stone or food a full-grown creature brings in one trip
+creature_shrink_on_knockout = 0.25  # share of its size the creature loses when it is knocked out
+creature_getup_health = 0.25    # share of its health it has when it gets up again
+creature_young_appetite = 0.5   # under half grown it eats this share of what it otherwise would
 
 # --- The raven ---------------------------------------------------------------
 raven_fly_distance = 30         # metres: it flies any journey longer than this, and walks shorter ones (unless the way climbs steeply or it is getting out of a fight)
 raven_fly_height = 9            # metres above the ground when full grown
 raven_fly_speed = 2.5           # flying is this many times as fast as walking
-raven_flee_health = 0.25        # it flees a fight by itself below this share of its health (0 = never)
-raven_return_health = 0.6       # ...and keeps away from enemies until it has healed to this share
 
 # --- The balrog (the goblins' giant; it grows as your creature does) ----------
 balrogs = 1                     # how many the goblins keep (0 = none)
@@ -95,14 +96,25 @@ cottage_housing = 3
 
 # Building time. A building needs this many seconds of work for every unit
 # of resource it costs, shared between the villagers building it. A Home
-# (55 resources) is 550 seconds of work: under a minute for 10 villagers.
-build_work_per_resource = 10
+# (55 resources) is 275 seconds of work: under a minute for 5 villagers.
+build_work_per_resource = 5
 builders_per_building = 5           # the most villagers that work on one building at a time
+
+# --- Training -------------------------------------------------------------------
+# Seconds to train one recruit. Each training building trains one at a time.
+warrior_training_seconds = 30       # at a Town guard
+archer_training_seconds = 45        # at a Town guard, once bows are researched
+wizard_training_seconds = 90        # at a Wizard school
+
+# --- Gathering --------------------------------------------------------------------
+farmer_speed = 2                    # foraging, sowing and reaping go this many times faster
+rock_stone = 120                    # stone in a full-size boulder before it is used up
+rock_crumble_seconds = 4            # how long a used-up boulder takes to crumble away
 
 # --- Bones, necromancers and skeletons ----------------------------------------
 bones_min = 2                       # bones the village gets when a villager, goblin or ogre dies...
 bones_max = 4                       # ...somewhere between these two
-necromancer_training_seconds = 300  # a wizard at a Necromancer tower
+necromancer_training_seconds = 150  # a wizard at a Necromancer tower
 necromancers_per_tower = 2
 raise_bones = 2                     # bones a necromancer spends to raise a skeleton
 skeleton_seconds = 180              # how long a skeleton lasts
@@ -111,6 +123,7 @@ skeleton_share = 0.5                # its health and damage, as a share of who i
 # --- Goblin buildings -----------------------------------------------------------
 goblin_build_minutes = 5            # the goblins start a new building this often
 goblin_buildings_max = 20           # and stop when they have this many
+goblin_rate_per_building = 0.5      # every finished goblin building adds this many goblins a minute at its cave
 # The goblins do not pay for theirs, but the bigger the number the longer
 # it takes them (build_work_per_resource above applies to them too).
 goblin_tent_resources = 40
@@ -129,6 +142,7 @@ wet_seconds = 20                    # how long rain leaves villagers and goblins
 # --- The giant bat --------------------------------------------------------------
 ogres_per_war_hut = 1               # ogres every goblin war hut keeps (dead ones are replaced at midnight)
 bats_per_watchtower = 1             # giant bats every goblin watchtower sends with a raid; each carries one villager off to a cave
+bats_from_night = 3                 # no bats before this night
 bat_health = 80                     # a fireball or lightning can bring it down
 bat_speed = 11                      # metres a second
 
@@ -181,12 +195,26 @@ level_max_gain = 0.1            # a level makes the bar this much bigger...
 level_regen_gain = 0.2          # ...and this much quicker to refill
 
 # --- The tortoise's shell ---------------------------------------------------------
-shell_damage_share = 0.2        # share of the damage it takes while hiding
+shell_damage_share = 0.2        # share of the damage it takes while hiding (1 = the shell is no use, and it never hides)
 shell_think_seconds = 8         # when it is hit, it decides whether to hide at most this often
 shell_calm_seconds = 5          # it comes out when nothing has hit it for this long...
 shell_max_seconds = 15          # ...or after this long whatever happens
 
 # --- Bless and curse ---------------------------------------------------------
-behavior_start = 50             # how keen the creature is on each thing to begin with (0 never, 100 always)
+# Every action has a keenness from -100 (never) to 100 (always). Past 50
+# (or -50) a blessing (or curse) counts for less and less the further out it is.
+behavior_start = 0              # how keen the creature is on each thing to begin with
 bless_points = 10
 curse_points = 10
+
+# Each second or so of a fight, the chance the creature runs from it, at a
+# keenness of 0. It doubles at 100 and is never at -100.
+flee_chance_unharmed = 0.05
+flee_chance_slightly = 0.1      # slightly injured: under 95% health
+flee_chance_badly = 0.2         # badly injured: under 60% health
+flee_chance_near_death = 0.4    # near death: under 25% health
+explore_reach_most = 3          # at a keenness of 100 for exploring it wanders this many times as far
+
+# Spells
+spell_recent_seconds = 10       # a spell costs more for this long after it is cast...
+spell_recent_extra = 0.5        # ...this much more (0.5 is 50%) for each cast, added up

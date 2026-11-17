@@ -16,10 +16,12 @@ extends Node
 ##
 ## Grown-ups are workers unless the player asks for warriors or wizards
 ## (the jobs panel). Each Town guard trains one warrior at a time, taking
-## WARRIOR_SECONDS, up to WARRIORS_PER_GUARD; each Singing rocks trains one
-## wizard at a time, taking WIZARD_SECONDS, up to WIZARDS_PER_ROCKS.
-## Buildings train side by side. A warrior or wizard sent back to work
-## must train from the start to return.
+## Balance "warrior_training_seconds", up to WARRIORS_PER_GUARD; each
+## Singing rocks trains one wizard at a time, taking
+## "wizard_training_seconds", up to WIZARDS_PER_ROCKS. Buildings train side
+## by side. A warrior or wizard sent back to work must train from the start
+## to return. Recruits come from the unassigned workers, so no job's count
+## can go up unless one of them is free (free_workers()).
 ##
 ## A Necromancer tower trains wizards on into necromancers
 ## ("necromancers_per_tower", "necromancer_training_seconds"), who raise the
@@ -34,7 +36,8 @@ extends Node
 ## Everyone eats: villagers FOOD_PER_VILLAGER a minute, warriors
 ## FOOD_PER_WARRIOR, archers FOOD_PER_ARCHER and wizards FOOD_PER_WIZARD.
 ## The creature eats too: Game.settings.creature_food a minute when full
-## grown, and in proportion to its size before that. With no food, no children
+## grown, and in proportion to its size before that (and only Balance
+## "creature_young_appetite" of that while it is under half grown). With no food, no children
 ## are born; after STARVE_AFTER seconds without food, someone starves every
 ## STARVE_EVERY seconds until there is food again.
 
@@ -56,13 +59,9 @@ const JOB_SHARE := {"lumber": 0.4, "food": 0.35, "stone": 0.25}
 const MAX_PER_TARGET := 2
 const TREE_WOOD := 30.0
 const BUSH_WOOD := 10.0
-const ROCK_STONE := 35.0
 const WARRIORS_PER_GUARD := 4
-const WARRIOR_SECONDS := 60.0
 const ARCHERS_PER_GUARD := 2
-const ARCHER_SECONDS := 90.0
 const WIZARDS_PER_ROCKS := 2
-const WIZARD_SECONDS := 180.0
 ## Magicko each wizard makes per minute.
 const WIZARD_MAGICKO := 5.0
 ## Food eaten per minute.
@@ -72,14 +71,15 @@ const FOOD_PER_WIZARD := 2.0
 const FOOD_PER_ARCHER := 2.0
 const STARVE_AFTER := 60.0
 const STARVE_EVERY := 30.0
-## role -> [building role in the catalog, per building, seconds to train].
-## Necromancers are wizards trained on at a Necromancer tower; their two
-## numbers come from balancing.txt (see per_building() and train_seconds()).
+## role -> [building role in the catalog, per building]. The training
+## times come from balancing.txt ("<role>_training_seconds"). Necromancers
+## are wizards trained on at a Necromancer tower; how many a tower takes
+## comes from balancing.txt too (see per_building() and train_seconds()).
 const ARMY := {
-	"warrior": ["guard", WARRIORS_PER_GUARD, WARRIOR_SECONDS],
-	"archer": ["guard", ARCHERS_PER_GUARD, ARCHER_SECONDS],
-	"wizard": ["wizard", WIZARDS_PER_ROCKS, WIZARD_SECONDS],
-	"necromancer": ["necro", 2, 300.0],
+	"warrior": ["guard", WARRIORS_PER_GUARD],
+	"archer": ["guard", ARCHERS_PER_GUARD],
+	"wizard": ["wizard", WIZARDS_PER_ROCKS],
+	"necromancer": ["necro", 2],
 }
 ## Blood Sacrifice: how long the magicko boost lasts, how big it is, and
 ## how near the click a villager must be.
@@ -214,6 +214,8 @@ func store(kind: String, amount: float) -> void:
 ## or "build"), or with a `change` of -1 sends one back to the unassigned.
 ## It happens at once. Never takes warriors, archers or wizards.
 func change_quota(kind: String, change: int) -> void:
+	if change > 0 and free_workers() <= 0:
+		return
 	var chosen: Villager = null
 	for v in people():
 		if not v.can_work() or v.job == "train":
@@ -241,6 +243,25 @@ func unassigned() -> int:
 		if v.can_work() and v.job != "train" and v.pin == "":
 			n += 1
 	return n
+
+
+## Unassigned workers not already promised to a warrior, archer or wizard
+## the player asked for. A job's count only goes up while this is above 0.
+func free_workers() -> int:
+	var promised := 0
+	for role: String in ["warrior", "archer", "wizard"]:
+		promised += maxi(0, wanted[role] - count(role) - training_progress(role).size())
+	return maxi(0, unassigned() - promised)
+
+
+## Wizards that could still be trained on into necromancers.
+func free_wizards() -> int:
+	var n := 0
+	for v in people():
+		if v.wizard and not v.necromancer and v.job != "train" and v.is_alive():
+			n += 1
+	var promised := maxi(0, wanted.necromancer - count("necromancer") - training_progress("necromancer").size())
+	return maxi(0, n - promised)
 
 
 ## Blood Sacrifice cast by the creature: any one of the workers.
@@ -332,7 +353,7 @@ func per_building(role: String) -> int:
 
 
 func train_seconds(role: String) -> float:
-	return Balance.num("necromancer_training_seconds") if role == "necromancer" else ARMY[role][2]
+	return Balance.num(role + "_training_seconds")
 
 
 ## The most warriors (or archers, or wizards) the village's buildings can
@@ -403,12 +424,14 @@ func _update_research(delta: float) -> void:
 	research_done.emit(id)
 
 
-## Food the creature eats per minute: its full appetite once grown.
+## Food the creature eats per minute: its full appetite once grown, in
+## proportion to its size before that, and less again while it is young.
 func creature_upkeep() -> float:
 	var c := Game.creature
 	if not is_instance_valid(c):
 		return 0.0
-	return Game.settings.creature_food * c.size
+	var young := Balance.num("creature_young_appetite") if c.grown() < 0.5 else 1.0
+	return Game.settings.creature_food * c.size * young
 
 
 ## Grown-ups that are not warriors, wizards or in training.
@@ -421,9 +444,14 @@ func workers() -> int:
 
 
 ## Sets how many warriors or wizards the player wants (clamped to what the
-## buildings allow).
+## buildings allow). It only goes up while there is someone free to train:
+## an unassigned worker (or, for necromancers, a wizard).
 func set_wanted(role: String, value: int) -> void:
-	wanted[role] = clampi(value, 0, max_count(role))
+	var top := max_count(role)
+	if value > wanted[role]:
+		var free_now := free_wizards() if role == "necromancer" else free_workers()
+		top = mini(top, wanted[role] + free_now)
+	wanted[role] = clampi(value, 0, maxi(top, 0))
 	_army_timer = 0.0
 
 
@@ -604,13 +632,13 @@ func work(v: Villager, delta: float) -> void:
 					_:
 						v.become_wizard(post.global_position)
 		"food":
-			v.gather("food", Game.settings.food_rate / 60.0 * delta * tool_bonus("food"))
+			v.gather("food", Game.settings.food_rate / 60.0 * delta * tool_bonus("food") * Balance.num("farmer_speed"))
 		"farm":
 			var field := v.job_target as CropField
 			if field == null or not field.needs_work():
 				v.clear_job()
 			else:
-				var reaped := field.add_work(delta * tool_bonus("food"))
+				var reaped := field.add_work(delta * tool_bonus("food") * Balance.num("farmer_speed"))
 				if reaped > 0.0:
 					v.gather("food", reaped)
 		"lumber":
@@ -627,7 +655,7 @@ func work(v: Villager, delta: float) -> void:
 			v.gather("stone", gained)
 			var rock := v.job_target as Node3D
 			if rock and rock.is_in_group("rocks"):
-				var left: float = rock.get_meta("stone", ROCK_STONE * rock.scale.x) - gained
+				var left: float = rock.get_meta("stone", Balance.num("rock_stone") * rock.scale.x) - gained
 				rock.set_meta("stone", left)
 				if left <= 0.0:
 					_break_rock(rock)
@@ -637,8 +665,9 @@ func _break_rock(rock: Node3D) -> void:
 	rock.remove_from_group("rocks")
 	rock.remove_from_group("grounded")
 	Game.effects.spawn_dust(rock.global_position, clampf(rock.scale.x, 0.5, 2.0))
+	# What is left of it crumbles away slowly.
 	var tw := rock.create_tween()
-	tw.tween_property(rock, "scale", rock.scale * 0.05, 0.6)
+	tw.tween_property(rock, "scale", rock.scale * 0.05, maxf(Balance.num("rock_crumble_seconds"), 0.1)).set_ease(Tween.EASE_IN)
 	tw.tween_callback(rock.queue_free)
 
 
@@ -825,11 +854,13 @@ func _manage_army() -> void:
 			training += 1
 
 
+## The nearest unassigned worker (lumberjacks, miners, farmers and
+## builders keep to their jobs).
 func _nearest_worker(to: Vector3) -> Villager:
 	var best: Villager = null
 	var best_d := INF
 	for v in people():
-		if not v.can_work() or v.job == "train":
+		if not v.can_work() or v.job == "train" or v.pin != "":
 			continue
 		var d := v.global_position.distance_to(to)
 		if d < best_d:

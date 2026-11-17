@@ -6,7 +6,11 @@ extends Node3D
 ## Maps never get buildings: villagers build those during the game.
 ##
 ## A new map starts from a random island of the chosen size without
-## villages; a saved map is loaded as it was left.
+## villages; a saved map is loaded as it was left. The map also keeps the
+## nature palette chosen here, and is played in it.
+##
+## Ctrl + mouse wheel changes the brush size, and Ctrl+Z undoes the last
+## change (each click or stroke is one change; see _begin_undo()).
 
 enum Tool { RAISE, LOWER, FLATTEN, SMOOTH, LAND, SAND, GRASS, WATER, START, CAVE, TREES, ROCKS, ERASE, CUT, PATH }
 
@@ -41,6 +45,9 @@ const START_SPACING := 14.0
 const CAVE_SPACING := 30.0
 ## Metres of sky added on each side when the map square grows.
 const GROW_BY := 64
+## Undo keeps a copy of the whole map for each change, as many as fit in
+## about this much memory (between 5 and 30 of them).
+const UNDO_MEMORY := 160 * 1024 * 1024
 
 var tool: Tool = Tool.START
 var brush_radius := 8.0
@@ -70,6 +77,12 @@ var _stroke := PackedVector2Array()
 var _drawing := false
 var _path_mesh := ImmediateMesh.new()
 var _path_view: MeshInstance3D
+## Copies of the map from before each change, oldest first.
+var _undo: Array[Dictionary] = []
+## The map as it was when the mouse went down: kept once it changes.
+var _pending_undo := {}
+## True while an undo puts the map back (which is not itself a change).
+var _restoring := false
 
 
 func setup(info: Dictionary) -> void:
@@ -114,11 +127,16 @@ func _ready() -> void:
 		_map_name = text
 		_confirm = "")
 	hud.expand_requested.connect(_expand)
+	hud.palette_selected.connect(_set_palette)
 	# A map grown in memory (see _expand) has not been saved yet.
 	_dirty = _info.get("unsaved", false)
 	hud.set_map(_map_name, Terrain.SIZE)
 	hud.set_brush(brush_radius)
-	Game.terrain.changed.connect(func(_c: Vector3, _r: float) -> void: _dirty = true)
+	hud.set_palette(Art.palette_index)
+	Game.terrain.changed.connect(func(_c: Vector3, _r: float) -> void:
+		if not _restoring:
+			_dirty = true
+			_keep_undo())
 	Game.camera_rig.set_zoom(150.0 * Terrain.SCALE, true)
 	_set_tool(Tool.START)
 	_update_counts()
@@ -158,8 +176,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_S:
 				if key.ctrl_pressed:
 					_save()
+			KEY_Z:
+				if key.ctrl_pressed:
+					undo()
 		return
 	var button := event as InputEventMouseButton
+	if button and button.pressed and button.ctrl_pressed \
+			and (button.button_index == MOUSE_BUTTON_WHEEL_UP or button.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+		# Ctrl + wheel changes the brush size (the camera leaves it alone).
+		var grow := 1.5 if button.button_index == MOUSE_BUTTON_WHEEL_UP else -1.5
+		brush_radius = clampf(brush_radius + grow, BRUSH_MIN, BRUSH_MAX)
+		hud.set_brush(brush_radius)
+		get_viewport().set_input_as_handled()
+		return
 	if button and button.pressed:
 		# Clicking the world leaves the name box, so WASD moves the camera again.
 		get_viewport().gui_release_focus()
@@ -191,6 +220,7 @@ func _set_tool(t: Tool) -> void:
 
 
 func _on_click(p: Vector3) -> void:
+	_begin_undo()
 	match tool:
 		Tool.START:
 			_place_start(p)
@@ -476,9 +506,77 @@ func _flat(a: Vector3, b: Vector3) -> float:
 
 
 func _changed() -> void:
+	if not _restoring:
+		_keep_undo()
 	_dirty = true
 	_confirm = ""
 	_update_counts()
+
+
+# --- Undo -----------------------------------------------------------------------
+
+## Copies the map as it is now, for undo: it is kept only if something
+## then changes (_keep_undo()), so a click that does nothing is not a step.
+func _begin_undo() -> void:
+	var data := map_data()
+	data["paths"] = _paths.duplicate()
+	_pending_undo = data
+
+
+func _keep_undo() -> void:
+	if _pending_undo.is_empty():
+		return
+	_undo.append(_pending_undo)
+	_pending_undo = {}
+	var per_copy := maxi(1, Terrain.N * Terrain.N * 21)
+	while _undo.size() > clampi(int(float(UNDO_MEMORY) / per_copy), 5, 30):
+		_undo.pop_front()
+
+
+## Puts the map back as it was before the last change.
+func undo() -> void:
+	_painting = false
+	_drawing = false
+	_stroke = PackedVector2Array()
+	if _undo.is_empty():
+		hud.set_status("Nothing to undo.")
+		return
+	_pending_undo = {}
+	var data: Dictionary = _undo.pop_back()
+	_restoring = true
+	Game.terrain.restore_layers(data)
+	for group in ["trees", "rocks", "start_markers", "caves"]:
+		for node in get_tree().get_nodes_in_group(group):
+			_remove(node)
+	var root := Game.world_root
+	for t in data.trees:
+		WorldPopulator.spawn_tree(root, Game.terrain, t[0], t[1], t[2], t[3])
+	for r in data.rocks:
+		var rock := WorldPopulator.spawn_rock(root, Game.terrain, r[0], r[1], r[2])
+		rock.scale = Vector3(r[3], r[3] * rock.scale.y / rock.scale.x, r[3])
+	for c in data.caves:
+		WorldPopulator.place_cave(root, Game.terrain, c.pos, c.facing, _rng, false, false)
+	for p: Vector2 in data.starts:
+		_add_start(p)
+	_paths.clear()
+	for path: PackedVector2Array in data.paths:
+		_paths.append(path)
+	Art.set_palette(int(data.get("palette", Art.palette_index)))
+	hud.set_palette(Art.palette_index)
+	_restoring = false
+	_dirty = true
+	_confirm = ""
+	_update_counts()
+	_draw_paths()
+	hud.set_status("Undone (%d more step%s can be undone)." % [_undo.size(), "" if _undo.size() == 1 else "s"])
+
+
+## The nature palette the map is played in.
+func _set_palette(index: int) -> void:
+	_begin_undo()
+	Art.set_palette(index)
+	hud.set_palette(Art.palette_index)
+	_changed()
 
 
 func _update_counts() -> void:
@@ -548,6 +646,7 @@ func map_data() -> Dictionary:
 		rocks.append([n.global_position.x, n.global_position.z, n.get_meta("seed", 0), n.scale.x])
 	data["rocks"] = rocks
 	data["paths"] = _valid_paths()
+	data["palette"] = Art.palette_index
 	return data
 
 

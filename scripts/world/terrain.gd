@@ -276,6 +276,28 @@ func export_map() -> Dictionary:
 		"sand": sand.duplicate(), "rock": rock.duplicate()}
 
 
+## Puts back land, water and paint saved by export_map() on this same map
+## square (the map editor's undo), and rebuilds everything that shows them.
+func restore_layers(data: Dictionary) -> void:
+	heights = (data.heights as PackedFloat32Array).duplicate()
+	bare = (data.bare as PackedFloat32Array).duplicate()
+	island = (data.island as PackedByteArray).duplicate()
+	water = (data.water as PackedFloat32Array).duplicate()
+	sand = (data.sand as PackedFloat32Array).duplicate()
+	rock = (data.rock as PackedFloat32Array).duplicate()
+	rivers.clear()
+	for path in data.rivers:
+		rivers.append(path)
+	_settle_pending = false
+	_shape_dirty = false
+	_falls_dirty = false
+	_dirty.clear()
+	_water_dirty.clear()
+	_finish()
+	_collision_dirty = true
+	changed.emit(Vector3.ZERO, float(SIZE))
+
+
 ## Water in every hollow below sea level, and beaches on low ground.
 func _init_layers() -> void:
 	water.resize(N * N)

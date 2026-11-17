@@ -53,6 +53,10 @@ func _process(delta: float) -> void:
 		phase_changed.emit(mood)
 
 
+func is_night() -> bool:
+	return time >= NIGHT_START
+
+
 static func phase_at(t: float) -> int:
 	var found := 0
 	for k in PHASES.size():

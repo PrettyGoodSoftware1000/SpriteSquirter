@@ -46,19 +46,28 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
 
 1. **Choose a start location.** Numbered banners mark them; click one. On a
    random island each banner is an existing village, which becomes yours. On
-   a map from the editor you start with 8 villagers and no buildings.
+   a map from the editor you start with no buildings. Either way the
+   village starts with 20 villagers.
 2. **Your villagers work by themselves.** Grown-ups fell trees (lumber),
    break up boulders (stone) and forage near the village (food), and every
    grown-up adds a trickle of magicko. Workers carry each load to the
-   nearest **Storehouse** (or to the middle of the village while you have
-   none); it only counts once it arrives. Boulders come in small boulder
+   nearest **Storehouse** (food may go to a **Granary** too; with no
+   Storehouse, to the middle of the village); it only counts once it
+   arrives. Each Storehouse holds 300 each of lumber, stone, food and
+   bones, and each Granary 300 more food: anything over that is lost.
+   Magicko and **animus** have no limit; each **Shrine** makes 1 animus a
+   minute. Boulders come in small boulder
    fields dotted over the island. Trees and boulders run out, so the
    workers move on; a boulder holds a lot of stone and crumbles away
    slowly once it is used up. A worker carries a small load (2 units) home on its
    back. Once you have a **Blacksmith**, workers use wheelbarrows, which
    take three times as much.
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
-   building, and place its outline (**R** rotates it). The cost is paid up
+   building, and place its outline (**R** rotates it) anywhere inside your
+   village's **influence**: a wall of light shows its edge while you place
+   a building, or hold the mouse over a Storehouse. It starts 45 m from the
+   start location and reaches 1 m further for every villager (both in the
+   dev menu). The cost is paid up
    front and the villagers come and build it: up to 5 work on each
    building (your **Builders** first, then unassigned Workers), and a
    second building gets 5 of its own. The
@@ -67,10 +76,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    villagers just under a minute. The building rises out of the ground as
    they work.
    The buildings have jobs: a **Home** (or Mushroom cottage) adds housing, a
-   **Storehouse** is where resources are carried, a **Town guard** trains
-   warriors (and archers), the **Singing rocks** train wizards, a
-   **Necromancer tower** turns wizards into necromancers, and a
-   **Blacksmith** makes wheelbarrows and does research.
+   **Storehouse** is where resources are carried and houses 25 people, a
+   **Granary** (the Windmill) stores food, a **Town guard** (the Tall
+   house) trains warriors (and archers), a **Wizardry tower** (the Moon
+   tower) trains wizards, a **Shrine** (the Singing rocks) makes animus
+   and is where a dead creature is brought back to life, a **Necromancer
+   tower** turns wizards into necromancers, and a **Blacksmith** makes
+   wheelbarrows and does research. The dev menu's construction rate makes
+   all your building go faster or slower.
    **Asset names and gameplay names.** Every building has an asset name
    (its model: Stacked houses, Moon tower, Skull tower, Treehouse...) and
    a gameplay name (what it does: Storehouse, Town guard, Necromancer
@@ -88,8 +101,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **Bones and necromancers.** Whenever a villager, goblin or ogre dies
    the village gets 2 to 4 **bones** (the bone counter in the top bar).
    Build a Necromancer tower (it costs bones too) and ask for
-   necromancers in the Jobs row: a wizard trains at the tower for 2½
-   minutes and comes out in black robes. A necromancer still throws
+   necromancers in the village panel: a wizard trains at the tower for 75
+   seconds and comes out in black robes. A necromancer still throws
    firebolts, and raises one dead villager or enemy lying nearby as a
    **skeleton** warrior or archer, for 2 bones. A skeleton fights for you
    with half the health and damage of whoever it was, and crumbles after
@@ -102,11 +115,16 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    gathered twice as fast).
    Your first **Storehouse** is free: it appears on the start location
    when you found the village.
-   **Workers and set jobs.** **Workers** in the Jobs row is the number of
-   villagers you have not set to anything: they gather whatever is most
-   needed by themselves. In the **Gather** row, **+** takes one Worker
-   and makes it a Lumberjack, Miner, Farmer or **Builder** at once (never
-   a warrior, archer or wizard), and **-** sends one back to the Workers.
+   **The village panel** (top left). At the top, your people and the room
+   you have for them (a bar fills behind the count towards the next
+   birth) and the time of day. **Workers** is the number of villagers you
+   have not set to anything: they gather whatever is most needed by
+   themselves. Below it, **Builders**, then each resource with what came
+   in (or went out) over the last minute. Beside lumber, stone and food,
+   **+** takes one Worker and makes it a Lumberjack, Miner or Farmer at
+   once (Builders the same way; never a warrior, archer or wizard), and
+   **-** sends one back to the Workers. Hold the mouse over a + or - to see
+   what it does.
    Builders only build: they are first onto every building site and wait
    when there is nothing to build. Farmers (and anyone foraging) gather
    food twice as fast as other workers gather, and sow and reap fields
@@ -114,17 +132,18 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    for it (one not already promised to a warrior, archer or wizard you
    asked for); a necromancer needs a free wizard.
 4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
-   in the **Jobs** row under the resource counter (the - and + buttons).
+   at the bottom of the village panel (the - and + buttons).
    Each Town guard allows 4 warriors and trains one at a time, taking
-   half a minute each; each Singing rocks allows 2 wizards and trains one
-   at a time, taking 90 seconds each. Recruits are taken from the
+   15 seconds each; each Wizardry tower allows 2 wizards and trains one
+   at a time, taking 45 seconds each (the dev menu's training time slider
+   stretches or shortens all of them). Recruits are taken from the
    unassigned Workers. More buildings train side by side. A grey
    bar fills over the count while recruits train. Lower the number and
    warriors or wizards go straight back to work; they have to train again
    to return. **Wizards** make 5 magicko a minute each and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
    sometimes setting them alight. Once **Bows** are researched an Archers
-   count appears: each Town guard allows 2 **archers** (45 seconds each),
+   count appears: each Town guard allows 2 **archers** (22½ seconds each),
    who shoot goblins from 22 m.
 5. **Feed everyone.** Each villager (children too) eats 1 food a minute,
    each warrior 3 and each archer or wizard 2; the counter shows how much
@@ -192,21 +211,26 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    getting faster, stronger and tougher as it does (a small one cannot pick
    goblins up or flatten buildings, and stays out of raids unless you send
    it). It stops growing while the village has no food. Goblins attack a
-   creature that comes close; at no health it is knocked out for 45
-   seconds and shrinks by a quarter of its size (it grows back), then gets
-   up with a quarter of its health. Left alone it heals.
+   creature that comes close; at no health it **dies**, shrinks by a
+   quarter of its size (it grows back) and lies where it fell. A
+   **Resurrect** button then appears above its bars: it costs 5 animus and
+   brings it back to life beside your Shrine, in a shaft of light, with all
+   its health. Left alone it heals.
    **Health, stamina and magicko.** Three bars to the right of the spell
    bar show the creature's own. The squirrel **runs** on all fours (long
    journeys, steep slopes, getting out of a fight): half as fast again,
    and no slope slows it. Running and the raven's flying use stamina, and
-   stop when it runs out. The tortoise can do neither, but when it is hit
+   stop when it runs out. The tortoise can do neither; it tires slowly as
+   it walks, and walks at half speed with no stamina left. When it is hit
    it may pull into its **shell**, where blows do a fifth of the harm,
-   until nothing has hit it for 5 seconds. Each time a bar is run down to
-   a quarter counts towards its next **level** (2 times for the first, 3
-   for the next, then 4, then 5 every time): 10% more of it, refilling 20%
-   faster.
+   until nothing has hit it for 5 seconds. Stamina, magicko and health
+   each **level up** with use (stamina spent, magicko spent on its spells,
+   health lost): the first level after 100, the next after 200 more, then
+   300 more, and so on, but never more than 1,000 for one level. Each level
+   gives 10% more of it, refilling 20% faster.
    **What it does by itself.** It wanders a little way from where you last
-   sent it and comes back. When goblins raid, or hang about within 50 m of
+   sent it and comes back. Now and then it goes **exploring**: a long trip,
+   up to half the map away, and back. When goblins raid, or hang about within 50 m of
    the village, it chases them, turning 30% faster in a fight. A line of
    text floats up from its head when it does something ("The creature ate
    2 goblins"). In a fight it may **run from battle**, more readily the
@@ -223,11 +247,12 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    carry into the store it gains 25 knowledge of harvesting that; once
    learned it pulls up a tree or a boulder (or reaps ripe wheat) and
    carries it to the Storehouse, 25 at a time when full grown.
-   **Bless and Curse.** Tap the **Bless** key (golden sparkles, 10
-   magicko) and the top of the screen says what the creature last did
-   (holding the mouse over the Bless or Curse button shows it too); tap it
-   again, within 30 seconds of that action, and the creature becomes
-   keener on doing it again. **Curse** (red and creepy, 10 magicko) works
+   **Bless and Curse.** Press the **Bless** key or square (golden
+   sparkles, 10 magicko): the pointer becomes a golden star and the top of
+   the screen says what the creature last did (holding the mouse over the
+   Bless or Curse square shows it too). Click anywhere, within 30 seconds
+   of that action, and the creature becomes keener on doing it again;
+   press the key again to put the spell away. **Curse** (red and creepy, 10 magicko) works
    the same way and makes it less keen. Each thing the creature does can
    be blessed or cursed once. Every action has a keenness from -100
    (never) to 100 (always), starting at 0 and moving 10 a time; past 50
@@ -243,12 +268,18 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    slightly injured, badly injured or near death. The tortoise's hiding in
    its shell is judged by the same four states, so it can be blessed for
    hiding when near death and cursed for hiding when unharmed. A raven
-   that runs from battle flies, and a squirrel runs on all fours. Running,
-   flying and raining on the crops are actions too: a creature cursed for
-   flying walks more, and one blessed for it flies even short trips. The
-   keener it is on exploring, the further it wanders (up to three times as far).
-9. **Cast spells** with keys 1 to 7: each is cast at once, where the mouse
-   points (there is no spell to pick first). A spell cast in the last 10
+   that runs from battle flies, and a squirrel runs on all fours (running
+   and flying themselves are not blessed or cursed). Raining on the crops
+   is an action too. Only a long trip away from where you sent it counts
+   as exploring: the keener it is on that, the more often it goes.
+9. **Cast spells** with keys 1 to 7 or the squares on the spell bar (each
+   shows the first letter of its spell for now). The spell goes into your
+   hand and the pointer changes: a flame for Fireball, sparks for Chain
+   Lightning, a cloud dripping water for Rain, roots for Roots, a skull
+   dripping blood for Blood Sacrifice. Click to cast it (Shift+click casts
+   and keeps it in hand); press the key again, right-click or Esc to put
+   it away. Spells only work inside your village's influence, and a
+   fireball that flies out of it fizzles out. A spell cast in the last 10
    seconds costs 50% more for each time, added up, and its square on the
    spell bar fills with blue sparkles as it gets dearer (most at 300%
    more). **Fireball** blows
@@ -259,7 +290,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    they stand, and your own people wade through at a quarter of their
    speed. The cost in magicko (the blue droplet) is under each spell.
    **Chain Lightning** strikes whoever is nearest the mouse and jumps
-   on through up to six things, each within 9 m of the last: goblins,
+   on through up to twelve things, each within 9 m of the last: goblins,
    ogres, bats and your own people alike. Anything wet (rained on in the
    last 20 seconds, or standing in a river or lake) takes double.
    **Blood Sacrifice** costs none: point at one of your villagers and
@@ -267,10 +298,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    turns red and drips while it lasts). A fireball crater is bare stone; it
    only fills with water when it breaks into water nearby.
 
-The counter at the top shows lumber (log), stone, food (wheat), people
-(and housing), magicko (blue droplet), the day, the time to the next birth
-and how much food is eaten each minute. Days turn from dawn to
-daytime, evening and night.
+Days turn from dawn to daytime, evening and night.
 
 ## Controls
 
@@ -284,8 +312,8 @@ In the game, press **Esc** and **Show controls** for this list.
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
-| 1–7 | Cast a spell where the mouse points (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Curse) |
-| Bless or Curse key | Once: see what the creature last did. Twice: bless or curse it |
+| 1–7 (or a spell's square) | Take a spell in hand (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Curse); the same key again puts it away |
+| Click with a spell in hand | Cast it (Bless and Curse: click anywhere); Shift+click keeps it in hand |
 | B / Backspace | Open or close the build menu (1–9 pick the field, the bridge or a building) |
 | U | Open or close the research menu (needs a Blacksmith) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
@@ -309,6 +337,9 @@ In the game, press **Esc** and **Show controls** for this list.
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
 | Goblin build speed | How many times as fast the goblins start and finish buildings |
+| Construction rate | How many times as fast your buildings go up |
+| Training time | Multiplies every training time |
+| Starting influence / Influence per person | How far the village's influence reaches at first, and how much further for every villager |
 | Villager detail within | Villagers nearer the camera than this are drawn in full detail (default 60 m; lower it on a slow machine) |
 | Give 100 of everything | For testing |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; Ctrl + mouse wheel (or `[` and `]`) changes the brush size |
@@ -382,7 +413,7 @@ the game again. Each line reads `name = number`, with a note after `#`.
 
 `Announcements.txt`, next to `project.godot`, holds every line of text
 the game announces: the messages in the middle of the screen (the raid,
-the morning, the bat, research, the creature knocked out), what Bless
+the morning, the bat, research, the creature dying and coming back), what Bless
 and Curse show at the top, the lines that float up from the creature,
 and the sentence for each thing the creature can be blessed or cursed
 for. Each line reads `name = text`; rewrite the text after the `=`, save,

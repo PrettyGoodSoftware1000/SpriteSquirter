@@ -1,10 +1,12 @@
 class_name Hud
 extends CanvasLayer
 ## On-screen interface while playing.
-##   top centre    resource counter, people, the day, the next birth and
-##                 the jobs row (workers, warriors and wizards)
-##   top left      title, hint for the current tool, Build and Menu buttons
-##   bottom centre the spell bar
+##   top left      the village: people and the next birth, the day, each
+##                 resource and what came in over the last minute, the
+##                 workers set to gather it, builders, warriors and wizards
+##   bottom centre hint for the current tool, Build and Research buttons,
+##                 the spell bar, and the creature's health, stamina and
+##                 magicko (with a Resurrect button while it is dead)
 ##   centre        the build menu (B / Backspace) and the start-location prompt
 ##   right         the dev menu (~): terrain tools, weather, palettes, grass,
 ##                 gameplay settings and stats
@@ -26,12 +28,19 @@ signal jobs_changed(role: String, change: int)
 signal quota_changed(kind: String, change: int)
 signal research_menu_requested
 signal research_selected(id: String)
+signal resurrect_requested
 
 const SCULPT_NAMES := ["Raise", "Lower", "Flatten", "Smooth"]
 const RESOURCE_COLORS := {
 	"lumber": Color(0.95, 0.7, 0.42), "stone": Color(0.8, 0.82, 0.86), "food": Color(0.7, 0.92, 0.4),
 	"people": Color(1.0, 0.95, 0.85), "magicko": Color(0.8, 0.6, 1.0), "bones": Color(0.95, 0.92, 0.8),
+	"animus": Color(1.0, 0.88, 0.35),
 }
+## Resource icons in the village panel, and the spell squares (3 times as big).
+const ICON_SIZE := 24
+const SPELL_SIZE := ICON_SIZE * 3
+## gathering job -> what one worker on it is called
+const JOB_NAMES := {"lumber": "lumberjack", "stone": "miner", "food": "farmer", "build": "builder"}
 ## key, label, min, max, step, unit
 const SETTING_SLIDERS := [
 	["day_minutes", "Day length", 1.0, 30.0, 0.5, "min"],
@@ -46,19 +55,27 @@ const SETTING_SLIDERS := [
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 	["goblin_build_speed", "Goblin build speed", 0.25, 10.0, 0.25, "x"],
 	["villager_detail", "Villager detail within", 0.0, 300.0, 10.0, "m"],
+	["construction_rate", "Construction rate", 0.25, 10.0, 0.25, "x"],
+	["training_time", "Training time", 0.1, 3.0, 0.1, "x"],
+	["influence_start", "Starting influence", 10.0, 150.0, 5.0, "m"],
+	["influence_per_person", "Influence per person", 0.0, 5.0, 0.25, "m"],
 ]
 const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.66, 0.26), "magicko": Color(0.5, 0.34, 0.86)}
 ## role -> [name in the jobs row, the building that trains it]
+## role -> [name in the panel, the building that trains it, one of them]
 const ROLES := {
-	"warrior": ["Warriors", "Town guard"],
-	"archer": ["Archers", "Town guard"],
-	"wizard": ["Wizards", "Singing rocks"],
-	"necromancer": ["Necromancers", "Necromancer tower"],
+	"warrior": ["Warriors", "Town guard", "warrior"],
+	"archer": ["Archers", "Town guard", "archer"],
+	"wizard": ["Wizards", "Wizardry tower", "wizard"],
+	"necromancer": ["Necromancers", "Necromancer tower", "necromancer"],
 }
 
 var _hint: Label
 var _resource_labels := {}
-var _sub_label: Label
+var _rate_labels := {}
+var _warning: Label
+var _workers_count: Label
+var _resurrect: Button
 var _clock: Label
 var _jobs := {}
 var _gather := {}
@@ -94,7 +111,7 @@ func _ready() -> void:
 	add_child(root)
 	_root = root
 	root.theme = UiTheme.get_theme()
-	_build_resource_bar(root)
+	_build_status_panel(root)
 	_build_spell_bar(root)
 	_build_build_menu(root)
 	_build_research_menu(root)
@@ -104,121 +121,155 @@ func _ready() -> void:
 
 # --- Layout -------------------------------------------------------------------
 
-func _build_resource_bar(root: Control) -> void:
+## The village panel in the top left corner: people (the bar behind the
+## count fills towards the next birth) and the day; the unassigned
+## Workers and the Builders; each resource with what came in (or went out)
+## over the last minute, and beside lumber, stone and food the workers set
+## to gather it; then warriors, archers, wizards and necromancers.
+func _build_status_panel(root: Control) -> void:
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.position.y = 10
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	panel.position = Vector2(10, 10)
 	root.add_child(panel)
 	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 4)
 	panel.add_child(box)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 22)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_child(row)
-	for key in ["lumber", "stone", "food", "bones", "people", "magicko"]:
-		var item := HBoxContainer.new()
-		item.add_theme_constant_override("separation", 6)
-		item.tooltip_text = key.capitalize()
-		row.add_child(item)
-		item.add_child(ResourceIcon.make(key, 24))
-		var label := Label.new()
-		label.add_theme_font_size_override("font_size", 18)
-		label.add_theme_color_override("font_color", RESOURCE_COLORS[key])
-		label.custom_minimum_size.x = 56 if key != "people" else 70
-		item.add_child(label)
-		_resource_labels[key] = label
-	_clock = Label.new()
-	_clock.add_theme_font_size_override("font_size", 16)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	box.add_child(top)
+	top.add_child(ResourceIcon.make("people", ICON_SIZE))
+	var people := _text("", 20)
+	people.add_theme_color_override("font_color", RESOURCE_COLORS.people)
+	people.custom_minimum_size = Vector2(84, 28)
+	people.mouse_filter = Control.MOUSE_FILTER_STOP
+	people.tooltip_text = "Villagers / room for them. The bar fills towards the next birth."
+	people.add_child(_fill_bar(Color(1.0, 0.95, 0.85, 0.3)))
+	top.add_child(people)
+	_resource_labels.people = people
+	_clock = _text("", 16)
 	_clock.modulate = Color(1.0, 0.9, 0.6)
-	row.add_child(_clock)
-	_sub_label = Label.new()
-	_sub_label.add_theme_font_size_override("font_size", 13)
-	_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub_label.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(_sub_label)
-	box.add_child(_build_jobs_row())
-	box.add_child(_build_gather_row())
+	_clock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	top.add_child(_clock)
+	_warning = _text("", 13)
+	_warning.add_theme_color_override("font_color", Color(1.0, 0.45, 0.4))
+	_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_warning.visible = false
+	box.add_child(_warning)
 
-
-## Workers, and the number of warriors and wizards the player wants, with
-## a grey bar filling over the count while recruits train.
-func _build_jobs_row() -> Control:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 10)
-	var title := _heading("Jobs")
-	row.add_child(title)
-	_workers = Label.new()
-	_workers.add_theme_font_size_override("font_size", 15)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 3)
+	box.add_child(grid)
+	_workers = _text("Workers", 18)
+	_workers.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_workers.mouse_filter = Control.MOUSE_FILTER_STOP
-	row.add_child(_workers)
+	_workers.tooltip_text = "Villagers you have not set to a job. They gather whatever is most needed and help on building sites."
+	grid.add_child(_workers)
+	_workers_count = _text("", 18)
+	grid.add_child(_workers_count)
+	var builders := _text("Builders", 15)
+	builders.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	builders.mouse_filter = Control.MOUSE_FILTER_STOP
+	builders.tooltip_text = "Builders only build: they are first onto every building site, and wait when there is nothing to build."
+	grid.add_child(builders)
+	grid.add_child(_quota_controls("build"))
+	for res: String in PlayerVillage.RESOURCES:
+		var item := HBoxContainer.new()
+		item.add_theme_constant_override("separation", 8)
+		item.tooltip_text = res.capitalize()
+		item.mouse_filter = Control.MOUSE_FILTER_STOP
+		item.add_child(ResourceIcon.make(res, ICON_SIZE))
+		var amount := _text("", 19)
+		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		amount.add_theme_color_override("font_color", RESOURCE_COLORS[res])
+		amount.custom_minimum_size.x = 46
+		item.add_child(amount)
+		var rate := _text("", 15)
+		rate.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		rate.add_theme_color_override("font_color", RESOURCE_COLORS[res])
+		rate.custom_minimum_size.x = 40
+		item.add_child(rate)
+		_resource_labels[res] = amount
+		_rate_labels[res] = rate
+		grid.add_child(item)
+		if JOB_NAMES.has(res):
+			grid.add_child(_quota_controls(res))
+		else:
+			grid.add_child(Control.new())
+	var army := GridContainer.new()
+	army.columns = 2
+	army.add_theme_constant_override("h_separation", 14)
+	army.add_theme_constant_override("v_separation", 3)
+	box.add_child(army)
 	for role: String in ROLES:
-		var role_label := Label.new()
-		role_label.text = ROLES[role][0]
-		role_label.add_theme_font_size_override("font_size", 15)
-		row.add_child(role_label)
+		var role_label := _text(ROLES[role][0], 16)
+		role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		army.add_child(role_label)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		army.add_child(row)
+		var singular: String = ROLES[role][2]
 		var less := _button("-")
 		less.custom_minimum_size.x = 28
+		less.tooltip_text = "Remove %s" % singular
 		less.pressed.connect(func() -> void: jobs_changed.emit(role, -1))
 		row.add_child(less)
-		var count := Label.new()
-		count.add_theme_font_size_override("font_size", 15)
-		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		count.custom_minimum_size = Vector2(56, 26)
+		var count := _text("", 16)
+		count.custom_minimum_size = Vector2(52, 26)
 		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		row.add_child(count)
-		var bar := ProgressBar.new()
-		bar.show_percentage = false
-		bar.max_value = 1.0
-		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bar.set_anchors_preset(Control.PRESET_FULL_RECT)
-		var empty := StyleBoxEmpty.new()
-		var fill := StyleBoxFlat.new()
-		fill.bg_color = Color(0.7, 0.7, 0.72, 0.45)
-		fill.set_corner_radius_all(4)
-		bar.add_theme_stylebox_override("background", empty)
-		bar.add_theme_stylebox_override("fill", fill)
+		count.mouse_filter = Control.MOUSE_FILTER_STOP
+		var bar := _fill_bar(Color(0.7, 0.7, 0.72, 0.45))
 		count.add_child(bar)
+		row.add_child(count)
 		var more := _button("+")
 		more.custom_minimum_size.x = 28
+		more.tooltip_text = "Add %s" % singular
 		more.pressed.connect(func() -> void: jobs_changed.emit(role, 1))
 		row.add_child(more)
-		_jobs[role] = {"count": count, "bar": bar, "less": less, "more": more, "label": role_label}
-	return row
+		_jobs[role] = {"count": count, "bar": bar, "less": less, "more": more, "label": role_label, "row": row}
 
 
-## How many workers are felling, mining and getting food, with + and - to
-## set workers to a job yourself.
-func _build_gather_row() -> Control:
+## - count + for one gathering job (or the builders).
+func _quota_controls(kind: String) -> Control:
 	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 10)
-	row.add_child(_heading("Gather"))
-	var names := {"lumber": "Lumberjacks", "stone": "Miners", "food": "Farmers", "build": "Builders"}
-	for kind: String in names:
-		if kind != "build":
-			row.add_child(ResourceIcon.make(kind, 18))
-		var label := _text(names[kind], 15)
-		row.add_child(label)
-		var less := _button("-")
-		less.custom_minimum_size.x = 28
-		less.pressed.connect(func() -> void: quota_changed.emit(kind, -1))
-		row.add_child(less)
-		var count := _text("0", 15)
-		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		count.custom_minimum_size.x = 30
-		count.mouse_filter = Control.MOUSE_FILTER_STOP
-		count.tooltip_text = "Villagers you have set to this job. + takes one of the unassigned Workers, - sends one back." if kind != "build" \
-			else "Builders only build: they are first onto every building site, and wait when there is nothing to build."
-		row.add_child(count)
-		var more := _button("+")
-		more.custom_minimum_size.x = 28
-		more.pressed.connect(func() -> void: quota_changed.emit(kind, 1))
-		row.add_child(more)
-		_gather[kind] = {"count": count, "less": less, "more": more}
+	row.add_theme_constant_override("separation", 4)
+	var singular: String = JOB_NAMES[kind]
+	var less := _button("-")
+	less.custom_minimum_size.x = 28
+	less.tooltip_text = "Remove %s" % singular
+	less.pressed.connect(func() -> void: quota_changed.emit(kind, -1))
+	row.add_child(less)
+	var count := _text("0", 18)
+	count.custom_minimum_size.x = 34
+	count.mouse_filter = Control.MOUSE_FILTER_STOP
+	count.tooltip_text = "Villagers you have set to gather this. + takes one of the unassigned Workers, - sends one back." if kind != "build" \
+		else "Builders only build: they are first onto every building site, and wait when there is nothing to build."
+	row.add_child(count)
+	var more := _button("+")
+	more.custom_minimum_size.x = 28
+	more.tooltip_text = "Add %s" % singular
+	more.pressed.connect(func() -> void: quota_changed.emit(kind, 1))
+	row.add_child(more)
+	_gather[kind] = {"count": count, "less": less, "more": more}
 	return row
+
+
+## A bar that fills from the left behind a label.
+func _fill_bar(color: Color) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.max_value = 1.0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bar.show_behind_parent = true
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = color
+	fill.set_corner_radius_all(4)
+	bar.add_theme_stylebox_override("background", StyleBoxEmpty.new())
+	bar.add_theme_stylebox_override("fill", fill)
+	return bar
 
 
 func _build_spell_bar(root: Control) -> void:
@@ -250,24 +301,41 @@ func _build_spell_bar(root: Control) -> void:
 	var research := _button("Research (U)")
 	research.pressed.connect(func() -> void: research_menu_requested.emit())
 	menus.add_child(research)
+	# Each spell is a square (for its icon one day; for now the first letter
+	# of its name), with its key in the corner and its cost underneath.
 	for k in SpellBook.SPELLS.size():
 		var spell: Dictionary = SpellBook.SPELLS[k]
+		var slot := VBoxContainer.new()
+		slot.add_theme_constant_override("separation", 1)
+		row.add_child(slot)
 		var b := _button("")
-		b.custom_minimum_size = Vector2(132, 58)
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE)
+		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		b.tooltip_text = "%s (key %d): %s" % [spell.name, k + 1, spell.hint]
-		var lines: Array[Control] = [_text("%d  %s" % [k + 1, spell.name], 15)]
-		var cost_label: Label = null
-		if spell.cost > 0:
-			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 15)
-			cost_label = cost_row.get_child(0) as Label
-			lines.append(cost_row)
-		b.add_child(_stacked(lines))
+		var letter := _text((spell.name as String).left(1), 40)
+		letter.set_anchors_preset(Control.PRESET_FULL_RECT)
+		letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(letter)
+		var key := _text(str(k + 1), 13)
+		key.position = Vector2(6, 2)
+		key.modulate = Color(1, 1, 1, 0.7)
+		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(key)
 		var sparkles := SpellSparkles.new()
 		b.add_child(sparkles)
 		b.pressed.connect(func() -> void: spell_selected.emit(k))
 		b.mouse_entered.connect(func() -> void: spell_hovered.emit(k))
 		b.mouse_exited.connect(func() -> void: spell_hovered.emit(-1))
-		row.add_child(b)
+		slot.add_child(b)
+		var cost_label: Label = null
+		if spell.cost > 0:
+			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 14)
+			cost_label = cost_row.get_child(0) as Label
+			slot.add_child(cost_row)
+		else:
+			slot.add_child(_text("free", 13))
 		_spell_buttons.append(b)
 		_spell_costs.append(cost_label)
 		_spell_sparkles.append(sparkles)
@@ -276,6 +344,12 @@ func _build_spell_bar(root: Control) -> void:
 	stats.add_theme_constant_override("separation", 3)
 	stats.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(stats)
+	_resurrect = _button("Resurrect at a Shrine (%d animus)" % roundi(Balance.num("resurrect_animus")))
+	_resurrect.tooltip_text = "Your creature is dead. Bring it back to life beside a Shrine."
+	_resurrect.add_theme_color_override("font_color", RESOURCE_COLORS.animus)
+	_resurrect.pressed.connect(func() -> void: resurrect_requested.emit())
+	_resurrect.visible = false
+	stats.add_child(_resurrect)
 	for stat: String in ["health", "stamina", "magicko"]:
 		var bar := ProgressBar.new()
 		bar.show_percentage = false
@@ -300,19 +374,21 @@ func _build_spell_bar(root: Control) -> void:
 		_creature_bars[stat] = [bar, label]
 
 
-## The creature's bars. Stamina and magicko show their level, and how many
-## times the bar has been run down towards the next one.
+## The creature's bars, each with its level and how much of it has been
+## used towards the next. While the creature is dead, the Resurrect button.
 func update_creature(beast: Creature) -> void:
 	if not is_instance_valid(beast):
 		return
+	_resurrect.visible = beast.knocked_out
 	var values := {"health": [beast.hp, beast.max_hp], "stamina": [beast.stamina, beast.max_stamina], "magicko": [beast.magicko, beast.max_magicko]}
 	for stat: String in values:
 		var now: float = values[stat][0]
 		var most: float = maxf(values[stat][1], 1.0)
 		(_creature_bars[stat][0] as ProgressBar).value = clampf(now / most, 0.0, 1.0)
-		var text := "%s %d / %d" % [stat.capitalize(), roundi(now), roundi(most)]
-		if stat != "health":
-			text += "   Lv %d (%d/%d)" % [int(beast.levels[stat]) + 1, beast.drains_done(stat), beast.drains_needed(stat)]
+		var text := "%s %d / %d   Lv %d (%d/%d)" % [stat.capitalize(), roundi(now), roundi(most), int(beast.levels[stat]) + 1,
+			floori(beast.used[stat]), roundi(beast.level_cost(stat))]
+		if stat == "health" and beast.knocked_out:
+			text = "Dead"
 		(_creature_bars[stat][1] as Label).text = text
 
 
@@ -592,44 +668,31 @@ func set_prompt(text: String) -> void:
 
 func set_resources(village: PlayerVillage, clock: String) -> void:
 	for res in PlayerVillage.RESOURCES:
-		_resource_labels[res].text = str(village.amount(res))
+		var label: Label = _resource_labels[res]
+		label.text = str(village.amount(res))
+		if village.capacity(res) < INF:
+			label.tooltip_text = "%s: %d of %d the village can store" % [res.capitalize(), village.amount(res), roundi(village.capacity(res))]
+		var change := village.last_minute(res)
+		(_rate_labels[res] as Label).text = ("+%d" % change) if change >= 0 else str(change)
 	if village.blood_active():
 		_resource_labels.magicko.text += " x2"
-	var pop := village.population()
-	var cap := village.housing()
-	_resource_labels.people.text = "%d/%d" % [pop, cap]
+	var people: Label = _resource_labels.people
+	people.text = "%d/%d" % [village.population(), village.housing()]
+	(people.get_child(0) as ProgressBar).value = village.birth_share()
 	_update_jobs(village)
 	_clock.text = clock
-	_sub_label.visible = village.founded
-	if not village.founded:
-		return
-	var kids := pop - village.adults()
-	var parts: PackedStringArray = []
-	var next := village.next_birth_in()
-	if village.amount("food") <= 0:
-		parts.append("Out of food! No births, and people will starve" if village.hungry_for < PlayerVillage.STARVE_AFTER else "Starving!")
-	else:
-		parts.append("Next villager in %d s" % ceili(next) if next >= 0.0 else "No room for more villagers: build a Home")
-	parts.append("Eating %d food/min" % roundi(village.food_upkeep()))
-	var beast := Game.creature
-	if is_instance_valid(beast):
-		var state := "%s %d%% grown" % [beast.species_name(), roundi(beast.grown() * 100.0)] if beast.grown() < 0.995 else beast.species_name()
-		state += ", knocked out" if beast.knocked_out else ", health %d%%" % roundi(100.0 * beast.hp / maxf(beast.max_hp, 1.0))
-		if beast.is_fleeing():
-			state += ", fleeing"
-		parts.append(state)
-	if kids > 0:
-		parts.append("%d growing up" % kids)
-	var sites := get_tree().get_nodes_in_group("construction_sites").size()
-	if sites > 0:
-		parts.append("%d building%s under construction" % [sites, "" if sites == 1 else "s"])
-	_sub_label.text = "   ".join(parts)
+	var warning := ""
+	if village.founded:
+		if village.amount("food") <= 0:
+			warning = "Out of food! No births, and people will starve" if village.hungry_for < PlayerVillage.STARVE_AFTER else "Starving!"
+		elif village.population() >= village.housing():
+			warning = "No room for more villagers: build a Home"
+	_warning.text = warning
+	_warning.visible = warning != ""
 
 
 func _update_jobs(village: PlayerVillage) -> void:
-	var spare := village.unassigned()
-	_workers.text = "Workers %d" % spare
-	_workers.tooltip_text = "Villagers you have not set to a job. They gather whatever is most needed and help on building sites."
+	_workers_count.text = str(village.unassigned())
 	for kind: String in _gather:
 		var set_by_player: int = village.quota[kind]
 		(_gather[kind].count as Label).text = str(set_by_player)
@@ -647,7 +710,7 @@ func _update_jobs(village: PlayerVillage) -> void:
 		var known := role != "archer" or village.has_research("bows")
 		if role == "necromancer":
 			known = top > 0 or village.count(role) > 0
-		for part: String in ["count", "less", "more", "label"]:
+		for part: String in ["label", "row"]:
 			(w[part] as Control).visible = known
 		var free_now := village.free_wizards() if role == "necromancer" else village.free_workers()
 		(w.more as Button).disabled = want >= top or free_now <= 0
@@ -700,6 +763,12 @@ func _process(delta: float) -> void:
 
 ## `costs`: what each spell costs now. `extras`: the share more than usual
 ## it costs for being cast recently, shown as blue sparkles.
+## Shows spell `index` as the one in hand (-1: none).
+func set_spell(index: int) -> void:
+	for k in _spell_buttons.size():
+		_spell_buttons[k].set_pressed_no_signal(k == index)
+
+
 func update_spells(magicko: int, costs: Array[int], extras: Array[float], enabled: bool) -> void:
 	for k in _spell_buttons.size():
 		var ready_now: bool = enabled and magicko >= costs[k]

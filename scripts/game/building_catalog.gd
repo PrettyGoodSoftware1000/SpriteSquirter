@@ -12,17 +12,20 @@ extends RefCounted
 ##
 ## Roles (what the code asks about):
 ##   home   adds housing, so more villagers can be born
-##   store  the Storehouse: villagers carry what they gather to it
+##   store  the Storehouse: villagers carry what they gather to it, and it
+##          holds Balance "storehouse_holds" of each (and houses people)
+##   granary the Granary: holds "granary_holds" more food; farmers take food to it
+##   shrine the Shrine: makes animus, and the creature is brought back to life there
 ##   guard  the Town guard: trains warriors (soldiers in the code) and archers
 ##   smith  the Blacksmith: wheelbarrows for the workers, and research
-##   wizard the Wizard school: trains wizards
+##   wizard the Wizardry tower: trains wizards
 ##   necro  the Necromancer tower: turns wizards into necromancers
 ##   field  a wheat field, drawn on the ground instead of placed (CropField)
 ##   bridge a rope bridge, hung between two treehouses instead of placed (RopeBridge)
 
 const NAMES_PATH := "res://Names.txt"
 ## Housing every village has before it builds anything.
-const BASE_HOUSING := 10
+const BASE_HOUSING := 0
 
 ## kind -> asset name, in the order of Names.txt.
 const ASSETS := [
@@ -43,18 +46,20 @@ const ASSETS := [
 ## The gameplay names used when Names.txt is missing or leaves an asset out.
 const DEFAULT_GAMEPLAY := {
 	"treehouse": "Home", "lookout_treehouse": "Home", "twin_treehouse": "Home", "great_treehouse": "Home",
-	"store": "Storehouse", "moon_tower": "Town guard", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
-	"singing_rocks": "Wizard school", "necro_tower": "Necromancer tower", "windmill": "Decoration",
-	"crystal_tower": "Decoration", "tall_house": "",
+	"store": "Storehouse", "moon_tower": "Wizardry tower", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
+	"singing_rocks": "Shrine", "necro_tower": "Necromancer tower", "windmill": "Granary",
+	"crystal_tower": "Decoration", "tall_house": "Town guard",
 }
 ## gameplay name (lower case) -> [name, role, cost id, what the menu says]
 const GAMEPLAY := {
 	"home": ["Home", "home", "home", "Home: room for %d villagers"],
 	"cottage": ["Cottage", "home", "cottage", "Cottage: room for %d villagers"],
-	"storehouse": ["Storehouse", "store", "storehouse", "Storehouse: resources go here"],
+	"storehouse": ["Storehouse", "store", "storehouse", "Storehouse: stores goods, houses %d"],
+	"granary": ["Granary", "granary", "granary", "Granary: stores food"],
+	"shrine": ["Shrine", "shrine", "shrine", "Shrine: animus, revives creature"],
 	"town guard": ["Town guard", "guard", "town_guard", "Town guard: trains warriors"],
 	"blacksmith": ["Blacksmith", "smith", "blacksmith", "Blacksmith: barrows, research (U)"],
-	"wizard school": ["Wizard school", "wizard", "wizard_school", "Wizard school: trains wizards"],
+	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Wizardry tower: trains wizards"],
 	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Necromancer tower: raises the dead"],
 	"decoration": ["Decoration", "", "decoration", "No use yet"],
 }
@@ -97,8 +102,7 @@ static func apply_balance() -> void:
 			var info: Array = GAMEPLAY[key]
 			entry.gameplay = info[0]
 			entry.role = info[1]
-			if info[1] == "home":
-				entry.housing = roundi(Balance.num(key + "_housing"))
+			entry.housing = roundi(Balance.num(info[2] + "_housing"))
 			entry.desc = (info[3] as String) % entry.housing if "%d" in info[3] else info[3]
 			for res: String in COST_RESOURCES:
 				var n := roundi(Balance.num("cost_%s_%s" % [info[2], res]))

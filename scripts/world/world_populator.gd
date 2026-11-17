@@ -94,7 +94,10 @@ static func _place_villages(parent: Node3D, terrain: Terrain, rng: RandomNumberG
 			b.rotation.y = atan2(c.x - p.x, c.y - p.y)
 			terrain.add_bare(b.position, b.footprint + 1.5, 0.9)
 			placed.append(p)
-		for k in rng.randi_range(14, 22):
+		# Every village starts with Balance "start_villagers". (The old
+		# random number is still drawn, so the worlds come out as before.)
+		rng.randi_range(14, 22)
+		for k in roundi(Balance.num("start_villagers")):
 			var v := spawn_villager(parent, terrain, Vector3(c.x, 0.0, c.y), r)
 			v.set_meta("site", site_index)
 

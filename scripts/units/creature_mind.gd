@@ -17,18 +17,18 @@ extends Node
 ## each thing the creature does. Past 50 (or -50) each blessing (or curse)
 ## counts for less and less, so 100 and -100 are never quite reached. The
 ## keenness decides between stomping, throwing and eating in a fight,
-## whether a spell is cast, whether it runs from a fight, how far it
-## wanders, and what it does with itself when left alone: wander a little
+## whether a spell is cast, whether it runs from a fight, how often it goes
+## exploring, and what it does with itself when left alone: wander a little
 ## way from where it was last sent and come back, or fetch something.
 ##
 ## Some actions depend on what was going on. Fetching lumber, stone or food
 ## is one action when a battle is on, another when the village has none of
 ## it, another when it has plenty (over PLENTY), and otherwise one by day
 ## and one by night. Running from battle is one action for each of four
-## states of health, and so is the tortoise's hiding in its shell. The
-## squirrel's running and the raven's flying are actions too: the keener
-## it is, the shorter the journey it will run or fly. Texts
-## "action_<name>" says what each one is.
+## states of health, and so is the tortoise's hiding in its shell.
+## Exploring is a long trip away from where it was sent: the keener it is,
+## the more often it goes. (The squirrel's running and the raven's flying
+## are not things to judge.) Texts "action_<name>" says what each one is.
 ##
 ## All the amounts come from balancing.txt (see Balance).
 
@@ -76,7 +76,7 @@ var _away := false
 ## Every action the creature can be blessed or cursed for.
 static func all_actions() -> Array[String]:
 	var out: Array[String] = []
-	for id: String in FIGHTS + SPELLS + FLEES + SHELLS + ["explore", "water", "run", "fly"]:
+	for id: String in FIGHTS + SPELLS + FLEES + SHELLS + ["explore", "water"]:
 		out.append(id)
 	for kind: String in HARVESTS:
 		for context: String in CONTEXTS:
@@ -295,8 +295,9 @@ func _process(delta: float) -> void:
 		_choose_idle()
 
 
-## Left to itself: come home if it has strayed, otherwise wander a little
-## or fetch something, whichever it is keenest on.
+## Left to itself: come home if it has strayed; now and then go exploring
+## (as keen as it is on that); otherwise wander a little way or fetch
+## something, whichever it is keenest on.
 func _choose_idle() -> void:
 	_idle_timer = randf_range(6.0, 12.0)
 	var from_home := Vector2(creature.global_position.x - home.x, creature.global_position.z - home.z).length()
@@ -304,7 +305,11 @@ func _choose_idle() -> void:
 		_away = false
 		creature.auto_move(home)
 		return
-	var options := {"explore": weight("explore")}
+	if randf() < Balance.num("explore_chance") * weight("explore") / 50.0 and _explore():
+		return
+	# (A short wander is not keenly sought: anything it has learned to
+	# fetch comes first, as keen as it is on that.)
+	var options := {"wander": 20.0}
 	var actions := {}
 	if creature.size >= 0.3:
 		for kind: String in HARVESTS:
@@ -315,42 +320,48 @@ func _choose_idle() -> void:
 	var total := 0.0
 	for key: String in options:
 		total += options[key]
-	if total <= 0.0:
-		return
 	var roll := randf() * total
-	var choice := "explore"
+	var choice := "wander"
 	for key: String in options:
 		roll -= options[key]
 		if roll <= 0.0:
 			choice = key
 			break
-	if choice == "explore":
-		_explore()
+	if choice == "wander":
+		_wander()
 	else:
 		_task = {"kind": choice, "action": actions[choice], "node": _harvest_target(choice), "stage": "go"}
 
 
-## How far it wanders, as a share of the usual: the keener on exploring
-## it is, the further it goes (up to Balance "explore_reach_most" times).
-func explore_reach() -> float:
-	var keen := weight("explore")
-	if keen < 50.0:
-		return lerpf(0.4, 1.0, keen / 50.0)
-	return lerpf(1.0, Balance.num("explore_reach_most"), (keen - 50.0) / 50.0)
-
-
-## A short walk to somewhere near home.
-func _explore() -> void:
+## A short walk to somewhere near home. (This is not exploring.)
+func _wander() -> void:
 	var terrain := Game.terrain
-	var reach := (10.0 + 14.0 * creature.size) * explore_reach()
+	var reach := 10.0 + 14.0 * creature.size
 	for attempt in 8:
 		var a := randf() * TAU
 		var p := home + Vector3(cos(a), 0.0, sin(a)) * randf_range(reach * 0.5, reach)
 		if terrain.is_inside(p.x, p.z) and terrain.is_dry(p.x, p.z):
 			creature.auto_move(p)
 			_away = true
-			did("explore")
 			return
+
+
+## Exploring: a long trip, from Balance "explore_least" metres up to half
+## the map away from where it was sent, and then back. False if it found
+## nowhere to go.
+func _explore() -> bool:
+	var terrain := Game.terrain
+	var least := Balance.num("explore_least")
+	var most := maxf(Terrain.SIZE * 0.5, least + 1.0)
+	for attempt in 16:
+		var a := randf() * TAU
+		var p := home + Vector3(cos(a), 0.0, sin(a)) * randf_range(least, most)
+		if terrain.is_inside(p.x, p.z) and terrain.is_dry(p.x, p.z):
+			creature.auto_move(p)
+			_away = true
+			did("explore")
+			return true
+	return false
 
 
 # --- Spells ---------------------------------------------------------------------
@@ -544,7 +555,7 @@ func _update_task() -> void:
 		creature.carry(load)
 		_task.stage = "carry"
 		return
-	var drop := village.drop_point(creature.global_position)
+	var drop := village.drop_point(creature.global_position, kind)
 	if Vector2(drop.x - creature.global_position.x, drop.z - creature.global_position.z).length() > reach + 3.0:
 		if not creature.has_target or creature.target.distance_to(drop) > 1.0:
 			creature.auto_move(drop)

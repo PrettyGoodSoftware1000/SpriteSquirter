@@ -52,13 +52,27 @@ func _run() -> void:
 	play._found(start, 0)
 	var village := play.village
 	var first_people := village.population()
-	_check(first_people > 5, "village site villagers join the player (%d)" % first_people)
+	_check(first_people == roundi(Balance.num("start_villagers")), "the village starts with 20 villagers (%d)" % first_people)
 	_check(not get_tree().get_nodes_in_group("player_buildings").is_empty(), "village site buildings join the player")
 	var free_store := false
 	for b in get_tree().get_nodes_in_group("player_buildings"):
 		if b.get_meta("kind", "") == "store" and (b as Node3D).global_position.distance_to(village.center) < 45.0:
 			free_store = true
 	_check(free_store, "a free Storehouse stands at the start location")
+	_check(BuildingCatalog.housing("store") == 25, "a Storehouse houses 25")
+	# What the village can store, and what came in over the last minute.
+	var lumber_cap := village.capacity("lumber")
+	village.give("lumber", 5000.0)
+	var stores := 0
+	for b in get_tree().get_nodes_in_group("player_buildings"):
+		if BuildingCatalog.role(b.get_meta("kind", "")) == "store":
+			stores += 1
+	_check(is_equal_approx(lumber_cap, Balance.num("storehouse_holds") * stores) and village.amount("lumber") == roundi(lumber_cap),
+		"each Storehouse holds 300 of each (%d lumber, %d Storehouses)" % [village.amount("lumber"), stores])
+	village.resources.lumber = 80.0
+	_check(village.capacity("magicko") == INF and village.capacity("animus") == INF, "magicko and animus have no limit")
+	_check(village.influence() > Game.settings.influence_start and village.in_territory(village.center + Vector3(village.influence() - 1.0, 0, 0))
+		and not village.in_territory(village.center + Vector3(village.influence() + 1.0, 0, 0)), "the village's influence grows with its people (%.0f m)" % village.influence())
 	_check(Balance.values.size() == Balance.DEFAULTS.size() and FileAccess.file_exists(Balance.PATH), "balancing.txt is read")
 	_check(str(ProjectSettings.get_setting("application/config/version", "")) != "", "the game has a version number")
 	play.pause_menu.open()
@@ -126,8 +140,9 @@ func _run() -> void:
 	play.raids.end_raid()
 	@warning_ignore("integer_division")
 	var guards_before := village.max_count("warrior") / PlayerVillage.WARRIORS_PER_GUARD
-	var tower := BuildingFactory.create("moon_tower", RandomNumberGenerator.new())
+	var tower := BuildingFactory.create("tall_house", RandomNumberGenerator.new())
 	game.world_root.add_child(tower)
+	tower.set_meta("kind", "tall_house")
 	tower.global_position = village.center + Vector3(10, 0, -10)
 	tower.add_to_group("player_buildings")
 	_check(village.max_count("warrior") == (guards_before + 1) * PlayerVillage.WARRIORS_PER_GUARD,
@@ -138,7 +153,10 @@ func _run() -> void:
 		"no more warriors are wanted than there are free workers (%d wanted, %d free)" % [village.wanted.warrior, free_before])
 	village.set_wanted("warrior", 0)
 	village.set_wanted("warrior", 1)
-	_check(is_equal_approx(village.train_seconds("warrior"), 30.0), "a warrior trains in half a minute")
+	_check(is_equal_approx(village.train_seconds("warrior"), 15.0), "a warrior trains in a quarter of a minute")
+	Game.settings.training_time = 2.0
+	_check(is_equal_approx(village.train_seconds("warrior"), 30.0), "the training time slider stretches it")
+	Game.settings.training_time = 1.0
 	await _wait(village.train_seconds("warrior") * 0.5)
 	_check(village.soldiers() == 0 and village.training_progress("warrior").size() == 1, "a warrior is still training halfway")
 	await _wait(village.train_seconds("warrior") * 0.5 + 35.0)
@@ -153,12 +171,13 @@ func _run() -> void:
 	await _wait(1.0)
 	_check(village.soldiers() == 0 and village.training_progress("warrior").is_empty(), "warriors go back to work when no longer wanted")
 
-	# Wizards: Singing rocks train one every 3 minutes; they make magicko.
-	var rocks := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
+	# Wizards: a Wizardry tower (the Moon tower) trains them; they make magicko.
+	var rocks := BuildingFactory.create("moon_tower", RandomNumberGenerator.new())
 	game.world_root.add_child(rocks)
+	rocks.set_meta("kind", "moon_tower")
 	rocks.global_position = village.center + Vector3(-12, 0, 10)
 	rocks.add_to_group("player_buildings")
-	_check(village.max_count("wizard") == PlayerVillage.WIZARDS_PER_ROCKS, "Singing rocks allow 2 wizards")
+	_check(village.max_count("wizard") == PlayerVillage.WIZARDS_PER_ROCKS, "a Wizardry tower allows 2 wizards")
 	village.set_wanted("wizard", 1)
 	# Training pauses while the recruit fights or flees, so allow for a raid.
 	for k in 30:
@@ -372,8 +391,38 @@ func _run() -> void:
 	Balance.values["shell_damage_share"] = 1.0
 	var size_before := beast.size
 	beast.take_hit(beast.max_hp * 2.0, null)
-	_check(beast.knocked_out, "the creature is knocked out at no health")
+	_check(beast.knocked_out, "the creature dies at no health")
 	_check(is_equal_approx(beast.size, size_before * 0.75), "and shrinks by a quarter (%.2f -> %.2f)" % [size_before, beast.size])
+	await _wait(50.0)
+	_check(beast.knocked_out and play.hud._resurrect.visible, "it stays dead, and the Resurrect button shows")
+	# Animus comes from a Shrine (the Singing rocks), and brings it back there.
+	village.resources.animus = 0.0
+	play.resurrect()
+	_check(beast.knocked_out, "no Shrine, no resurrection")
+	var shrine := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
+	game.world_root.add_child(shrine)
+	shrine.set_meta("kind", "singing_rocks")
+	shrine.global_position = village.center + Vector3(-14, 0, -12)
+	shrine.add_to_group("player_buildings")
+	await _wait(60.0)
+	_check(village.amount("animus") == 1, "a Shrine makes 1 animus a minute (%.2f)" % village.resources.animus)
+	play.resurrect()
+	_check(beast.knocked_out, "no resurrection without 5 animus")
+	village.give("animus", 10.0)
+	play.resurrect()
+	_check(not beast.knocked_out and is_equal_approx(beast.hp, beast.max_hp) and village.amount("animus") == 6
+		and beast.global_position.distance_to(shrine.global_position) < 20.0, "5 animus brings it back to life at the Shrine")
+	# A Granary stores more food.
+	var food_cap := village.capacity("food")
+	var granary := BuildingFactory.create("windmill", RandomNumberGenerator.new())
+	game.world_root.add_child(granary)
+	granary.set_meta("kind", "windmill")
+	granary.global_position = village.center + Vector3(16, 0, 14)
+	granary.add_to_group("player_buildings")
+	_check(is_equal_approx(village.capacity("food"), food_cap + Balance.num("granary_holds")), "a Granary holds 300 more food")
+	_check(village.drop_point(granary.global_position + Vector3(6, 0, 0), "food").distance_to(granary.global_position) < granary.footprint + 1.0,
+		"and food can be carried to it")
+	granary.queue_free()
 
 	# Blacksmith: wheelbarrows, research, archers.
 	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
@@ -444,7 +493,9 @@ func _run() -> void:
 	village.change_quota("build", -1)
 	await _wait(1.0)
 	_check(BuildingCatalog.find("store").name == "Stacked houses" and BuildingCatalog.role("store") == "store"
-		and BuildingCatalog.find("moon_tower").gameplay == "Town guard" and BuildingCatalog.find("necro_tower").name == "Skull tower"
+		and BuildingCatalog.find("moon_tower").gameplay == "Wizardry tower" and BuildingCatalog.find("tall_house").gameplay == "Town guard"
+		and BuildingCatalog.find("singing_rocks").gameplay == "Shrine" and BuildingCatalog.find("windmill").gameplay == "Granary"
+		and BuildingCatalog.find("necro_tower").name == "Skull tower"
 		and FileAccess.file_exists(BuildingCatalog.NAMES_PATH), "Names.txt pairs asset names with gameplay names")
 
 	# Treehouse Homes, and a rope bridge between two of them.
@@ -510,8 +561,8 @@ func _run() -> void:
 	game.world_root.add_child(necro_tower)
 	necro_tower.global_position = village.center + Vector3(-10, 0, 20)
 	necro_tower.add_to_group("player_buildings")
-	_check(village.max_count("necromancer") == 2 and is_equal_approx(village.train_seconds("necromancer"), 150.0),
-		"a Necromancer tower trains 2 necromancers, 2.5 minutes each")
+	_check(village.max_count("necromancer") == 2 and is_equal_approx(village.train_seconds("necromancer"), 75.0),
+		"a Necromancer tower trains 2 necromancers, 75 seconds each")
 	Balance.values["necromancer_training_seconds"] = 15.0
 	village.set_wanted("wizard", 1)
 	if village.wizards() == 0:
@@ -590,9 +641,14 @@ func _run() -> void:
 	_check(SpellBook.index_of("lightning") >= 0 and CreatureMind.SPELLS.has("lightning"), "chain lightning is a spell the creature can learn")
 
 	# Everyone grown up turns out when a goblin comes close to the village.
+	# (The creature is held back, so it does not eat the goblin first.)
+	play.creature.snared_until = game.now + 6.0
+	play.creature.mind.process_mode = Node.PROCESS_MODE_DISABLED
 	var prowler := WorldPopulator.spawn_villager(game.world_root, terrain, village.center + Vector3(3, 0, 18), 0.1, true)
 	prowler.max_hp = 5000.0
 	prowler.hp = 5000.0
+	if play.creature.global_position.distance_to(prowler.global_position) < 20.0:
+		play.creature.place(play.creature.global_position + (play.creature.global_position - prowler.global_position).normalized() * 25.0, play.creature.heading)
 	await _wait(4.0)
 	var defenders := 0
 	for v in village.people():
@@ -601,6 +657,7 @@ func _run() -> void:
 	_check(not prowler.raiding or defenders > 0, "a goblin near the village counts as an enemy")
 	_check(defenders >= 3, "villagers of all kinds turn out to fight it (%d)" % defenders)
 	prowler.queue_free()
+	play.creature.mind.process_mode = Node.PROCESS_MODE_INHERIT
 	await _wait(0.5)
 
 	# A giant bat carries a villager off to the cave during a raid.
@@ -623,20 +680,36 @@ func _run() -> void:
 		_check(not doomed.is_alive() and not doomed.is_in_group("bats"), "a bat with no health left falls out of the sky")
 	play.raids.raiding = false
 
-	# Bless and Curse: the first tap says what the creature last did, the
-	# second casts. Each thing it does is judged once.
+	# Bless and Curse: the key takes the spell in hand and says what the
+	# creature last did; a click casts it; the key again puts it away. Each
+	# thing it does is judged once.
+	var bless := SpellBook.index_of("bless")
 	beast.mind.did("explore")
-	play._spell_key(SpellBook.index_of("bless"))
-	_check(play._judge_prompt and play.hud._prompt.text.contains("explored"), "the first tap of Bless shows the creature's last action")
+	play._spell_key(bless)
+	_check(play._armed == bless and play._judge_prompt and play.hud._prompt.text.contains("exploring"), "pressing Bless shows the creature's last action")
+	play._spell_key(bless)
+	_check(play._armed == -1 and not play._judge_prompt, "pressing it again puts it away")
 	var keen: float = beast.mind.behavior.explore
 	village.give("magicko", 50.0)
-	play._spell_key(SpellBook.index_of("bless"))
-	_check(beast.mind.behavior.explore > keen, "the second tap casts it")
+	play._spell_key(bless)
+	play._click_spell()
+	_check(beast.mind.behavior.explore > keen and play._armed == -1, "a click casts it")
 	_check(not play._judge_prompt, "and the text goes")
 	keen = beast.mind.behavior.explore
-	play._spell_key(SpellBook.index_of("bless"))
-	play._spell_key(SpellBook.index_of("bless"))
+	play._spell_key(bless)
+	play._click_spell()
 	_check(is_equal_approx(beast.mind.behavior.explore, keen), "the same action cannot be blessed twice")
+	_check(not CreatureMind.all_actions().has("run") and not CreatureMind.all_actions().has("fly"), "running and flying are not blessed or cursed")
+	# Other spells: in hand, then cast with a click inside the influence.
+	var fireball := SpellBook.index_of("fireball")
+	play._spell_key(fireball)
+	_check(play._armed == fireball and SpellCursors.image("fireball").get_size() == Vector2i(SpellCursors.SIZE, SpellCursors.SIZE), "a spell in hand turns the pointer into its sign")
+	var magicko_then := village.amount("magicko")
+	play._cursor_hit = village.center + Vector3(village.influence() + 30.0, 0, 0)
+	play._click_spell()
+	_check(village.amount("magicko") == magicko_then, "spells cannot be cast outside the village's influence")
+	play._disarm()
+	_check(is_equal_approx(Balance.num("lightning_jumps"), 12.0), "chain lightning jumps twice as many times")
 	_check(is_equal_approx(CreatureMind.nudge(0.0, 10.0), 10.0) and is_equal_approx(CreatureMind.nudge(90.0, -10.0), 80.0)
 		and CreatureMind.nudge(90.0, 10.0) < 92.0 and CreatureMind.nudge(-90.0, -10.0) > -92.0, "past 50 or -50 a blessing or curse counts for less")
 	# The soft cooldown: a spell cast recently costs more.
@@ -692,15 +765,46 @@ func _run() -> void:
 		"it casts rain on the crops, and that costs it magicko (%d left)" % roundi(beast.magicko))
 	mind.behavior["rain"] = Balance.num("behavior_start")
 	mind.behavior["water"] = Balance.num("behavior_start")
-	# Running a bar down twice levels it up.
-	_check(beast.levels.magicko == 0 and beast.drains_needed("magicko") == 2, "the first level takes two drains")
-	for k in 2:
-		beast.magicko = beast.max_magicko
-		await _wait(0.2)
-		beast.magicko = beast.max_magicko * 0.2
-		await _wait(0.2)
-	_check(beast.levels.magicko == 1 and is_equal_approx(beast.max_magicko, Balance.num("creature_magicko") * 1.1) and beast.drains_needed("magicko") == 3,
-		"using up 75%% of its magicko twice makes the bar 10%% bigger (%.0f); the next level takes three" % beast.max_magicko)
+	# Using a stat levels it up: 100 used for the first level, 200 more for the next.
+	var start_level: int = beast.levels.magicko
+	beast.used.magicko = 0.0
+	beast._use("magicko", Balance.num("level_points") * (start_level + 1))
+	_check(beast.levels.magicko == start_level + 1 and is_equal_approx(beast.level_cost("magicko"), minf(Balance.num("level_points") * (start_level + 2), 1000.0)),
+		"using magicko levels it up, and the next level costs 100 more (level %d)" % (beast.levels.magicko + 1))
+	var health_level: int = beast.levels.health
+	beast.take_hit(Balance.num("level_points") * (health_level + 1) + 1.0, null)
+	_check(beast.levels.health == health_level + 1, "losing health levels up health too")
+	beast.hp = beast.max_hp
+	beast.levels.stamina = 0
+	beast.used.stamina = 0.0
+	_check(is_equal_approx(beast.level_cost("stamina"), 100.0), "the first level costs 100")
+	beast.levels.stamina = 20
+	_check(is_equal_approx(beast.level_cost("stamina"), 1000.0), "and a level never costs more than 1,000")
+	beast.levels.stamina = 0
+	# The tortoise tires as it walks.
+	beast.stamina = beast.max_stamina * 0.5
+	var stamina_then := beast.stamina
+	var walk_to := beast.global_position
+	for k in 24:
+		var a := TAU * k / 24.0
+		var p := beast.global_position + Vector3(cos(a), 0, sin(a)) * 25.0
+		if game.terrain.is_inside(p.x, p.z) and game.terrain.is_dry(p.x, p.z):
+			walk_to = p
+			break
+	beast.move_to(walk_to)
+	var top_speed := 0.0
+	for k in 6:
+		await _wait(0.5)
+		top_speed = maxf(top_speed, beast.speed)
+	_check(beast.stamina < stamina_then, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s)" % [
+		stamina_then, beast.stamina, top_speed, game.now < beast.snared_until, beast._alert, beast.hiding])
+	beast.has_target = false
+	# Exploring is a long trip.
+	var home_then := beast.mind.home
+	_check(beast.mind._explore() and beast.target.distance_to(home_then) >= Balance.num("explore_least") - 0.1 and beast.mind.last_action == "explore",
+		"exploring is a long trip from where it was sent (%.0f m)" % beast.target.distance_to(home_then))
+	beast.has_target = false
+	beast.mind._away = false
 	_check(play.hud._creature_bars.size() == 3, "the creature's health, stamina and magicko bars are on the HUD")
 	# Its fireball only singes the player's own people.
 	var bystander := village.people()[0]
@@ -709,7 +813,7 @@ func _run() -> void:
 	_put_out_fires()
 	_check(bystander.is_alive() and bystander.hp < bystander.max_hp, "the creature's fireball does a tenth of the harm to villagers (%.0f of %.0f left)" % [bystander.hp, bystander.max_hp])
 	# Fetching a tree once it knows how.
-	await _wait(maxf(0.0, Balance.num("creature_knockout_seconds") - 150.0) + 2.0)
+	await _wait(2.0)
 	mind.knowledge.lumber = Balance.num("knowledge_lumber")
 	# (Only lumber: it may have picked up enough about food or stone by now,
 	# and a spell cast in between would hide the fetching.)
@@ -721,6 +825,17 @@ func _run() -> void:
 	# (Standing still, so it is at home when it next thinks.)
 	beast.has_target = false
 	mind.home = beast.global_position
+	# (The villagers may have felled every tree near the village by now:
+	# plant one for it.)
+	if mind._harvest_target("lumber") == null:
+		var tree_rng := RandomNumberGenerator.new()
+		var sapling := FloraFactory.create_tree(tree_rng)
+		while sapling.footprint < 1.2:
+			sapling.free()
+			sapling = FloraFactory.create_tree(tree_rng)
+		game.world_root.add_child(sapling)
+		var spot_for := beast.global_position.lerp(village.center, 0.5) + Vector3(6, 0, 6)
+		sapling.global_position = Vector3(spot_for.x, game.terrain.get_height(spot_for.x, spot_for.z), spot_for.z)
 	var fetched := false
 	for k in 30:
 		await _wait(5.0)
@@ -851,7 +966,7 @@ func _run() -> void:
 	_check(get_tree().get_nodes_in_group("goblins").size() > 0 == (data.caves.size() > 0), "goblins live in the caves")
 	var s0: Vector2 = play._info.starts[0]
 	play._found(Vector3(s0.x, game.terrain.get_height(s0.x, s0.y), s0.y), 0)
-	_check(play.village.population() == PlayerVillage.START_VILLAGERS, "starting villagers spawned (%d)" % play.village.population())
+	_check(play.village.population() == roundi(Balance.num("start_villagers")), "starting villagers spawned (%d)" % play.village.population())
 	var raider := get_tree().get_nodes_in_group("goblins")[0] as Villager
 	var route := play.raids._route_for(raider.home)
 	_check(play.raids.paths.size() == placed and route.size() >= 2, "goblins take the map's painted path to the village (%d points)" % route.size())
@@ -885,7 +1000,7 @@ func _run() -> void:
 	squirrel.move_to(run_to)
 	await _wait(3.0)
 	var walk_speed := squirrel._top_speed()
-	_check(squirrel.running and squirrel.speed > walk_speed * 1.2 and squirrel.mind.last_action == "run",
+	_check(squirrel.running and squirrel.speed > walk_speed * 1.2,
 		"the squirrel runs a long journey, half as fast again (%.1f against %.1f)" % [squirrel.speed, walk_speed])
 	_check(squirrel.stamina < squirrel.max_stamina, "running uses stamina (%.0f left)" % squirrel.stamina)
 	squirrel.stamina = 0.2
@@ -933,7 +1048,7 @@ func _run() -> void:
 		if not raven.flying and not raven.has_target:
 			break
 		await _wait(1.0)
-	_check(raven.stamina < raven.max_stamina and raven.mind.last_action == "fly", "flying uses stamina (%.0f left)" % raven.stamina)
+	_check(raven.stamina < raven.max_stamina, "flying uses stamina (%.0f left)" % raven.stamina)
 	up = raven.global_position.y - game.terrain.get_height(raven.global_position.x, raven.global_position.z)
 	_check(not raven.flying and up < 0.5 and Vector2(raven.global_position.x - flight_to.x, raven.global_position.z - flight_to.z).length() < 3.0, "the raven lands where it was sent")
 	# When it runs from a battle, it flies.

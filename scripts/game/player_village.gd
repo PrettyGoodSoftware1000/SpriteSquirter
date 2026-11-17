@@ -6,8 +6,12 @@ extends Node
 ## boulders) and food (foraging round the village, or sowing and reaping
 ## wheat fields) at the rates set in Game.settings, in units per worker per
 ## minute. What they gather only counts once they have carried it to the
-## nearest Storehouse (or to the village centre while there is none).
-## Every grown-up also adds a trickle of magicko. While a building is under
+## nearest Storehouse (or to the village centre while there is none; food
+## may go to a Granary too). Each Storehouse holds Balance
+## "storehouse_holds" of each of lumber, stone, food and bones, and each
+## Granary "granary_holds" more food: more than that is lost. Every
+## grown-up also adds a trickle of magicko, and every Shrine makes
+## "animus_per_shrine" animus a minute. While a building is under
 ## construction up to Balance "builders_per_building" villagers work on
 ## it: the builders first, then unassigned workers. Each site gets its own.
 ##
@@ -17,8 +21,9 @@ extends Node
 ## Grown-ups are workers unless the player asks for warriors or wizards
 ## (the jobs panel). Each Town guard trains one warrior at a time, taking
 ## Balance "warrior_training_seconds", up to WARRIORS_PER_GUARD; each
-## Singing rocks trains one wizard at a time, taking
-## "wizard_training_seconds", up to WIZARDS_PER_ROCKS. Buildings train side
+## Wizardry tower trains one wizard at a time, taking
+## "wizard_training_seconds", up to WIZARDS_PER_ROCKS. (The dev menu's
+## training time multiplies all the training times.) Buildings train side
 ## by side. A warrior or wizard sent back to work must train from the start
 ## to return. Recruits come from the unassigned workers, so no job's count
 ## can go up unless one of them is free (free_workers()).
@@ -41,18 +46,15 @@ extends Node
 ## are born; after STARVE_AFTER seconds without food, someone starves every
 ## STARVE_EVERY seconds until there is food again.
 
-const RESOURCES := ["lumber", "stone", "food", "bones", "magicko"]
-const START_RESOURCES := {"lumber": 80.0, "stone": 50.0, "food": 40.0, "bones": 0.0, "magicko": 30.0}
-const START_VILLAGERS := 8
+const RESOURCES := ["lumber", "stone", "food", "bones", "animus", "magicko"]
+const START_RESOURCES := {"lumber": 80.0, "stone": 50.0, "food": 40.0, "bones": 0.0, "animus": 0.0, "magicko": 30.0}
+## What the Storehouses (and, for food, the Granaries) hold.
+const STORED := ["lumber", "stone", "food", "bones"]
 const HOME_RADIUS := 16.0
-## Buildings may go up this far from the village centre...
-const TERRITORY := 45.0
 ## Every grown-up turns out to fight a raider this close to the village
 ## centre, and any goblin at all (raid or no raid) within INTRUDER_RADIUS.
 const DEFEND_RADIUS := 50.0
 const INTRUDER_RADIUS := 25.0
-## ...or this close to one of the village's buildings.
-const NEAR_BUILDING := 24.0
 ## How far workers walk to reach trees and rocks.
 const WORK_REACH := 65.0
 const JOB_SHARE := {"lumber": 0.4, "food": 0.35, "stone": 0.25}
@@ -115,6 +117,9 @@ var quota := {"lumber": 0, "stone": 0, "food": 0, "build": 0}
 var gatherers := {"lumber": 0, "stone": 0, "food": 0}
 
 var _stored := {}
+## Each resource's amount, once a second for the last minute.
+var _history := {}
+var _history_timer := 0.0
 ## Seconds with no food, and towards the next death from hunger.
 var hungry_for := 0.0
 ## Magicko comes in BLOOD_BOOST times as fast until Game.now passes this.
@@ -153,7 +158,7 @@ func found(pos: Vector3, site := -1) -> void:
 	_raise_first_storehouse()
 	if people().is_empty():
 		Game.terrain.add_bare(center, 9.0, 0.7)
-		for k in START_VILLAGERS:
+		for k in roundi(Balance.num("start_villagers")):
 			WorldPopulator.spawn_villager(Game.world_root, Game.terrain, center, 6.0, false, true)
 		for v in people():
 			v.home_radius = HOME_RADIUS
@@ -353,7 +358,7 @@ func per_building(role: String) -> int:
 
 
 func train_seconds(role: String) -> float:
-	return Balance.num(role + "_training_seconds")
+	return Balance.num(role + "_training_seconds") * maxf(Game.settings.training_time, 0.01)
 
 
 ## The most warriors (or archers, or wizards) the village's buildings can
@@ -428,7 +433,7 @@ func _update_research(delta: float) -> void:
 ## proportion to its size before that, and less again while it is young.
 func creature_upkeep() -> float:
 	var c := Game.creature
-	if not is_instance_valid(c):
+	if not is_instance_valid(c) or c.knocked_out:
 		return 0.0
 	var young := Balance.num("creature_young_appetite") if c.grown() < 0.5 else 1.0
 	return Game.settings.creature_food * c.size * young
@@ -481,13 +486,15 @@ func food_upkeep() -> float:
 
 
 ## Where a worker standing at `from` takes what it gathered: the door of
-## the nearest Storehouse, or the middle of the village if there is none.
-func drop_point(from: Vector3) -> Vector3:
+## the nearest Storehouse (or, for food, Granary), or the middle of the
+## village if there is none.
+func drop_point(from: Vector3, kind := "") -> Vector3:
 	var best := center
 	var best_d := INF
 	for node in get_tree().get_nodes_in_group("player_buildings"):
 		var b := node as Destructible
-		if BuildingCatalog.role(b.get_meta("kind", "")) != "store":
+		var role := BuildingCatalog.role(b.get_meta("kind", ""))
+		if role != "store" and not (role == "granary" and kind == "food"):
 			continue
 		var d := b.global_position.distance_to(from)
 		if d < best_d:
@@ -524,19 +531,84 @@ func spend(cost: Dictionary) -> bool:
 
 
 func give(res: String, value: float) -> void:
-	resources[res] = resources.get(res, 0.0) + value
+	var now: float = resources.get(res, 0.0) + value
+	if value > 0.0 and STORED.has(res):
+		# Whatever does not fit is lost (but nothing already stored is).
+		now = minf(now, maxf(capacity(res), resources.get(res, 0.0)))
+	resources[res] = now
 
 
-## True where the village may put up a building.
+## How much of `res` the village can keep: Balance "storehouse_holds" for
+## every Storehouse (at least one's worth, so a village that has lost its
+## Storehouse can still keep something), and "granary_holds" more food for
+## every Granary. Magicko and animus have no limit.
+func capacity(res: String) -> float:
+	if not STORED.has(res):
+		return INF
+	var stores := 0
+	var granaries := 0
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		match BuildingCatalog.role(node.get_meta("kind", "")):
+			"store":
+				stores += 1
+			"granary":
+				granaries += 1
+	var most := maxi(stores, 1) * Balance.num("storehouse_holds")
+	if res == "food":
+		most += granaries * Balance.num("granary_holds")
+	return most
+
+
+## How much of `res` came in (or, if negative, went out) over the last
+## minute, from samples taken once a second.
+func last_minute(res: String) -> int:
+	var samples: Array = _history.get(res, [])
+	if samples.is_empty():
+		return 0
+	return floori(resources.get(res, 0.0)) - floori(samples[0])
+
+
+## Keeps a minute of samples of every resource.
+func _sample(delta: float) -> void:
+	_history_timer -= delta
+	if _history_timer > 0.0:
+		return
+	_history_timer = 1.0
+	for res in RESOURCES:
+		var samples: Array = _history.get(res, [])
+		samples.append(resources.get(res, 0.0))
+		while samples.size() > 61:
+			samples.pop_front()
+		_history[res] = samples
+
+
+## How far the village's influence reaches from its centre:
+## Game.settings.influence_start, and influence_per_person more for every
+## villager. Buildings go up, and the player's spells are cast, inside it.
+func influence() -> float:
+	return Game.settings.influence_start + Game.settings.influence_per_person * population()
+
+
+## True where the village may put up a building, or the player cast a spell.
 func in_territory(p: Vector3) -> bool:
-	if Vector2(p.x - center.x, p.z - center.z).length() < TERRITORY:
-		return true
-	for group in ["player_buildings", "construction_sites"]:
-		for node in get_tree().get_nodes_in_group(group):
-			var b := node as Node3D
-			if Vector2(p.x - b.global_position.x, p.z - b.global_position.z).length() < NEAR_BUILDING:
-				return true
-	return false
+	return founded and Vector2(p.x - center.x, p.z - center.z).length() < influence()
+
+
+## The Shrines that stand, for animus and bringing the creature back.
+func shrines() -> Array[Destructible]:
+	var out: Array[Destructible] = []
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if BuildingCatalog.role(b.get_meta("kind", "")) == "shrine" and not b.destroyed:
+			out.append(b)
+	return out
+
+
+## 0..1 of the way to the next birth (0 while no child can be born).
+func birth_share() -> float:
+	if next_birth_in() < 0.0:
+		return 0.0
+	return clampf(birth_progress / maxf(Game.settings.birth_seconds, 0.01), 0.0, 1.0)
 
 
 ## Seconds until the next child, or -1 when the village is out of housing.
@@ -552,6 +624,8 @@ func _process(delta: float) -> void:
 	var grown := adults() - wizards()
 	var boost := BLOOD_BOOST if blood_active() else 1.0
 	give("magicko", (grown * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
+	give("animus", shrines().size() * Balance.num("animus_per_shrine") / 60.0 * delta)
+	_sample(delta)
 	_eat(delta)
 	if population() < housing() and amount("food") > 0:
 		birth_progress += delta

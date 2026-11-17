@@ -2,9 +2,10 @@ class_name ResourceIcon
 extends Control
 ## A small resource icon drawn with vector shapes, so it stays sharp at any
 ## UI scale: a log (lumber), a stone, an ear of wheat (food), a blue droplet
-## (magicko), a bone (bones) or a little person (people).
+## (magicko), a bone (bones), a golden cloud (animus) or a little person
+## (people).
 
-const KINDS := ["lumber", "stone", "food", "bones", "magicko", "people"]
+const KINDS := ["lumber", "stone", "food", "bones", "animus", "magicko", "people"]
 const INK := Color(0.08, 0.06, 0.05)
 
 var kind := "lumber"
@@ -73,6 +74,15 @@ func _draw() -> void:
 				_disc(p.call(end.x + 0.07, end.y + 0.07), s * 0.12, bone)
 			draw_line(p.call(0.26, 0.74), p.call(0.74, 0.26), INK, s * 0.2 + maxf(2.0, s * 0.06), true)
 			draw_line(p.call(0.24, 0.76), p.call(0.76, 0.24), bone, s * 0.2, true)
+		"animus":
+			# A puffy golden cloud: four overlapping discs, outlined together.
+			var gold := Color(1.0, 0.88, 0.42)
+			var puffs := [[0.3, 0.6, 0.19], [0.5, 0.45, 0.24], [0.72, 0.58, 0.2], [0.52, 0.66, 0.2]]
+			for puff: Array in puffs:
+				draw_circle(p.call(puff[0], puff[1]), s * puff[2] + maxf(1.5, s * 0.06), INK, true, -1.0, true)
+			for puff: Array in puffs:
+				draw_circle(p.call(puff[0], puff[1]), s * puff[2], gold, true, -1.0, true)
+			_disc(p.call(0.44, 0.4), s * 0.07, Color(1.0, 0.97, 0.8), false)
 		"magicko":
 			# A drop of water: a round bottom joined to a point by its tangents.
 			var centre := Vector2(0.5, 0.62)

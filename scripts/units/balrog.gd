@@ -144,8 +144,7 @@ func _on_footfall(pos: Vector3) -> void:
 
 func _on_killed() -> void:
 	_sparks.emitting = false
-	# Dead, not knocked out: it never gets up.
-	_ko_timer = INF
+	# (Nobody brings a balrog back.)
 	_dead_for = 0.0
 	raiding = false
 	remove_from_group("balrogs")

@@ -22,7 +22,6 @@ const BRIDGE_HINT := "The treehouses a rope bridge can join are lit up. Click on
 const FIELD_HINT := "Hold the left mouse button and drag to draw the field, then let go. Villagers sow and reap it.  Shift keeps drawing,  right-click or Esc to stop."
 
 ## How long after the first tap of Bless or Curse the second tap casts it.
-const JUDGE_ARM_SECONDS := 10.0
 ## The shortest time between two casts of the same spell.
 const SPELL_DEBOUNCE := 0.25
 
@@ -45,9 +44,8 @@ var _hover: StartMarker
 var _cooldowns: Array = []
 ## For each spell, when it was cast in the last Balance "spell_recent_seconds".
 var _recent: Array = []
-## Bless or Curse tapped once: its index, until Game.now passes _judge_armed_until.
-var _judge_armed := -1
-var _judge_armed_until := 0.0
+## The spell in hand (see _spell_key), or -1.
+var _armed := -1
 ## The spell button under the mouse, or -1.
 var _hover_spell := -1
 var _cursor_hit: Variant = null
@@ -55,6 +53,9 @@ var _painting := false
 var _flatten_height := 0.0
 var _ui_timer := 0.0
 var _ring: GroundRing
+## The edge of the village's influence, shown while placing a building or
+## with the mouse over a Storehouse.
+var _wall: InfluenceWall
 
 var _place_kind := ""
 var _place_seed := 0
@@ -64,6 +65,8 @@ var _ghost_valid := false
 var _ghost_problem := ""
 var _ghost_material := StandardMaterial3D.new()
 var _rng := RandomNumberGenerator.new()
+## Seconds the influence wall stays up after a spell was aimed outside it.
+var _wall_flash := 0.0
 
 # The wheat field being drawn: dragged out from one corner to the other.
 var _field_dragging := false
@@ -124,6 +127,8 @@ func _ready() -> void:
 
 	_ring = GroundRing.new()
 	add_child(_ring)
+	_wall = InfluenceWall.new()
+	add_child(_wall)
 	_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_ghost_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
@@ -136,6 +141,7 @@ func _ready() -> void:
 	hud.sculpt_selected.connect(_on_sculpt_selected)
 	hud.spell_selected.connect(_on_spell_button)
 	hud.spell_hovered.connect(_on_spell_hovered)
+	hud.resurrect_requested.connect(resurrect)
 	hud.build_selected.connect(_start_placing)
 	hud.build_menu_requested.connect(_toggle_build_menu)
 	hud.research_menu_requested.connect(_toggle_research_menu)
@@ -198,6 +204,7 @@ func _process(delta: float) -> void:
 		Game.terrain.sculpt(sculpt_brush, _cursor_hit, brush_radius, delta, _flatten_height)
 	_update_ring()
 	_update_ghost()
+	_update_wall()
 	_ui_timer -= delta
 	if _ui_timer <= 0.0:
 		_ui_timer = 0.2
@@ -220,9 +227,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if button and button.pressed:
 		if button.button_index == MOUSE_BUTTON_LEFT:
-			_on_left_click()
+			if _armed >= 0 and not _choosing:
+				_click_spell()
+			else:
+				_on_left_click()
 		elif button.button_index == MOUSE_BUTTON_RIGHT:
-			if mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE:
+			if _armed >= 0:
+				_disarm()
+				_set_mode(mode)
+			elif mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE:
 				_set_mode(Mode.COMMAND)
 			elif _cursor_hit != null and not _choosing:
 				_command_move(_cursor_hit)
@@ -239,8 +252,9 @@ func _on_key(key: InputEventKey) -> void:
 		if hud.is_build_menu_open() or hud.is_research_menu_open():
 			hud.show_build_menu(false)
 			hud.show_research_menu(false)
-		elif _judge_armed >= 0:
-			_disarm_judge()
+		elif _armed >= 0:
+			_disarm()
+			_set_mode(mode)
 		elif mode != Mode.COMMAND:
 			_set_mode(Mode.COMMAND)
 		else:
@@ -339,8 +353,8 @@ func _found(pos: Vector3, start_index: int) -> void:
 	creature.kind = Game.creature_kind
 	Game.world_root.add_child(creature)
 	creature.knocked_down.connect(func() -> void:
-		_announce(Texts.line("creature_knocked_out", {"creature": creature.species_name().to_lower(), "seconds": int(Balance.num("creature_knockout_seconds"))})))
-	creature.got_up.connect(func() -> void: _announce(Texts.line("creature_got_up", {"creature": creature.species_name().to_lower()})))
+		_announce(Texts.line("creature_died", {"creature": creature.species_name().to_lower(), "animus": roundi(Balance.num("resurrect_animus"))})))
+	creature.got_up.connect(func() -> void: _announce(Texts.line("creature_resurrected", {"creature": creature.species_name().to_lower()})))
 	var out := Vector2(pos.x, pos.z)
 	var dir := (-out).normalized() if out.length() > 1.0 else Vector2.RIGHT
 	var spot := out + dir * (PlayerVillage.HOME_RADIUS + 12.0)
@@ -357,7 +371,7 @@ func _set_mode(m: Mode) -> void:
 	_painting = false
 	_field_dragging = false
 	_bridge_from = null
-	_disarm_judge()
+	_disarm()
 	_refresh_bridge_ghosts()
 	if m != Mode.PLACE and _ghost != null:
 		_ghost.queue_free()
@@ -365,7 +379,7 @@ func _set_mode(m: Mode) -> void:
 	hud.set_sculpt(sculpt_brush if m == Mode.SCULPT else -1)
 	match m:
 		Mode.COMMAND:
-			hud.set_hint("Click or right-click the ground to walk the %s there. Keys 1-%d cast spells where the mouse points. B or Backspace opens the build menu." \
+			hud.set_hint("Click or right-click the ground to walk the %s there. Keys 1-%d take a spell in hand. B or Backspace opens the build menu." \
 				% [(Creature.SPECIES[Game.creature_kind].name as String).to_lower(), SpellBook.SPELLS.size()])
 		Mode.PLACE:
 			hud.set_hint(_place_hint())
@@ -454,6 +468,33 @@ func _on_left_click() -> void:
 			_update_field()
 
 
+## The Resurrect button: brings the dead creature back to life at the
+## nearest Shrine, for Balance "resurrect_animus" animus.
+func resurrect() -> void:
+	if creature == null or not creature.knocked_out:
+		return
+	var who := creature.species_name().to_lower()
+	var cost := roundi(Balance.num("resurrect_animus"))
+	var shrines := village.shrines()
+	if shrines.is_empty():
+		_announce(Texts.line("resurrect_no_shrine", {"creature": who}))
+		return
+	if village.amount("animus") < cost:
+		_announce(Texts.line("resurrect_no_animus", {"creature": who, "animus": cost, "have": village.amount("animus")}))
+		return
+	village.give("animus", -cost)
+	var shrine := shrines[0]
+	for s in shrines:
+		if s.global_position.distance_to(creature.global_position) < shrine.global_position.distance_to(creature.global_position):
+			shrine = s
+	# Beside the Shrine, on the side facing the village.
+	var out := village.center - shrine.global_position
+	out.y = 0.0
+	out = out.normalized() if out.length_squared() > 1.0 else Vector3.RIGHT
+	creature.resurrect(shrine.global_position + out * (shrine.footprint + 4.0 + 3.0 * creature.size))
+	Game.camera_rig.focus_on(creature.global_position)
+
+
 func _command_move(pos: Vector3) -> void:
 	if creature == null or not Game.terrain.is_inside(pos.x, pos.z):
 		return
@@ -497,35 +538,41 @@ func _pay_for(index: int) -> bool:
 	return true
 
 
-## A spell's number key: cast it where the mouse points. Bless and Curse
-## show what the creature last did on the first tap and cast on the second.
+## A spell's number key (or its button): takes the spell in hand, and the
+## mouse pointer turns into its sign. A click then casts it (Bless and
+## Curse: a click anywhere). Pressing the same key again puts it away.
 func _spell_key(index: int) -> void:
 	if _choosing or index < 0 or index >= SpellBook.SPELLS.size():
 		return
-	if not _is_judgement(index):
-		_cast(index)
-	elif _judge_armed == index and Game.now < _judge_armed_until:
-		_judge(index)
-	else:
-		_judge_armed = index
-		_judge_armed_until = Game.now + JUDGE_ARM_SECONDS
-		_show_last_action(index, true)
-
-
-## A spell button was clicked: Bless and Curse work as their key does; the
-## others are cast with the key, where the mouse points.
-func _on_spell_button(index: int) -> void:
+	if _armed == index:
+		_disarm()
+		hud.set_hint("")
+		_set_mode(mode)
+		return
+	if mode != Mode.COMMAND:
+		_set_mode(Mode.COMMAND)
+	_armed = index
+	hud.set_spell(index)
+	var spell: Dictionary = SpellBook.SPELLS[index]
+	Input.set_custom_mouse_cursor(SpellCursors.image(spell.id), Input.CURSOR_ARROW, SpellCursors.hotspot())
 	if _is_judgement(index):
-		_spell_key(index)
+		_show_last_action(index, true)
+		hud.set_hint("Click anywhere to %s the %s for what it last did.  Press %d again to cancel." % [
+			(spell.name as String).to_lower(), creature.species_name().to_lower() if creature else "creature", index + 1])
 	else:
-		hud.set_hint("Press %d to cast %s where the mouse points." % [index + 1, SpellBook.SPELLS[index].name])
+		hud.set_hint("Click to cast %s inside your village's influence.  Shift+click keeps it in hand.  Press %d again, right-click or Esc to cancel." % [
+			spell.name, index + 1])
+
+
+func _on_spell_button(index: int) -> void:
+	_spell_key(index)
 
 
 ## The mouse went over a spell button (-1: off it). Over Bless or Curse,
 ## the top of the screen says what the creature last did.
 func _on_spell_hovered(index: int) -> void:
 	_hover_spell = index
-	if _judge_armed >= 0:
+	if _armed >= 0:
 		return
 	if index >= 0 and _is_judgement(index) and not _choosing:
 		_show_last_action(index, false)
@@ -534,15 +581,33 @@ func _on_spell_hovered(index: int) -> void:
 		hud.set_prompt("")
 
 
-func _disarm_judge() -> void:
-	_judge_armed = -1
+## Puts the spell in hand away.
+func _disarm() -> void:
+	if _armed >= 0:
+		Input.set_custom_mouse_cursor(null)
+		hud.set_spell(-1)
+	_armed = -1
 	if _judge_prompt:
 		_judge_prompt = false
 		hud.set_prompt("")
 
 
+## A click with a spell in hand.
+func _click_spell() -> void:
+	var index := _armed
+	if _is_judgement(index):
+		_disarm()
+		_judge(index)
+		_set_mode(mode)
+		return
+	_cast(index)
+	if not Input.is_key_pressed(KEY_SHIFT):
+		_disarm()
+		_set_mode(mode)
+
+
 ## The top of the screen says what the creature last did, which is what
-## Bless or Curse would judge. `armed`: the key has been tapped once.
+## Bless or Curse would judge. `armed`: the spell is in hand.
 func _show_last_action(index: int, armed: bool) -> void:
 	if creature == null:
 		return
@@ -564,7 +629,6 @@ func _show_last_action(index: int, armed: bool) -> void:
 ## Casts Bless or Curse on the creature, for what it last did. Each thing
 ## it does can be blessed or cursed only once.
 func _judge(index: int) -> void:
-	_disarm_judge()
 	if _choosing or creature == null or _cooldowns[index] > 0.0:
 		return
 	if not creature.mind.can_judge():
@@ -586,6 +650,10 @@ func _cast(index: int) -> void:
 		hud.set_hint("Point at the island to cast %s." % spell.name)
 		return
 	var target: Vector3 = _cursor_hit
+	if not village.in_territory(target):
+		hud.set_hint("Spells can only be cast inside your village's influence (the wall of light).")
+		_wall_flash = 1.5
+		return
 	if spell.id == "blood" and village.amount("magicko") >= spell_cost(index) and not village.sacrifice(target):
 		hud.set_hint("Blood Sacrifice needs one of your villagers within %d m of the mouse." % int(PlayerVillage.BLOOD_REACH))
 		return
@@ -599,6 +667,8 @@ func _cast(index: int) -> void:
 			var cam := Game.camera_rig.camera
 			var from := cam.project_ray_origin(mouse) + cam.project_ray_normal(mouse) * 5.0
 			var fb := Fireball.new()
+			fb.limit_center = village.center
+			fb.limit_radius = village.influence()
 			Game.world_root.add_child(fb)
 			fb.launch(from, target)
 		"rain":
@@ -613,6 +683,33 @@ func _cast(index: int) -> void:
 			ChainLightning.cast(target)
 	if creature:
 		creature.watch(target)
+
+
+# --- Influence ------------------------------------------------------------------
+
+## Shows the wall at the edge of the village's influence while a building
+## is being placed (or a field drawn, or a bridge hung), while the mouse is
+## over a Storehouse, and for a moment after a spell is cast outside it.
+func _update_wall() -> void:
+	if _choosing or not village.founded:
+		return
+	_wall_flash = maxf(0.0, _wall_flash - get_process_delta_time())
+	var show := mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE or _wall_flash > 0.0 or _store_at_mouse()
+	if show:
+		_wall.show_at(village.center, village.influence())
+
+
+## True with the mouse over one of the village's Storehouses.
+func _store_at_mouse() -> bool:
+	if _cursor_hit == null:
+		return false
+	var p: Vector3 = _cursor_hit
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if BuildingCatalog.role(b.get_meta("kind", "")) == "store" \
+				and Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < b.footprint * 1.3 + 1.0:
+			return true
+	return false
 
 
 # --- Building placement -------------------------------------------------------
@@ -663,7 +760,7 @@ func _placement_problem(p: Vector3, footprint: float) -> String:
 	if not terrain.is_dry(p.x, p.z):
 		return "Buildings need dry land."
 	if not village.in_territory(p):
-		return "Too far from your village."
+		return "Outside your village's influence (the wall of light)."
 	for group in ["buildings", "construction_sites", "goblin_sites"]:
 		for node in get_tree().get_nodes_in_group(group):
 			var b := node as Node3D
@@ -1029,11 +1126,8 @@ func _update_ui() -> void:
 		var cost: int = CropField.cost_for(_field_size).lumber
 		hud.set_hint("Field %d x %d m: %d lumber.  %s" % [roundi(_field_size.x), roundi(_field_size.y), cost,
 			_field_problem_text if _field_problem_text != "" else "Let go to plant it."])
-	if _judge_armed >= 0:
-		if Game.now >= _judge_armed_until:
-			_disarm_judge()
-		else:
-			_show_last_action(_judge_armed, true)
+	if _armed >= 0 and _is_judgement(_armed):
+		_show_last_action(_armed, true)
 	elif _hover_spell >= 0 and _is_judgement(_hover_spell) and not _choosing:
 		_show_last_action(_hover_spell, false)
 	if mode == Mode.BRIDGE and _bridge_from != null and is_instance_valid(_bridge_from) and _bridge_hover != null and _bridge_hover != _bridge_from:

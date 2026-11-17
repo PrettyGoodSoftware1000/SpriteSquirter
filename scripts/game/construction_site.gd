@@ -114,6 +114,8 @@ func add_work(villager_seconds: float) -> void:
 		return
 	if goblin:
 		villager_seconds *= Game.settings.goblin_build_speed
+	else:
+		villager_seconds *= Game.settings.construction_rate
 	progress = minf(1.0, progress + villager_seconds / work_needed)
 	_busy = 0.5
 	_update_visual()

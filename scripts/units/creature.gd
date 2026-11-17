@@ -44,12 +44,18 @@ extends Node3D
 ## The squirrel runs on all fours where the raven would fly: half as fast
 ## again, and no slope slows it. Both use up stamina, and must stop when it
 ## is gone. The tortoise can do neither, but when it is hurt it may pull
-## into its shell, where blows do a fifth of their harm. Flying, running
-## and hiding are all things the player can Bless or Curse (the shell
-## separately for each of four states of health: see CreatureMind).
+## into its shell, where blows do a fifth of their harm. Hiding is a thing
+## the player can Bless or Curse (separately for each of four states of
+## health: see CreatureMind); flying and running are not.
 ##
-## Stamina, and the magicko the creature's own spells cost, each level up
-## with use (see _note_drain): 10% more of it and 20% faster back.
+## Stamina, the magicko the creature's own spells cost, and health each
+## level up with use (see _use): 10% more of it and 20% faster back. The
+## tortoise tires slowly as it walks, and walks at half speed when it has
+## no stamina left.
+##
+## At no health the creature dies (`knocked_out` stays true) and lies
+## where it fell until the player pays Balance "resurrect_animus" animus to
+## bring it back at a Shrine (resurrect()).
 ##
 ## The face is drawn on top of the model: eyeballs, pupils that look about,
 ## lids that blink and slant with its mood, and an inked mouth line that
@@ -96,7 +102,9 @@ const SPECIES := {
 	},
 }
 
+## At no health: the creature has died (the Balrog's death too).
 signal knocked_down
+## Brought back to life at a Shrine.
 signal got_up
 ## Height of the ankle joint above the sole of the foot.
 const ANKLE_HEIGHT := 0.75
@@ -154,7 +162,9 @@ var max_stamina := 100.0
 var magicko := 100.0
 var max_magicko := 100.0
 ## How many times each has levelled up.
-var levels := {"stamina": 0, "magicko": 0}
+var levels := {"stamina": 0, "magicko": 0, "health": 0}
+## How much of each has been used since its last level.
+var used := {"stamina": 0.0, "magicko": 0.0, "health": 0.0}
 ## Knowledge, likes and dislikes, and what it does when left alone.
 var mind: CreatureMind
 ## A tree, boulder or sheaf the creature is carrying in its arms.
@@ -229,7 +239,6 @@ var _mouth_material := StandardMaterial3D.new()
 ## The jaw opening and anger the mouth was last drawn with.
 var _mouth_drawn := Vector2(-1.0, -1.0)
 var _spec := {}
-var _ko_timer := 0.0
 var _hurt_timer := 0.0
 ## The nervous creature's head jerks and glances about.
 var _twitch := 0.0
@@ -246,10 +255,6 @@ var _flight_length := 0.0
 var _struck := false
 ## Too tired to run or fly until some stamina is back.
 var _tired := false
-## How many times each bar has been run down since its last level, and
-## whether it has come back up far enough for the next time to count.
-var _drains := {"stamina": 0, "magicko": 0}
-var _armed := {"stamina": true, "magicko": true}
 var _run := 0.0
 var _gallop := 0.0
 var _shell := 0.0
@@ -291,7 +296,9 @@ func _hungry() -> bool:
 
 ## Walking speed at its present size, before slopes and so on.
 func _top_speed() -> float:
-	return max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0)
+	# (The tortoise drags its feet when it has no stamina left.)
+	var weary := 0.5 if _tired and _spec.get("shell", false) else 1.0
+	return max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0) * weary
 
 
 ## The other giant: the Balrog for the player's creature, and the other
@@ -311,58 +318,64 @@ func is_threat() -> bool:
 
 # --- Stamina and magicko ------------------------------------------------------
 
-## Stamina drains while it runs or flies and comes back otherwise; magicko
-## comes back all the time.
+## Stamina drains while it runs or flies (or, for the tortoise, walks) and
+## comes back otherwise; magicko comes back all the time.
 func _update_stats(delta: float) -> void:
-	if hostile:
+	if hostile or knocked_out:
 		return
+	var drain := 0.0
 	if flying or running:
-		stamina -= Balance.num("fly_stamina_per_second" if flying else "run_stamina_per_second") * delta
+		drain = Balance.num("fly_stamina_per_second" if flying else "run_stamina_per_second")
+	elif _spec.get("shell", false) and speed > 0.3:
+		drain = Balance.num("tortoise_walk_stamina")
+	if drain > 0.0:
+		var spent := minf(stamina, drain * delta)
+		stamina -= spent
+		_use("stamina", spent)
 		if stamina <= 0.0:
 			stamina = 0.0
 			_tired = true
 			running = false
-	elif not knocked_out:
-		stamina = minf(max_stamina, stamina + Balance.num("creature_stamina_regen") * pow(1.0 + Balance.num("level_regen_gain"), levels.stamina) * delta)
+	else:
+		stamina = minf(max_stamina, stamina + Balance.num("creature_stamina_regen") * regen_boost("stamina") * delta)
 	if _tired and stamina >= max_stamina * 0.3:
 		_tired = false
-	if not knocked_out:
-		magicko = minf(max_magicko, magicko + Balance.num("creature_magicko_regen") * pow(1.0 + Balance.num("level_regen_gain"), levels.magicko) * delta)
-	_note_drain("stamina", stamina / max_stamina)
-	_note_drain("magicko", magicko / max_magicko)
+	magicko = minf(max_magicko, magicko + Balance.num("creature_magicko_regen") * regen_boost("magicko") * delta)
 
 
-## Counts the times a bar is run down to a quarter (it must come back to
-## half before the next time counts). The first level takes 2 such times,
-## the next 3, then 4, and 5 from then on. A level makes the bar 10%
-## bigger and 20% quicker to refill.
-func _note_drain(stat: String, share: float) -> void:
-	if _armed[stat]:
-		if share > 1.0 - Balance.num("level_drain_share"):
-			return
-		_armed[stat] = false
-		_drains[stat] += 1
-		if _drains[stat] < drains_needed(stat):
-			return
-		_drains[stat] = 0
+## How many times as fast `stat` refills, for its levels.
+func regen_boost(stat: String) -> float:
+	return pow(1.0 + Balance.num("level_regen_gain"), levels[stat])
+
+
+## `amount` of `stat` has been used (stamina spent, magicko spent on a
+## spell, health lost). Enough of it and the stat levels up: 10% more of
+## it, refilling 20% faster.
+func _use(stat: String, amount: float) -> void:
+	if hostile or amount <= 0.0:
+		return
+	used[stat] += amount
+	while used[stat] >= level_cost(stat):
+		used[stat] -= level_cost(stat)
 		levels[stat] += 1
 		var gain := 1.0 + Balance.num("level_max_gain")
-		if stat == "stamina":
-			max_stamina *= gain
-		else:
-			max_magicko *= gain
+		match stat:
+			"stamina":
+				max_stamina *= gain
+			"magicko":
+				max_magicko *= gain
+			"health":
+				var before := max_hp
+				max_hp *= gain
+				hp += max_hp - before
 		say(Texts.line("stat_grew", {"creature": species_name().to_lower(), "stat": stat, "level": int(levels[stat]) + 1}), Color(0.6, 1.0, 0.7))
-	elif share >= 0.5:
-		_armed[stat] = true
 
 
-## How many times `stat` must be run down for its next level.
-func drains_needed(stat: String) -> int:
-	return mini(2 + int(levels[stat]), 5)
-
-
-func drains_done(stat: String) -> int:
-	return _drains[stat]
+## How much of `stat` must be used for its next level: Balance
+## "level_points" for the first, twice that for the second, and so on, but
+## never more than "level_points_most".
+func level_cost(stat: String) -> float:
+	return minf(Balance.num("level_points") * (int(levels[stat]) + 1), Balance.num("level_points_most"))
 
 
 ## Pays for one of its own spells. False if it has not the magicko.
@@ -370,6 +383,7 @@ func spend_magicko(cost: float) -> bool:
 	if magicko < cost:
 		return false
 	magicko -= cost
+	_use("magicko", cost)
 	return true
 
 
@@ -402,28 +416,23 @@ func grown() -> float:
 
 
 ## Grows, and heals slowly when nothing has hurt it for a while. A creature
-## with no food to eat does neither.
+## with no food to eat does neither, and a dead one does not either.
 func _grow(delta: float) -> void:
-	var hungry := _hungry()
+	var hungry := _hungry() or knocked_out
 	if not hungry:
 		age += delta
 	var minutes: float = maxf(Game.settings.creature_grow_minutes, 0.05)
 	var t := clampf(age / (minutes * 60.0), 0.0, 1.0)
 	size = lerpf(START_SIZE, 1.0, t)
 	scale = Vector3.ONE * size
-	var new_max: float = Balance.num(kind + "_health") * lerpf(0.3, 1.0, t)
+	var new_max: float = Balance.num(kind + "_health") * lerpf(0.3, 1.0, t) * pow(1.0 + Balance.num("level_max_gain"), levels.health)
 	hp += new_max - max_hp
 	max_hp = new_max
 	_hurt_timer = maxf(0.0, _hurt_timer - delta)
 	if knocked_out:
-		_ko_timer -= delta
-		if _ko_timer <= 0.0:
-			knocked_out = false
-			hp = max_hp * Balance.num("creature_getup_health")
-			_crouch = 0.0
-			got_up.emit()
+		hp = 0.0
 	elif _hurt_timer <= 0.0 and not hungry:
-		hp = minf(max_hp, hp + max_hp * 0.01 * delta)
+		hp = minf(max_hp, hp + max_hp * 0.01 * regen_boost("health") * delta)
 
 
 ## Hurt by a goblin or an ogre.
@@ -432,6 +441,7 @@ func take_hit(amount: float, _from: Node3D) -> void:
 		return
 	if hiding:
 		amount *= Balance.num("shell_damage_share")
+	_use("health", minf(amount, maxf(hp, 0.0)))
 	hp -= amount
 	_hurt_timer = 6.0
 	_last_hit_at = Game.now
@@ -447,7 +457,8 @@ func take_hit(amount: float, _from: Node3D) -> void:
 	knocked_out = true
 	hiding = false
 	running = false
-	_ko_timer = Balance.num("creature_knockout_seconds")
+	flying = false
+	_alt = 0.0
 	fleeing_until = 0.0
 	if not hostile:
 		shrink(Balance.num("creature_shrink_on_knockout"))
@@ -460,6 +471,23 @@ func take_hit(amount: float, _from: Node3D) -> void:
 	_jaw_want = 0.0
 	Game.effects.spawn_dust(global_position, 3.0 * size)
 	knocked_down.emit()
+
+
+## Brings the dead creature back to life at `at` (a Shrine), in a shaft
+## of light, with Balance "creature_getup_health" of its health.
+func resurrect(at: Vector3) -> void:
+	if not knocked_out:
+		return
+	knocked_out = false
+	_crouch = 0.0
+	_jaw_want = 0.0
+	hp = max_hp * Balance.num("creature_getup_health")
+	stamina = max_stamina
+	_tired = false
+	place(at, heading)
+	mind.home = global_position
+	Game.effects.spawn_god_ray(global_position, size)
+	got_up.emit()
 
 
 ## Makes the creature smaller by `share` of its size (never below
@@ -573,20 +601,17 @@ func haste() -> String:
 ## True if the raven would rather fly to `pos` than walk (or the squirrel
 ## run): it is a long way, the ground climbs steeply on the way, or it is
 ## getting out of a fight (by itself, or because the player has `ordered`
-## it away). How keen it is on flying or running (Bless and Curse) counts:
-## keener, and shorter journeys are worth it; less keen, and it often
-## walks; not keen at all, and it always does.
+## it away).
 func _should_hurry(pos: Vector3, ordered := false) -> bool:
 	var how := haste()
 	if how == "" or flying or running or _tired or hiding:
 		return false
 	if knocked_out or Game.now < snared_until or (how == "run" and is_instance_valid(carrying)):
 		return false
-	var keen := mind.weight(how) / 50.0
 	var d := _flat(pos, global_position)
-	if keen <= 0.0 or d < SHORT_HOP or randf() > keen:
+	if d < SHORT_HOP:
 		return false
-	if d > Balance.num("raven_fly_distance" if how == "fly" else "squirrel_run_distance") / keen:
+	if d > Balance.num("raven_fly_distance" if how == "fly" else "squirrel_run_distance"):
 		return true
 	if is_fleeing() or (ordered and (_alert or _action != Action.NONE)):
 		return true
@@ -605,7 +630,6 @@ func _should_hurry(pos: Vector3, ordered := false) -> bool:
 
 ## Takes to the air, or drops to all fours and runs.
 func _hurry() -> void:
-	mind.did(haste())
 	if haste() == "fly":
 		_take_off()
 		return

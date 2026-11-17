@@ -12,6 +12,12 @@ var friendly := 1.0
 var hostile := false
 ## Share of the usual damage it does.
 var power := 1.0
+## The player's fireball only works inside the village's influence: once it
+## has been inside this circle (centre, radius; radius 0 for no limit) and
+## leaves it again, it fizzles out.
+var limit_center := Vector3.ZERO
+var limit_radius := 0.0
+var _was_inside := false
 
 var _from := Vector3.ZERO
 var _to := Vector3.ZERO
@@ -76,6 +82,12 @@ func _process(delta: float) -> void:
 	var pos := _from.lerp(_to, t) + Vector3.UP * _arc * 4.0 * t * (1.0 - t)
 	global_position = pos
 	_glow.scale = Vector3.ONE * (1.0 + sin(_t * 40.0) * 0.12)
+	if limit_radius > 0.0:
+		var inside := Vector2(pos.x - limit_center.x, pos.z - limit_center.z).length() < limit_radius
+		if _was_inside and not inside:
+			_fizzle(pos)
+			return
+		_was_inside = _was_inside or inside
 	var below_ground := t > 0.1 and pos.y < Game.terrain.get_height(pos.x, pos.z)
 	if t >= 1.0 or below_ground or _hits_structure(pos):
 		_explode(pos)
@@ -90,6 +102,15 @@ func _hits_structure(pos: Vector3) -> bool:
 		if Vector2(base.x - pos.x, base.z - pos.z).length() < d.footprint * 0.85:
 			return true
 	return false
+
+
+## Out of the village's influence: it goes out in a puff of smoke.
+func _fizzle(pos: Vector3) -> void:
+	_trail.emitting = false
+	_trail.reparent(Game.effects, true)
+	get_tree().create_timer(1.0).timeout.connect(_trail.queue_free)
+	Game.effects.spawn_steam(pos, 1.5)
+	queue_free()
 
 
 func _explode(pos: Vector3) -> void:

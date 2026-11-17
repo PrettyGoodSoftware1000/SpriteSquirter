@@ -98,6 +98,15 @@ stage.
 - Ogres come from goblin war huts and giant bats from watchtowers; goblin build speed in the dev menu
 - The balrog: slimmer, horns rooted in the skull, an open jaw of teeth, smoke, sparks and burning footprints
 
+## Version 0.16: The village panel, animus and influence ✅
+- The village panel in the top left: resources with last-minute rates, workers beside them, a birth bar
+- Animus, from Shrines (the Singing rocks); the creature dies and is resurrected for 5 animus in a god ray
+- Wizardry tower (Moon tower) trains wizards; Town guard is the Tall house; Granary (Windmill) stores food
+- Storehouses hold 300 of each and house 25; villages start with 20 people
+- The village's influence: a wall of light; buildings anywhere inside, spells only inside
+- Spells taken in hand with their own pointers; square spell slots; chain lightning jumps twice as far along
+- Stat levels by points used; the tortoise tires as it walks; exploring is a long trip; training halved
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

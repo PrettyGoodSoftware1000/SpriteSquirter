@@ -35,10 +35,10 @@ squirrel_health = 600
 raven_health = 800
 creature_stomp_damage = 60      # in the middle of the stomp, half that at its edge
 creature_strike_damage = 70     # a blow with the fists at the other giant (your creature against the balrog, and back)
-creature_knockout_seconds = 45  # how long it stays down at no health
 creature_gather_amount = 25     # lumber, stone or food a full-grown creature brings in one trip
-creature_shrink_on_knockout = 0.25  # share of its size the creature loses when it is knocked out
-creature_getup_health = 0.25    # share of its health it has when it gets up again
+creature_shrink_on_knockout = 0.25  # share of its size the creature loses when it dies (it grows back)
+creature_getup_health = 1       # share of its health it has when it is brought back to life
+resurrect_animus = 5            # animus it costs to bring the creature back to life, at the Shrine
 creature_young_appetite = 0.5   # under half grown it eats this share of what it otherwise would
 
 # --- The raven ---------------------------------------------------------------
@@ -78,12 +78,16 @@ cost_storehouse_stone = 10
 cost_town_guard_lumber = 30
 cost_town_guard_stone = 40
 cost_town_guard_food = 20
+cost_wizardry_tower_lumber = 20
+cost_wizardry_tower_stone = 50
+cost_shrine_stone = 50
+cost_granary_lumber = 40
+cost_granary_stone = 20
 cost_blacksmith_lumber = 50
 cost_blacksmith_stone = 40
 cost_cottage_lumber = 15
 cost_cottage_stone = 5
 cost_cottage_food = 30
-cost_wizard_school_stone = 50
 cost_decoration_lumber = 30
 cost_decoration_stone = 30
 cost_necromancer_tower_lumber = 20
@@ -93,6 +97,15 @@ cost_bridge_lumber_per_metre = 1    # rope bridges between treehouses
 bridge_max_length = 35              # metres: about 20 villagers lying end to end
 home_housing = 6                    # villagers a Home has room for
 cottage_housing = 3
+storehouse_housing = 25             # the Storehouse is a block of homes too
+start_villagers = 20                # villagers a new village starts with (on a map with no village site there)
+
+# --- Storage ------------------------------------------------------------------
+# What the village can keep. Lumber, stone, food and bones over the limit
+# are lost. Magicko and animus are not stored, so they have no limit.
+storehouse_holds = 300              # of each, for every Storehouse
+granary_holds = 300                 # more food, for every Granary
+animus_per_shrine = 1               # animus each Shrine makes a minute
 
 # Building time. A building needs this many seconds of work for every unit
 # of resource it costs, shared between the villagers building it. A Home
@@ -102,9 +115,10 @@ builders_per_building = 5           # the most villagers that work on one buildi
 
 # --- Training -------------------------------------------------------------------
 # Seconds to train one recruit. Each training building trains one at a time.
-warrior_training_seconds = 30       # at a Town guard
-archer_training_seconds = 45        # at a Town guard, once bows are researched
-wizard_training_seconds = 90        # at a Wizard school
+# (The dev menu's training time slider multiplies all of them.)
+warrior_training_seconds = 15       # at a Town guard
+archer_training_seconds = 22.5      # at a Town guard, once bows are researched
+wizard_training_seconds = 45        # at a Wizardry tower
 
 # --- Gathering --------------------------------------------------------------------
 farmer_speed = 2                    # foraging, sowing and reaping go this many times faster
@@ -114,7 +128,7 @@ rock_crumble_seconds = 4            # how long a used-up boulder takes to crumbl
 # --- Bones, necromancers and skeletons ----------------------------------------
 bones_min = 2                       # bones the village gets when a villager, goblin or ogre dies...
 bones_max = 4                       # ...somewhere between these two
-necromancer_training_seconds = 150  # a wizard at a Necromancer tower
+necromancer_training_seconds = 75   # a wizard at a Necromancer tower
 necromancers_per_tower = 2
 raise_bones = 2                     # bones a necromancer spends to raise a skeleton
 skeleton_seconds = 180              # how long a skeleton lasts
@@ -134,7 +148,7 @@ goblin_watchtower_resources = 100
 
 # --- Chain lightning ----------------------------------------------------------
 lightning_damage = 40               # to each thing the bolt jumps through
-lightning_jumps = 6                 # how many things one bolt can hit
+lightning_jumps = 12                # how many things one bolt can hit
 lightning_jump_range = 9            # metres between one and the next
 lightning_wet_bonus = 2             # damage is multiplied by this for anything wet
 wet_seconds = 20                    # how long rain leaves villagers and goblins wet
@@ -190,7 +204,13 @@ fly_stamina_per_second = 5      # the raven lands when it runs out
 run_stamina_per_second = 5      # the squirrel drops back to a walk when it runs out
 squirrel_run_speed = 1.5        # running on all fours is this many times as fast as walking
 squirrel_run_distance = 20      # metres: it runs any journey longer than this (or up a steep slope, or out of a fight)
-level_drain_share = 0.75        # using up this share of a bar counts once towards its next level (2 times for the first level, then 3, 4, and 5 from then on)
+tortoise_walk_stamina = 1       # a second: the tortoise tires slowly as it walks, and walks at half speed with none left
+# Levels: stamina, magicko and health each level up with use. The first
+# level takes level_points of it used (stamina spent, magicko spent on
+# spells, health lost), the next twice that, then three times, and so on,
+# but never more than level_points_most for one level.
+level_points = 100
+level_points_most = 1000
 level_max_gain = 0.1            # a level makes the bar this much bigger...
 level_regen_gain = 0.2          # ...and this much quicker to refill
 
@@ -213,7 +233,11 @@ flee_chance_unharmed = 0.05
 flee_chance_slightly = 0.1      # slightly injured: under 95% health
 flee_chance_badly = 0.2         # badly injured: under 60% health
 flee_chance_near_death = 0.4    # near death: under 25% health
-explore_reach_most = 3          # at a keenness of 100 for exploring it wanders this many times as far
+# Exploring: now and then, left alone, the creature sets off on a long
+# trip, up to half the map away, and then comes back. Only that counts as
+# exploring (for Bless and Curse); short walks round where it was sent do not.
+explore_chance = 0.15           # the chance each time it looks for something to do, at a keenness of 0 (twice that at 100, never at -100)
+explore_least = 40              # metres: the shortest trip that counts as exploring
 
 # Spells
 spell_recent_seconds = 10       # a spell costs more for this long after it is cast...

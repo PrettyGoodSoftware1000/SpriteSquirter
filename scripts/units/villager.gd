@@ -121,7 +121,7 @@ var child := false
 var soldier := false
 ## The Town guard building this soldier belongs to.
 var guard: Node
-## Trained at the Singing rocks: robed, makes magicko and throws firebolts.
+## Trained at a Wizardry tower: robed, makes magicko and throws firebolts.
 var wizard := false
 ## Trained at a Town guard once bows are researched: shoots from a distance.
 var archer := false
@@ -1476,7 +1476,7 @@ func _start_delivery() -> void:
 		return
 	_delivering = true
 	_working = false
-	_drop_pos = Game.village.drop_point(global_position)
+	_drop_pos = Game.village.drop_point(global_position, carry_kind)
 	# The load goes home in a wheelbarrow if the village has a Blacksmith to
 	# make them, and on the worker's back if not.
 	if _load == null:
@@ -1562,7 +1562,7 @@ func _wear(look: Dictionary) -> void:
 	_apply_lod(_near)
 
 
-## Trained at the Singing rocks: a robe, a tall hat and a glowing staff.
+## Trained at a Wizardry tower: a robe, a tall hat and a glowing staff.
 func become_wizard(post: Vector3) -> void:
 	if wizard or soldier or goblin or state == State.DEAD:
 		return

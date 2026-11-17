@@ -372,6 +372,62 @@ func spawn_judgement(pos: Vector3, size: float, blessing: bool) -> void:
 	tw.tween_callback(light.queue_free)
 
 
+## The creature brought back to life: a shaft of warm light comes down
+## from the sky onto it, golden motes rise through it, and both fade.
+func spawn_god_ray(pos: Vector3, size: float) -> void:
+	var ray := Node3D.new()
+	add_child(ray)
+	ray.global_position = pos
+	var width := 5.0 + 6.0 * size
+	var tall := 90.0
+	# Three nested open cones, fading towards the top and the edge.
+	var mat := _glow_material(Color(1.0, 0.86, 0.5, 0.0))
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.no_depth_test = false
+	var mb := MeshBuilder.new()
+	for layer in 3:
+		var r := width * (0.55 + 0.3 * layer)
+		var alpha := 0.32 - 0.08 * layer
+		var sides := 28
+		for k in sides:
+			var a0 := TAU * k / sides
+			var a1 := TAU * (k + 1) / sides
+			var bottom0 := Vector3(cos(a0), 0.0, sin(a0)) * r
+			var bottom1 := Vector3(cos(a1), 0.0, sin(a1)) * r
+			var top0 := Vector3(cos(a0), 0.0, sin(a0)) * r * 1.6 + Vector3.UP * tall
+			var top1 := Vector3(cos(a1), 0.0, sin(a1)) * r * 1.6 + Vector3.UP * tall
+			var low := Color(1.0, 0.92, 0.65, alpha)
+			var high := Color(1.0, 0.92, 0.65, 0.0)
+			mb.verts.append_array(PackedVector3Array([bottom0, top0, bottom1, bottom1, top0, top1]))
+			mb.colors.append_array(PackedColorArray([low, high, low, low, high, high]))
+			for j in 6:
+				mb.normals.append(Vector3.UP)
+				mb.uvs.append(Vector2.ZERO)
+				mb.indices.append(mb.verts.size() - 6 + j)
+	var shaft := MeshInstance3D.new()
+	shaft.mesh = mb.commit()
+	shaft.material_override = mat
+	shaft.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ray.add_child(shaft)
+	mat.albedo_color = Color(1.0, 1.0, 1.0, 0.0)
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.88, 0.55)
+	light.light_energy = 0.0
+	light.omni_range = 22.0 + 10.0 * size
+	ray.add_child(light)
+	light.position = Vector3.UP * (3.0 + 4.0 * size)
+	# Motes of light drifting up the shaft.
+	spawn_judgement(pos + Vector3.UP * 2.0 * size, maxf(size, 0.6), true)
+	var tw := ray.create_tween()
+	tw.tween_property(mat, "albedo_color:a", 1.0, 0.8)
+	tw.parallel().tween_property(light, "light_energy", 7.0, 0.8)
+	tw.tween_interval(3.0)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 2.5)
+	tw.parallel().tween_property(light, "light_energy", 0.0, 2.5)
+	tw.tween_callback(ray.queue_free)
+
+
 ## A necromancer raising the dead: purple and green wisps wind up out of
 ## the ground under a sickly light.
 func spawn_raise(pos: Vector3) -> void:

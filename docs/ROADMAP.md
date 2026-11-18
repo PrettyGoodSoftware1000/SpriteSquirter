@@ -114,6 +114,11 @@ stage.
 - Gnomish Subcontractors: five little gnomes run in and help build
 - A ruler in the dev menu
 
+## Version 0.18: The owner's action table ✅
+- Actions.csv is the owner's sheet: sentences with their conditions in brackets, most specific first
+- [enemy name] and [a or an] are filled in; conditions are read by key words, numbers as written
+- Mischief: fireball at villagers, trees or your own buildings, spells cast at nothing, needless sacrifices, rare until blessed
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

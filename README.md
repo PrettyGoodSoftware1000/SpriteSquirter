@@ -258,20 +258,32 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **Waiting between judgements.** The same action can be blessed or
    condemned only once a minute; once its affinity is 30 or more (or -30 or
    less) the wait is 3 minutes, at 60 it is 6 minutes, and at 80 it is 12.
-   **The action table.** `Actions.csv`, next to `project.godot` (a
-   spreadsheet saved as CSV), lists the actions. Row 1 names each
-   category; under it, from row 2 down, are its actions, most general
-   first: under "Gathering wood" come `lumber` (the creature gathered some
-   wood), `lumber_highest` (it gathered wood when wood was the resource the
-   village had most of), `lumber_lowest` (when it had least), and others
-   for none, plenty, a battle, day and night. Stone, food, running from
-   battle (by how hurt it was), hiding in its shell (the same), rain (on a
-   fire or on the crops), each kind of attack, each spell and exploring
-   have their own columns. Bless and Condemn judge the first action down
-   the column of what the creature last did whose condition held then and
+   **The action table.** `Actions.csv`, next to `project.godot` (your
+   spreadsheet, saved as CSV), lists the creature's actions. Row 1 names
+   each category (gathering wood, stone and food, stomping, throwing,
+   eating, each spell, exploring, running from battle, hiding in its
+   shell). Under it are its actions, the most specific at the top and the
+   most general at the bottom. Each cell is the sentence the player sees,
+   with what had to be true in square brackets at the end, for example
+   `The creature gathered some wood. That was the lowest resource in
+   stock. [Gathered wood when it was the lowest stocked resource]`. A cell
+   with no brackets is the general action. In a sentence, `[enemy name]`
+   becomes the enemy (goblin, ogre, giant bat, balrog) and `[a or an]` the
+   right word before it. The game reads each bracket by its key words and
+   takes any numbers in it as written: highest, lowest, zero or at 0, over
+   250 in storage, battle, combat or invaded; full health, over 80%, 50%
+   to 80%, less than 50%, less than 25%; magicko under 25, magicko over
+   300, housing available, no housing; enemy, enemy building, villager,
+   tree, friendly building, fire, crops, wet, 5 or more, nothing or
+   nobody. A bracket it cannot read is reported in Godot's Output panel
+   and never applies. Bless and Condemn judge the first action down the
+   column of what the creature last did whose condition held then and
    that is not still waiting; if every one is waiting, they say how long.
-   The sentence for each action is in `Announcements.txt`
-   (`action_<id> = ...`).
+   **Mischief.** Some rows are things the creature should not do: fireball
+   at a villager, a tree or your own building, roots or lightning on your
+   people, a spell cast at nothing, a sacrifice when magicko is plentiful.
+   It does them now and then, rarely at first; bless one and it gets
+   likelier, condemn it and it all but stops.
    **How it chooses.** Every choice the creature makes is made at random,
    weighted by its affinities: the higher the affinity, the likelier, and a
    low one makes a thing unlikely but never impossible. What it does under
@@ -429,8 +441,9 @@ the game again. Each line reads `name = number`, with a note after `#`.
 `Announcements.txt`, next to `project.godot`, holds every line of text
 the game announces: the messages in the middle of the screen (the raid,
 the morning, the bat, research, the creature dying and coming back), what Bless
-and Condemn show at the top, the lines that float up from the creature,
-and the sentence for each action in `Actions.csv`. Each line reads `name = text`; rewrite the text after the `=`, save,
+and Condemn show at the top, and the lines that float up from the
+creature. (The sentence for each of the creature's actions is in
+`Actions.csv`.) Each line reads `name = text`; rewrite the text after the `=`, save,
 and start the game again. Words in `{braces}` are filled in by the game.
 
 ## What's in the world

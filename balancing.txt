@@ -249,6 +249,18 @@ flee_chance_near_death = 0.4    # near death: under 25% health
 # something it has learned to fetch (its affinity's weight: 1 at 0).
 wander_weight = 1
 explore_weight = 0.25
+
+# Spells the creature knows: each second it weighs holding off against
+# every place it could cast each one. A use the spell is meant for weighs
+# 1 (rain on enemies, to wet them for chain lightning, rain_enemies_weight);
+# mischief (fireball at a villager, a tree or your own building, roots or
+# lightning on your people, a spell cast at nothing, a needless sacrifice)
+# weighs mischief_weight. Each is then multiplied by its affinity's weight,
+# so blessing mischief makes more of it.
+spell_hold_weight = 1
+mischief_weight = 0.0005
+rain_enemies_weight = 0.3
+creature_blood_magicko = 25     # below this much village magicko a blood sacrifice is what the spell is for
 explore_least = 40              # metres: the shortest trip that counts as exploring
 
 # Spells

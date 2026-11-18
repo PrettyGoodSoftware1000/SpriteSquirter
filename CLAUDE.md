@@ -31,10 +31,15 @@
 
 ## Creature actions
 
-- `Actions.csv` is the owner's table of the creature's actions: row 1
-  names each category, the actions go below it, most general first. A
-  new action gets a cell there and a sentence in `Announcements.txt`
-  (`action_<id>`), never a string in the code.
+- `Actions.csv` is the owner's table of the creature's actions (they keep
+  it in a Google Sheet and export it as CSV). Row 1 names each category;
+  the actions go below it, most specific at the top, most general (no
+  brackets) at the bottom. Each cell is the sentence players see, with
+  its condition in square brackets at the end; `[enemy name]` and
+  `[a or an]` are placeholders. The owner writes the sentences and the
+  conditions. The game reads the conditions by key words
+  (`ActionTable._parse_condition()`); a new kind of condition needs code
+  there and in `CreatureMind.passes()`, never a sentence in the code.
 
 ## Branches
 

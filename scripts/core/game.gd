@@ -67,6 +67,7 @@ var _paths: PathGrid
 func _ready() -> void:
 	Balance.load_file()
 	Texts.load_file()
+	ActionTable.load_file()
 	Villager.apply_balance()
 	BuildingCatalog.apply_balance()
 	world_seed = randi()

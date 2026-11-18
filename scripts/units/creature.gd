@@ -402,7 +402,7 @@ func _hide() -> void:
 	_cancel_action()
 	_turning = false
 	running = false
-	mind.did("shell", [mind.health_word()], Texts.line("hid_in_shell", {"creature": species_name().to_lower(), "health": roundi(100.0 * health_share())}))
+	mind.did("shell", {"health": health_share(), "battle": true}, Texts.line("hid_in_shell", {"creature": species_name().to_lower(), "health": roundi(100.0 * health_share())}))
 
 
 ## True while it is too high for anything on the ground to reach.
@@ -450,7 +450,7 @@ func take_hit(amount: float, _from: Node3D) -> void:
 		if _spec.get("shell", false) and not hiding and Game.now >= _shell_think_at and Balance.num("shell_damage_share") < 1.0:
 			# Hurt in a fight: into the shell, if it is that way inclined.
 			_shell_think_at = Game.now + Balance.num("shell_think_seconds")
-			if mind.likely("shell", [mind.health_word()]):
+			if mind.likely("shell", {"health": health_share(), "battle": true}):
 				_hide()
 		return
 	hp = 0.0
@@ -1168,7 +1168,31 @@ func _on_stomp(pos: Vector3) -> void:
 	_action = Action.NONE
 	_action_cooldown = 1.4
 	if not hit.is_empty() and not hostile:
-		mind.did("stomp", [], Texts.line("stomped", {"them": _name_them(hit)}))
+		mind.did("stomp", {"enemy": enemy_name(hit), "battle": true}, Texts.line("stomped", {"them": _name_them(hit)}))
+
+
+## The name of the commonest kind of enemy in `list` (goblins, ogres,
+## giant bats, the balrog), as Actions.csv's [enemy name] is filled in.
+static func enemy_name(list: Array) -> String:
+	var counts := {}
+	for node: Variant in list:
+		if not is_instance_valid(node):
+			continue
+		var word := "goblin"
+		if node is Villager and (node as Villager).ogre:
+			word = "ogre"
+		elif node is GiantBat:
+			word = "giant bat"
+		elif node is Balrog:
+			word = "balrog"
+		counts[word] = counts.get(word, 0) + 1
+	var best := "goblin"
+	var most := 0
+	for word: String in counts:
+		if counts[word] > most:
+			most = counts[word]
+			best = word
+	return best
 
 
 ## "a goblin", "3 goblins and an ogre", ...
@@ -1243,7 +1267,7 @@ func _update_grab(delta: float) -> void:
 				g.eaten()
 			_released += 1
 		if t > 1.9 + 0.25 * _held.size():
-			mind.did("eat", [], Texts.line("ate", {"them": _name_them(_held)}))
+			mind.did("eat", {"enemy": enemy_name(_held), "battle": true}, Texts.line("ate", {"them": _name_them(_held)}))
 			_end_grab()
 			return
 	else:
@@ -1256,7 +1280,7 @@ func _update_grab(delta: float) -> void:
 				if is_instance_valid(g) and g.state == Villager.State.HELD:
 					g.toss((fwd * randf_range(15.0, 22.0) + Vector3.UP * randf_range(9.0, 13.0) + right * randf_range(-5.0, 5.0)) * lerpf(0.5, 1.0, size))
 			_released = _held.size()
-			mind.did("throw", [], Texts.line("threw", {"them": _name_them(_held)}))
+			mind.did("throw", {"enemy": enemy_name(_held), "battle": true}, Texts.line("threw", {"them": _name_them(_held)}))
 		if t > 2.5:
 			_end_grab()
 			return

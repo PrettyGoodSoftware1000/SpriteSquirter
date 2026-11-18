@@ -32,11 +32,8 @@ extends Node
 
 const SPELLS := ["fireball", "rain", "roots", "lightning", "blood"]
 const HARVESTS := ["lumber", "stone", "food"]
-## What it may cast, in the order it thinks of them: fighting first.
-## ("water" is the rain spell, cast on growing wheat.)
-const CASTS := ["fireball", "lightning", "roots", "rain", "blood", "water"]
-## More than this of a resource in store is plenty.
-const PLENTY := 200.0
+## The order it thinks of its spells in: fighting first.
+const CASTS := ["fireball", "lightning", "roots", "rain", "blood"]
 const SPELL_NAMES := {"fireball": "fireball", "rain": "rain", "roots": "roots", "lightning": "chain lightning", "blood": "blood sacrifice"}
 ## Bless and Condemn judge what the creature did in the last JUDGE_SECONDS.
 const JUDGE_SECONDS := 30.0
@@ -50,7 +47,8 @@ var behavior := {}
 ## What it last did (an action category: see ActionTable), the conditions
 ## that held, and when.
 var last_action := ""
-var last_flags: Array = []
+## What was true when it did it (see passes()).
+var last_facts := {}
 var last_action_time := -1000.0
 ## Where the player last left the creature. It never strays far from here.
 var home := Vector3.ZERO
@@ -69,11 +67,6 @@ var _away := false
 ## Every action the creature can be blessed or condemned for.
 static func all_actions() -> Array[String]:
 	return ActionTable.all()
-
-
-## The sentence for an action, as Bless and Condemn show it.
-static func describe(action: String) -> String:
-	return Texts.line("action_" + action)
 
 
 func _ready() -> void:
@@ -123,28 +116,28 @@ func _learn(id: String, points: float, saw: String, fill: Dictionary) -> void:
 
 # --- Behaviour ------------------------------------------------------------------
 
-## The creature's affinity for doing `category` under `flags` (the
-## conditions that hold: see ActionTable): the affinities of the category
-## and of each of those conditions in it, added up.
-func score(category: String, flags: Array = []) -> float:
+## The creature's affinity for doing `category` in the situation `facts`
+## (see passes()): the affinities of every action in its column whose
+## condition holds, added up.
+func score(category: String, facts: Dictionary = {}) -> float:
 	var total := 0.0
-	for action in applicable(category, flags):
+	for action in applicable(category, facts):
 		total += behavior.get(action, 0.0)
 	return total
 
 
-## How much the creature leans towards `category` under `flags`: 1 at an
-## affinity of 0, growing steeply with a higher one and shrinking towards
-## (but never reaching) nothing with a lower one. Choices between things
-## to do are made at random, in proportion to these.
-func weight(category: String, flags: Array = []) -> float:
-	return exp(clampf(score(category, flags), -300.0, 300.0) / maxf(Balance.num("affinity_spread"), 1.0))
+## How much the creature leans towards `category` in the situation `facts`:
+## 1 at an affinity of 0, growing steeply with a higher one and shrinking
+## towards (but never reaching) nothing with a lower one. Choices between
+## things to do are made at random, in proportion to these.
+func weight(category: String, facts: Dictionary = {}) -> float:
+	return exp(clampf(score(category, facts), -300.0, 300.0) / maxf(Balance.num("affinity_spread"), 1.0))
 
 
 ## Yes or no to doing `category` now, at random: an even chance at an
 ## affinity of 0, likelier the higher it is, never quite certain either way.
-func likely(category: String, flags: Array = []) -> bool:
-	var w := weight(category, flags)
+func likely(category: String, facts: Dictionary = {}) -> bool:
+	var w := weight(category, facts)
 	return randf() < w / (1.0 + w)
 
 
@@ -161,25 +154,83 @@ static func pick(options: Dictionary) -> Variant:
 	return options.keys().back() if not options.is_empty() else null
 
 
-## The actions in `category`'s column whose condition holds under `flags`.
-func applicable(category: String, flags: Array = []) -> Array[String]:
+## The ids of the actions in `category`'s column, top to bottom, whose
+## condition holds in `facts`.
+func applicable(category: String, facts: Dictionary = {}) -> Array[String]:
 	var out: Array[String] = []
-	for action in ActionTable.column(category):
-		var condition := ActionTable.condition(category, action)
-		if condition == "" or flags.has(condition):
-			out.append(action)
+	for action: Dictionary in ActionTable.column(category):
+		var ok := true
+		for test: Array in action.tests:
+			if not passes(test, facts):
+				ok = false
+				break
+		if ok:
+			out.append(action.id)
 	return out
 
 
-## Records what the creature just did (`category`, under the conditions in
-## `flags`) for Bless and Condemn to judge, and floats `text` up from its
+## Whether one of an action's tests (see ActionTable) holds in `facts`,
+## what was true when the creature did something:
+##   battle        a battle was on
+##   highest, lowest, stock   the resource fetched was the one the village
+##                 had most (least) of, and how much of it there was
+##   health        0..1 of its health
+##   magicko, housing_free    the village's magicko; room for another villager
+##   target, hit   what a spell was aimed at, and every kind of thing it
+##                 caught ("enemy", "villager", "tree", "enemy_building",
+##                 "our_building", "fire", "crops" or "nothing")
+##   wet, hits     an enemy it struck was wet; how many enemies it struck
+static func passes(test: Array, facts: Dictionary) -> bool:
+	var health: float = facts.get("health", 1.0)
+	match test[0]:
+		"never":
+			return false
+		"battle", "highest", "lowest", "wet", "housing_free":
+			return facts.get(test[0], false)
+		"housing_full":
+			return not facts.get("housing_free", true)
+		"stock_at_most":
+			return float(facts.get("stock", INF)) <= test[1]
+		"stock_above":
+			return float(facts.get("stock", -INF)) > test[1]
+		"health_at_least":
+			return health >= test[1]
+		"health_above":
+			return health > test[1]
+		"health_below":
+			return health < test[1]
+		"health_between":
+			return health >= test[1] and health <= test[2]
+		"magicko_below":
+			return float(facts.get("magicko", INF)) < test[1]
+		"magicko_above":
+			return float(facts.get("magicko", -INF)) > test[1]
+		"target":
+			return facts.get("target", "") == test[1] or (facts.get("hit", []) as Array).has(test[1])
+		"hits_at_least":
+			return int(facts.get("hits", 0)) >= test[1]
+	return false
+
+
+## Records what the creature just did (`category`, in the situation
+## `facts`) for Bless and Condemn to judge, and floats `text` up from its
 ## head.
-func did(category: String, flags: Array = [], text := "") -> void:
+func did(category: String, facts: Dictionary = {}, text := "") -> void:
 	last_action = category
-	last_flags = flags.duplicate()
+	last_facts = facts.duplicate()
 	last_action_time = Game.now
 	if text != "":
 		creature.say(text)
+
+
+## The sentence for an action from Actions.csv, as Bless and Condemn show
+## it, with the enemy's name from what the creature last did.
+func describe(action: String) -> String:
+	var found := ActionTable.find(action)
+	var sentence: String = found.get("sentence", "")
+	if sentence == "":
+		sentence = action
+	return ActionTable.fill(sentence, last_facts.get("enemy", "enemy"))
 
 
 ## How long after being blessed or condemned an action must wait before it
@@ -208,10 +259,19 @@ func cooling(action: String) -> float:
 func judge_target() -> String:
 	if last_action == "" or Game.now - last_action_time > JUDGE_SECONDS:
 		return ""
-	for action in applicable(last_action, last_flags):
+	for action in applicable(last_action, last_facts):
 		if cooling(action) <= 0.0:
 			return action
 	return ""
+
+
+## Seconds until the soonest of the actions that applied to what the
+## creature last did can be judged again.
+func soonest_judgement() -> float:
+	var soonest := INF
+	for action in applicable(last_action, last_facts):
+		soonest = minf(soonest, cooling(action))
+	return soonest
 
 
 ## True if Bless or Condemn would have something to judge.
@@ -229,10 +289,8 @@ func judge(sign_value: int) -> String:
 		return Texts.line("judge_nothing", {"creature": who, "seconds": int(JUDGE_SECONDS)})
 	var target := judge_target()
 	if target == "":
-		var soonest := INF
-		for action in applicable(last_action, last_flags):
-			soonest = minf(soonest, cooling(action))
-		return Texts.line("judge_cooling", {"creature": who, "action": describe(last_action), "seconds": ceili(soonest)})
+		var general: Array = ActionTable.column(last_action)
+		return Texts.line("judge_cooling", {"creature": who, "action": describe(general.back().id), "seconds": ceili(soonest_judgement())})
 	var points := Balance.num("bless_points") if sign_value > 0 else -Balance.num("condemn_points")
 	behavior[target] = clampf(behavior.get(target, 0.0) + points, -100.0, 100.0)
 	_judged_at[target] = Game.now
@@ -251,11 +309,11 @@ func player_moved(pos: Vector3) -> void:
 	_idle_timer = randf_range(8.0, 14.0)
 
 
-## The conditions that hold now for fetching `kind`: "highest" or "lowest"
-## (of lumber, stone and food in store), "none", "plenty", "battle", and
-## "day" or "night".
-func gather_flags(kind: String) -> Array[String]:
-	var flags: Array[String] = []
+## What is true now for fetching `kind` (see passes()): whether it is the
+## resource (of lumber, stone and food) the village has most or least of,
+## how much of it there is, and whether a battle is on.
+func gather_facts(kind: String) -> Dictionary:
+	var facts := {"battle": _battle_raging()}
 	var village := Game.village
 	if is_instance_valid(village):
 		var have := village.amount(kind)
@@ -263,20 +321,12 @@ func gather_flags(kind: String) -> Array[String]:
 		var least := true
 		for other: String in HARVESTS:
 			if other != kind:
-				most = most and have >= village.amount(other)
-				least = least and have <= village.amount(other)
-		if most:
-			flags.append("highest")
-		if least:
-			flags.append("lowest")
-		if have <= 0:
-			flags.append("none")
-		if have > PLENTY:
-			flags.append("plenty")
-	if _battle_raging():
-		flags.append("battle")
-	flags.append("night" if Game.day_cycle != null and is_instance_valid(Game.day_cycle) and Game.day_cycle.is_night() else "day")
-	return flags
+				most = most and have > village.amount(other)
+				least = least and have < village.amount(other)
+		facts["highest"] = most
+		facts["lowest"] = least
+		facts["stock"] = have
+	return facts
 
 
 ## True while the creature fights, goblins raid, or goblins prowl the village.
@@ -311,13 +361,13 @@ func health_word() -> String:
 func _consider_fleeing() -> bool:
 	if creature.is_fleeing() or not _enemy_close():
 		return false
-	var hurt := health_word()
-	var chance := Balance.num("flee_chance_" + hurt) * weight("flee", [hurt])
+	var facts := {"health": creature.health_share(), "battle": true}
+	var chance := Balance.num("flee_chance_" + health_word()) * weight("flee", facts)
 	if randf() >= chance or not creature.run_from_battle():
 		return false
 	_drop_task()
 	_away = true
-	did("flee", [hurt], Texts.line("fled"))
+	did("flee", facts, Texts.line("fled"))
 	return true
 
 
@@ -372,13 +422,13 @@ func _choose_idle() -> void:
 		_away = false
 		creature.auto_move(home)
 		return
-	var options := {"wander": Balance.num("wander_weight"), "explore": Balance.num("explore_weight") * weight("explore")}
-	var flags := {}
+	var options := {"wander": Balance.num("wander_weight"), "explore": Balance.num("explore_weight") * weight("explore", {"battle": _battle_raging()})}
+	var facts := {}
 	if creature.size >= 0.3:
 		for kind: String in HARVESTS:
 			if learned(kind) and _harvest_target(kind) != null:
-				flags[kind] = gather_flags(kind)
-				options[kind] = weight(kind, flags[kind])
+				facts[kind] = gather_facts(kind)
+				options[kind] = weight(kind, facts[kind])
 	var choice: String = pick(options)
 	match choice:
 		"wander":
@@ -387,7 +437,7 @@ func _choose_idle() -> void:
 			if not _explore():
 				_wander()
 		_:
-			_task = {"kind": choice, "flags": flags[choice], "node": _harvest_target(choice), "stage": "go"}
+			_task = {"kind": choice, "facts": facts[choice], "node": _harvest_target(choice), "stage": "go"}
 
 
 ## A short walk to somewhere near home. (This is not exploring.)
@@ -416,78 +466,159 @@ func _explore() -> bool:
 		if terrain.is_inside(p.x, p.z) and terrain.is_dry(p.x, p.z):
 			creature.auto_move(p)
 			_away = true
-			did("explore")
+			did("explore", {"battle": _battle_raging()})
 			return true
 	return false
 
 
 # --- Spells ---------------------------------------------------------------------
 
-## The conditions casting `id` comes under: rain is cast on a fire, or on
-## growing wheat ("water").
-func _cast_flags(id: String) -> Array:
-	match id:
-		"rain":
-			return ["fire"]
-		"water":
-			return ["crops"]
-	return []
-
-
+## Thinks about each spell it knows (and can pay for, and has rested from)
+## in turn: picks at random between holding off (Balance
+## "spell_hold_weight") and each place it could cast it, weighted by how
+## much it is for (useful places: 1; mischief, such as fireball at a
+## villager, "mischief_weight") times its affinity for doing that. Casts
+## the first one picked.
 func _try_spells() -> bool:
 	if not is_instance_valid(Game.village) or not Game.village.founded:
 		return false
 	if creature.flying or creature.running:
 		return false
-	for id: String in CASTS:
-		var spell := "rain" if id == "water" else id
-		if not learned(spell) or Game.now < _ready_at.get(id, 0.0) or creature.magicko < Balance.num("creature_cost_" + spell):
+	for spell: String in CASTS:
+		if not learned(spell) or Game.now < _ready_at.get(spell, 0.0) or creature.magicko < Balance.num("creature_cost_" + spell):
 			continue
-		if not likely(spell, _cast_flags(id)):
+		var options := {"hold": Balance.num("spell_hold_weight")}
+		var choices := _spell_options(spell)
+		for k in choices.size():
+			var choice: Dictionary = choices[k]
+			options[k] = float(choice.base) * weight(spell, choice.facts)
+		var picked: Variant = pick(options)
+		if typeof(picked) == TYPE_STRING:
 			continue
-		var target: Variant = _spell_target(id)
-		if target == null:
-			continue
-		_ready_at[id] = Game.now + Balance.num("cooldown_" + spell)
+		var chosen: Dictionary = choices[picked]
+		_ready_at[spell] = Game.now + Balance.num("cooldown_" + spell)
 		if creature.spend_magicko(Balance.num("creature_cost_" + spell)):
-			_cast(id, target)
+			_cast(spell, chosen.pos, chosen.facts)
 			return true
 	return false
 
 
-## Where to cast `id` right now, or null if there is no call for it.
-func _spell_target(id: String) -> Variant:
+## Where the creature could cast `spell` now, each {pos, facts, base}:
+## what it would be aimed at (see passes()) and how much it is for
+## (1 for a use the spell is meant for, Balance "mischief_weight" for
+## mischief).
+func _spell_options(spell: String) -> Array:
+	var out: Array = []
 	var village := Game.village
 	var tree := get_tree()
-	match id:
+	var battle := _battle_raging()
+	var mischief := Balance.num("mischief_weight")
+	var reach := 45.0
+	match spell:
 		"fireball":
 			# A knot of enemies, away from the village's buildings.
-			return _enemy_cluster(Fireball.BLAST_RADIUS * 0.7, 3, 10.0, 70.0, true)
-		"roots":
-			# A bigger crowd of raiders, with none of our own people among them.
-			return _enemy_cluster(RootPatch.RADIUS, 4, RootPatch.RADIUS + 4.0, 70.0, false)
+			var enemies: Variant = _enemy_cluster(Fireball.BLAST_RADIUS * 0.7, 3, 10.0, 70.0, true)
+			if enemies != null:
+				out.append({"pos": enemies, "base": 1.0, "facts": {"target": "enemy", "enemy": _enemy_name_near(enemies, 6.0), "battle": battle}})
+			var hut := _nearest_in(tree.get_nodes_in_group("goblin_buildings"), 70.0, 10.0)
+			if hut != null:
+				out.append({"pos": hut.global_position, "base": 1.0, "facts": {"target": "enemy_building", "battle": battle}})
+			var person := _nearest_in(village.people(), reach, 8.0)
+			if person != null:
+				out.append({"pos": person.global_position, "base": mischief, "facts": {"target": "villager", "battle": battle}})
+			var tree_node := _nearest_in(tree.get_nodes_in_group("trees"), reach, 8.0)
+			if tree_node != null:
+				out.append({"pos": tree_node.global_position, "base": mischief, "facts": {"target": "tree", "battle": battle}})
+			var ours := _nearest_in(tree.get_nodes_in_group("player_buildings"), reach, 10.0)
+			if ours != null:
+				out.append({"pos": ours.global_position, "base": mischief, "facts": {"target": "our_building", "battle": battle}})
 		"lightning":
 			# A crowd of enemies with none of our own people among them.
-			return _enemy_cluster(Balance.num("lightning_jump_range"), 3, Balance.num("lightning_jump_range") + 3.0, 70.0, false)
+			var crowd: Variant = _enemy_cluster(Balance.num("lightning_jump_range"), 3, Balance.num("lightning_jump_range") + 3.0, 70.0, false)
+			if crowd != null:
+				out.append({"pos": crowd, "base": 1.0, "facts": {"target": "enemy"}})
+			var person := _nearest_in(village.people(), reach, 6.0)
+			if person != null:
+				out.append({"pos": person.global_position, "base": mischief, "facts": {"target": "villager"}})
+			out.append({"pos": _empty_spot(), "base": mischief, "facts": {"target": "nothing"}})
+		"roots":
+			# A bigger crowd of raiders, with none of our own people among them.
+			var crowd: Variant = _enemy_cluster(RootPatch.RADIUS, 4, RootPatch.RADIUS + 4.0, 70.0, false)
+			if crowd != null:
+				out.append({"pos": crowd, "base": 1.0, "facts": {"target": "enemy", "enemy": _enemy_name_near(crowd, RootPatch.RADIUS)}})
+			var person := _nearest_in(village.people(), reach, 6.0)
+			if person != null:
+				out.append({"pos": person.global_position, "base": mischief, "facts": {"target": "villager"}})
+			out.append({"pos": _empty_spot(), "base": mischief, "facts": {"target": "nothing"}})
 		"rain":
+			var fire: Variant = null
 			for node in tree.get_nodes_in_group("player_buildings"):
 				if (node as Destructible).burning:
-					return (node as Node3D).global_position
-			for f in Game.fire._fires:
-				var p: Vector3 = f.pos
-				if p.distance_to(village.center) < 45.0:
-					return p
-		"water":
-			# Growing wheat that is not wet already.
+					fire = (node as Node3D).global_position
+					break
+			if fire == null:
+				for f in Game.fire._fires:
+					var p: Vector3 = f.pos
+					if p.distance_to(village.center) < 45.0:
+						fire = p
+						break
+			if fire != null:
+				out.append({"pos": fire, "base": 1.0, "facts": {"target": "fire", "battle": battle}})
 			for node in tree.get_nodes_in_group("fields"):
 				var field := node as CropField
 				if field.stage == CropField.Stage.GROWING and not field.is_wet() and not Game.fire.is_wet(field.global_position):
-					return field.global_position
+					out.append({"pos": field.global_position, "base": 1.0, "facts": {"target": "crops", "battle": battle}})
+					break
+			var raiders: Variant = _enemy_cluster(RainCloud.RADIUS * 0.6, 3, 8.0, 70.0, false)
+			if raiders != null:
+				out.append({"pos": raiders, "base": Balance.num("rain_enemies_weight"),
+					"facts": {"target": "enemy", "enemy": _enemy_name_near(raiders, RainCloud.RADIUS * 0.6), "battle": battle}})
+			out.append({"pos": _empty_spot(), "base": mischief, "facts": {"target": "nothing", "battle": battle}})
 		"blood":
-			# Only when magicko has run dry and there are people to spare.
-			if village.amount("magicko") < 10 and village.population() >= 12 and not village.blood_active():
-				return village.center
-	return null
+			# A sacrifice is meant for when magicko has run low and there are
+			# people to spare; at any other time it is mischief.
+			if village.population() >= 12 and not village.blood_active():
+				var low := village.amount("magicko") < Balance.num("creature_blood_magicko")
+				out.append({"pos": village.center, "base": 1.0 if low else mischief,
+					"facts": {"magicko": village.amount("magicko"), "housing_free": village.population() < village.housing(), "battle": battle}})
+	return out
+
+
+## The node of `nodes` nearest the creature, at least `least` and at most
+## `most` metres away (flat), or null.
+func _nearest_in(nodes: Array, most: float, least := 0.0) -> Node3D:
+	var best: Node3D = null
+	var best_d := most
+	for node: Variant in nodes:
+		var n := node as Node3D
+		if n == null or not is_instance_valid(n):
+			continue
+		var d := creature._flat(n.global_position, creature.global_position)
+		if d < best_d and d >= least:
+			best_d = d
+			best = n
+	return best
+
+
+## Somewhere on dry land 15 to 30 m from the creature, with nothing in
+## particular there.
+func _empty_spot() -> Vector3:
+	var terrain := Game.terrain
+	for attempt in 8:
+		var a := randf() * TAU
+		var p := creature.global_position + Vector3(cos(a), 0.0, sin(a)) * randf_range(15.0, 30.0)
+		if terrain.is_inside(p.x, p.z) and terrain.is_dry(p.x, p.z):
+			return Vector3(p.x, terrain.get_height(p.x, p.z), p.z)
+	return creature.global_position + Vector3(20.0, 0.0, 0.0)
+
+
+## The commonest kind of enemy within `radius` of `pos`: its name.
+func _enemy_name_near(pos: Vector3, radius: float) -> String:
+	var found: Array[Node3D] = []
+	for node in get_tree().get_nodes_in_group("goblins") + get_tree().get_nodes_in_group("bats") + get_tree().get_nodes_in_group("balrogs"):
+		if (node as Node3D).global_position.distance_to(pos) < radius:
+			found.append(node as Node3D)
+	return Creature.enemy_name(found)
 
 
 ## The middle of the best group of enemies within `radius` of each other.
@@ -526,36 +657,73 @@ func _enemy_cluster(radius: float, at_least: int, nearest: float, farthest: floa
 	return best
 
 
-func _cast(id: String, target: Vector3) -> void:
+## Casts `spell` at `target`. What it did is recorded with `facts`, and,
+## for spells that catch things where they land, with everything caught.
+func _cast(spell: String, target: Vector3, facts: Dictionary) -> void:
 	creature.watch(target)
-	match id:
+	var result := facts.duplicate()
+	match spell:
 		"fireball":
 			var fb := Fireball.new()
 			fb.friendly = Balance.num("creature_friendly_fire")
 			Game.world_root.add_child(fb)
 			fb.launch(creature.mouth_position(), target)
-			did(id, [], Texts.line("cast_fireball"))
+			did(spell, result, Texts.line("cast_fireball"))
 		"rain":
 			var cloud := RainCloud.new()
 			Game.world_root.add_child(cloud)
 			cloud.cast(target)
-			did("rain", ["fire"], Texts.line("cast_rain"))
-		"water":
-			var shower := RainCloud.new()
-			Game.world_root.add_child(shower)
-			shower.cast(target)
-			did("rain", ["crops"], Texts.line("cast_water"))
+			did(spell, result, Texts.line("cast_water" if facts.get("target", "") == "crops" else "cast_rain"))
 		"roots":
 			var patch := RootPatch.new()
 			Game.world_root.add_child(patch)
 			patch.cast(target)
-			did(id, [], Texts.line("cast_roots"))
+			result["hit"] = _caught_near(target, RootPatch.RADIUS)
+			did(spell, result, Texts.line("cast_roots"))
 		"lightning":
 			ChainLightning.cast(target, Balance.num("creature_friendly_fire"))
-			did(id, [], Texts.line("cast_lightning"))
+			var hit: Array[String] = []
+			var enemies: Array[Node3D] = []
+			var wet := false
+			for node in ChainLightning.last_struck:
+				if not is_instance_valid(node):
+					continue
+				var v := node as Villager
+				if v != null and v.owned:
+					if not hit.has("villager"):
+						hit.append("villager")
+					continue
+				enemies.append(node)
+				wet = wet or (v != null and v.is_wet())
+			if not enemies.is_empty():
+				hit.append("enemy")
+			result["hit"] = hit
+			result["target"] = "nothing" if hit.is_empty() else result.get("target", "enemy")
+			result["hits"] = enemies.size()
+			result["wet"] = wet
+			result["enemy"] = Creature.enemy_name(enemies)
+			did(spell, result, Texts.line("cast_lightning"))
 		"blood":
 			if Game.village.sacrifice_someone():
-				did(id, [], Texts.line("cast_blood"))
+				did(spell, result, Texts.line("cast_blood"))
+
+
+## The kinds of things within `radius` of `pos`: "villager", "enemy", or
+## "nothing" if neither.
+func _caught_near(pos: Vector3, radius: float) -> Array[String]:
+	var out: Array[String] = []
+	for v in Game.village.people():
+		if Vector2(v.global_position.x - pos.x, v.global_position.z - pos.z).length() < radius:
+			out.append("villager")
+			break
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Node3D
+		if Vector2(g.global_position.x - pos.x, g.global_position.z - pos.z).length() < radius:
+			out.append("enemy")
+			break
+	if out.is_empty():
+		out.append("nothing")
+	return out
 
 
 # --- Fetching -------------------------------------------------------------------
@@ -631,13 +799,14 @@ func _update_task() -> void:
 	creature.has_target = false
 	var amount: float = _task.amount
 	village.give(kind, amount)
-	var task_flags: Array = _task.get("flags", [])
+	# (What it is judged on is how things were when it set out.)
+	var task_facts: Dictionary = _task.get("facts", {})
 	creature.drop_load()
 	Game.effects.spawn_dust(drop, 2.0 * creature.size)
 	_task = {}
 	_away = true
 	_idle_timer = randf_range(3.0, 6.0)
-	did(kind, task_flags, Texts.line("brought_" + kind, {"amount": roundi(amount)}))
+	did(kind, task_facts, Texts.line("brought_" + kind, {"amount": roundi(amount)}))
 
 
 func _amount() -> float:

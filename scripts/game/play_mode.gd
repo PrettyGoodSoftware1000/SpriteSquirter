@@ -647,13 +647,11 @@ func _show_last_action(index: int, armed: bool) -> void:
 		text = Texts.line("judge_nothing", {"creature": creature.species_name().to_lower(), "seconds": int(CreatureMind.JUDGE_SECONDS)})
 	else:
 		var target := mind.judge_target()
-		var fill := {"action": CreatureMind.describe(target if target != "" else mind.last_action), "ago": int(ago), "key": index + 1,
+		var shown: String = target if target != "" else (ActionTable.column(mind.last_action).back() as Dictionary).id
+		var fill := {"action": mind.describe(shown), "ago": int(ago), "key": index + 1,
 			"spell": (spell.name as String).to_lower(), "creature": creature.species_name().to_lower()}
 		if target == "":
-			var soonest := INF
-			for action in mind.applicable(mind.last_action, mind.last_flags):
-				soonest = minf(soonest, mind.cooling(action))
-			fill["seconds"] = ceili(soonest)
+			fill["seconds"] = ceili(mind.soonest_judgement())
 		text = Texts.line("judge_cooling" if target == "" else ("judge_prompt" if armed else "judge_hover"), fill)
 	hud.set_prompt(text)
 	_prompt_timer = 0.0

@@ -9,6 +9,9 @@ extends Node3D
 
 const FADE := 0.45
 
+## Everything the last bolt struck, in order.
+static var last_struck: Array[Node3D] = []
+
 var _material := StandardMaterial3D.new()
 
 
@@ -25,6 +28,7 @@ static func cast(pos: Vector3, friendly := 1.0) -> int:
 	var points := PackedVector3Array([ground + Vector3(randf_range(-4.0, 4.0), 34.0, randf_range(-4.0, 4.0))])
 	var from := ground
 	var hits := 0
+	last_struck.clear()
 	for jump in roundi(Balance.num("lightning_jumps")):
 		var best: Node3D = null
 		var best_d := reach
@@ -36,6 +40,7 @@ static func cast(pos: Vector3, friendly := 1.0) -> int:
 		if best == null:
 			break
 		left.erase(best)
+		last_struck.append(best)
 		hits += 1
 		from = best.global_position
 		var harm := Balance.num("lightning_damage")

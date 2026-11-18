@@ -413,10 +413,11 @@ func _run() -> void:
 	Balance.values["shell_damage_share"] = Balance.DEFAULTS["shell_damage_share"]
 	beast.hp = beast.max_hp
 	beast.mind.behavior["shell"] = 100.0
-	beast.mind.behavior["shell_unharmed"] = 100.0
+	beast.mind.behavior["shell_health_full"] = 100.0
 	beast._shell_think_at = 0.0
 	beast.take_hit(10.0, null)
-	_check(beast.hiding and beast.mind.last_action == "shell" and beast.mind.last_flags == ["unharmed"], "the tortoise hides in its shell when it is hit (and that can be blessed or condemned)")
+	_check(beast.hiding and beast.mind.last_action == "shell" and beast.mind.judge_target() == "shell_health_full",
+		"the tortoise hides in its shell when it is hit, judged by how hurt it was (%s)" % beast.mind.judge_target())
 	beast.mind.behavior["shell"] = 0.0
 	var before_blow := beast.hp
 	beast.take_hit(100.0, null)
@@ -788,47 +789,70 @@ func _run() -> void:
 	# With an action cooling down, the next one down its column whose
 	# condition held is judged instead.
 	mind._judged_at.clear()
-	mind.did("lumber", ["lowest", "day"])
-	_check(mind.judge_target() == "lumber", "first the action itself is judged")
+	var short := {"lowest": true, "stock": 0, "battle": true}
+	mind.did("lumber", short)
+	_check(mind.judge_target() == "lumber_none", "the most specific action whose condition held is judged first (%s)" % mind.judge_target())
 	mind.judge(1)
-	_check(mind.judge_target() == "lumber_lowest", "then, while it cools, the next one down whose condition held (%s)" % mind.judge_target())
+	_check(mind.judge_target() == "lumber_lowest", "then, while it waits, the next one down whose condition held (%s)" % mind.judge_target())
 	mind.judge(1)
-	_check(mind.judge_target() == "lumber_day" and is_equal_approx(mind.behavior.lumber_lowest, 10.0), "and the next after that, skipping the ones that did not hold")
-	_check(mind.score("lumber", ["lowest", "day"]) > mind.score("lumber", ["highest"]) and mind.weight("lumber", ["lowest", "day"]) > mind.weight("lumber", []),
+	_check(mind.judge_target() == "lumber_battle" and is_equal_approx(mind.behavior.lumber_lowest, 10.0), "skipping the ones that did not hold (%s)" % mind.judge_target())
+	mind.judge(1)
+	_check(mind.judge_target() == "lumber", "and the general one comes last")
+	_check(mind.describe("lumber_none") == "When we were totally out of wood, the creature gathered some.", "the sentence comes from Actions.csv, without the brackets")
+	mind.did("throw", {"enemy": "ogre"})
+	_check(mind.describe("throw") == "The creature threw an ogre.", "[a or an] [enemy name] is filled in (%s)" % mind.describe("throw"))
+	_check(ActionTable.unknown.is_empty(), "every condition in Actions.csv is understood (%s)" % ", ".join(ActionTable.unknown))
+	_check(mind.score("lumber", short) > mind.score("lumber", {"highest": true, "stock": 100}) and mind.weight("lumber", short) > mind.weight("lumber", {}),
 		"what it is blessed for makes it likelier to do it")
+	_check(mind.applicable("flee", {"health": 0.2}) == ["flee_health_under_25", "flee_health_under_50", "flee"]
+		and mind.applicable("flee", {"health": 1.0}) == ["flee_health_full", "flee_health_over_80", "flee"], "health conditions read their numbers from the brackets")
 	var picks := {"a": 0, "b": 0}
 	for k in 400:
 		picks[CreatureMind.pick({"a": exp(1.0), "b": 1.0})] += 1
 	_check(picks.a > picks.b and picks.b > 0, "choices are made at random, weighted by affinity (%d to %d)" % [picks.a, picks.b])
-	for key: String in ["lumber", "lumber_lowest"]:
+	for key: String in ["lumber", "lumber_lowest", "lumber_none", "lumber_battle"]:
 		mind.behavior[key] = 0.0
 	mind._judged_at.clear()
-	_check(mind.behavior.has("food_none") and mind.behavior.has("food_plenty") and mind.behavior.has("lumber_battle") and mind.behavior.has("flee_near_death"),
+	_check(mind.behavior.has("food_none") and mind.behavior.has("food_plenty") and mind.behavior.has("lumber_battle") and mind.behavior.has("flee_health_under_25"),
 		"fetching and running away depend on what was going on")
 	# Rain when the village burns.
 	game.fire.start_fire(village.center + Vector3(5, 0, -5))
-	var rain_at: Variant = mind._spell_target("rain")
+	var rain_at: Variant = null
+	for option: Dictionary in mind._spell_options("rain"):
+		if option.facts.get("target", "") == "fire":
+			rain_at = option.pos
 	_check(rain_at != null, "the creature sees a fire to rain on")
 	if rain_at != null:
-		mind._cast("rain", rain_at)
-		_check(mind.last_action == "rain", "the creature casts rain")
+		mind._cast("rain", rain_at, {"target": "fire"})
+		_check(mind.last_action == "rain" and mind.judge_target() == "rain_fire", "the creature casts rain on it")
 	# Rain on growing wheat is its own thing to do, and spells cost it magicko.
 	var crop := get_tree().get_nodes_in_group("fields")[0] as CropField
 	crop.stage = CropField.Stage.GROWING
 	crop.progress = 0.0
 	crop._wet = 0.0
 	game.fire._wet.clear()
-	_check(mind._spell_target("water") != null, "the creature sees growing wheat to rain on")
+	var crop_seen := false
+	for option: Dictionary in mind._spell_options("rain"):
+		crop_seen = crop_seen or option.facts.get("target", "") == "crops"
+	_check(crop_seen, "the creature sees growing wheat to rain on")
+	Balance.values["spell_hold_weight"] = 0.0
 	mind.behavior["rain_fire"] = -100.0
 	mind.behavior["rain_crops"] = 100.0
 	mind._ready_at.clear()
 	beast.magicko = 0.0
 	_check(not mind._try_spells(), "the creature cannot cast without magicko")
 	beast.magicko = beast.max_magicko
-	_check(mind._try_spells() and mind.last_action == "rain" and mind.last_flags == ["crops"] and is_equal_approx(beast.magicko, beast.max_magicko - Balance.num("creature_cost_rain")),
+	_check(mind._try_spells() and mind.last_action == "rain" and mind.last_facts.get("target", "") == "crops" and is_equal_approx(beast.magicko, beast.max_magicko - Balance.num("creature_cost_rain")),
 		"it casts rain on the crops, and that costs it magicko (%d left)" % roundi(beast.magicko))
 	mind.behavior["rain_fire"] = Balance.num("affinity_start")
 	mind.behavior["rain_crops"] = Balance.num("affinity_start")
+	Balance.values["spell_hold_weight"] = Balance.DEFAULTS["spell_hold_weight"]
+	# Mischief: a fireball at a villager is possible, but rare until blessed.
+	var fire_options := {}
+	for option: Dictionary in mind._spell_options("fireball"):
+		fire_options[option.facts.target] = option.base
+	_check(fire_options.has("villager") and fire_options.villager < 0.01 and fire_options.has("our_building"),
+		"fireball at a villager or one of our buildings is a rare choice (%s)" % str(fire_options))
 	# Using a stat levels it up: 100 used for the first level, 200 more for the next.
 	var start_level: int = beast.levels.magicko
 	beast.used.magicko = 0.0

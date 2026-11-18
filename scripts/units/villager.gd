@@ -77,7 +77,9 @@ const RAISE_SECONDS := 2.0
 const CORPSE_SECONDS := 40.0
 
 ## The detailed meshes switch on within Game.settings.villager_detail
-## metres of the camera, and off again this much farther away.
+## metres of the camera, and off again this much farther away. At
+## ALWAYS_DETAILED or more, they are used however far away.
+const ALWAYS_DETAILED := 300.0
 const LOD_MARGIN := 8.0
 ## Where the knee and the elbow are, below the hip and the shoulder.
 const KNEE_Y := -0.36
@@ -310,6 +312,9 @@ func _build_body() -> void:
 		else:
 			_hold("rusty_sword", 0, Vector3(0.0, -0.55, 0.0))
 	scale = Vector3.ONE * _adult_scale * (CHILD_SCALE if child else 1.0)
+	# In full detail from the start when villagers are always drawn so.
+	if Game.settings.villager_detail >= ALWAYS_DETAILED:
+		_apply_lod(true)
 
 
 func _add_mesh(mesh: Mesh, pos: Vector3, parent: Node3D = null) -> MeshInstance3D:
@@ -1291,6 +1296,8 @@ func _process(delta: float) -> void:
 		if cam:
 			var d := cam.global_position.distance_to(global_position)
 			var detail: float = Game.settings.villager_detail
+			if detail >= ALWAYS_DETAILED:
+				detail = INF
 			if _near != (d < detail + (LOD_MARGIN if _near else 0.0)):
 				_apply_lod(not _near)
 	match state:

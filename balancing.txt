@@ -107,6 +107,21 @@ storehouse_holds = 300              # of each, for every Storehouse
 granary_holds = 300                 # more food, for every Granary
 animus_per_shrine = 1               # animus each Shrine makes a minute
 
+# --- Spells researched at the Shrine ----------------------------------------
+# Click a Shrine (the Singing rocks) to research spells, one at a time.
+# Fireball, Bless and Condemn need no research. Each costs animus, paid
+# when it starts, and takes this many seconds while a Shrine stands.
+spell_research_rain_animus = 2
+spell_research_rain_seconds = 60
+spell_research_roots_animus = 3
+spell_research_roots_seconds = 90
+spell_research_lightning_animus = 5
+spell_research_lightning_seconds = 120
+spell_research_blood_animus = 3
+spell_research_blood_seconds = 90
+spell_research_gnomes_animus = 4
+spell_research_gnomes_seconds = 120
+
 # Building time. A building needs this many seconds of work for every unit
 # of resource it costs, shared between the villagers building it. A Home
 # (55 resources) is 275 seconds of work: under a minute for 5 villagers.

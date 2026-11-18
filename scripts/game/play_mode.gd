@@ -152,6 +152,10 @@ func _ready() -> void:
 	hud.build_menu_requested.connect(_toggle_build_menu)
 	hud.research_menu_requested.connect(_toggle_research_menu)
 	hud.research_selected.connect(_on_research_selected)
+	hud.spell_research_selected.connect(_on_spell_research_selected)
+	hud.spells_requested.connect(func() -> void: village.learn_all_spells())
+	village.spell_researched.connect(func(id: String) -> void:
+		_announce(Texts.line("spell_researched", {"spell": SpellBook.find(id).name})))
 	village.research_done.connect(func(id: String) -> void:
 		_announce(Texts.line("research_done", {"research": (Research.find(id).name as String).to_lower()})))
 	hud.regenerate_requested.connect(_regenerate)
@@ -166,7 +170,7 @@ func _ready() -> void:
 		village.set_wanted(role, village.wanted[role] + change))
 	hud.resources_requested.connect(func() -> void:
 		for res in PlayerVillage.RESOURCES:
-			village.give(res, 100.0))
+			village.give(res, 100.0, false))
 	day_cycle.phase_changed.connect(func(mood: int) -> void:
 		Game.mood_index = mood
 		hud.set_mood(mood))
@@ -260,9 +264,10 @@ func _on_key(key: InputEventKey) -> void:
 	if code == KEY_ESCAPE:
 		# Esc backs out of a menu or a tool first; with nothing to back
 		# out of, it pauses the game.
-		if hud.is_build_menu_open() or hud.is_research_menu_open():
+		if hud.is_build_menu_open() or hud.is_research_menu_open() or hud.is_spell_research_open():
 			hud.show_build_menu(false)
 			hud.show_research_menu(false)
+			hud.show_spell_research(false)
 		elif _armed >= 0:
 			_disarm()
 			_set_mode(mode)
@@ -409,7 +414,7 @@ func _set_mode(m: Mode) -> void:
 
 func _place_hint() -> String:
 	return "Click to place the %s outline.  R / Shift+R rotate,  T another look,  Shift+click keeps placing,  right-click or Esc to cancel." \
-		% BuildingCatalog.find(_place_kind).name
+		% BuildingCatalog.title(_place_kind)
 
 
 func _on_sculpt_selected(index: int) -> void:
@@ -432,6 +437,7 @@ func _toggle_build_menu() -> void:
 		return
 	var open := not hud.is_build_menu_open()
 	hud.show_research_menu(false)
+	hud.show_spell_research(false)
 	hud.show_build_menu(open)
 	if open:
 		hud.update_build_menu(village)
@@ -442,6 +448,7 @@ func _toggle_research_menu() -> void:
 		return
 	var open := not hud.is_research_menu_open()
 	hud.show_build_menu(false)
+	hud.show_spell_research(false)
 	hud.show_research_menu(open)
 	if open:
 		hud.update_research(village)
@@ -457,6 +464,35 @@ func _on_research_selected(id: String) -> void:
 	hud.update_research(village)
 
 
+## Opens the Shrine's menu, where spells are researched (clicking a Shrine:
+## the Singing rocks).
+func open_spell_research(shrine: Destructible) -> void:
+	hud.show_build_menu(false)
+	hud.show_research_menu(false)
+	hud.show_spell_research(true, BuildingCatalog.find(shrine.get_meta("kind", "")).get("gameplay", "Shrine"))
+	hud.update_spell_research(village)
+
+
+func _on_spell_research_selected(id: String) -> void:
+	var problem := village.start_spell_research(id)
+	if problem != "":
+		hud.set_hint(problem)
+	else:
+		hud.set_hint("Researching %s: %s minutes." % [SpellBook.find(id).name, Hud._number(SpellBook.research_seconds(id) / 60.0)])
+	hud.update_spell_research(village)
+
+
+## The Shrine under the mouse, or null.
+func _shrine_at_mouse() -> Destructible:
+	if _cursor_hit == null:
+		return null
+	var p: Vector3 = _cursor_hit
+	for b in village.shrines():
+		if Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < b.footprint * 1.2 + 1.0:
+			return b
+	return null
+
+
 func _on_left_click() -> void:
 	if _choosing:
 		if _hover:
@@ -470,7 +506,11 @@ func _on_left_click() -> void:
 		return
 	match mode:
 		Mode.COMMAND:
-			_command_move(_cursor_hit)
+			var shrine := _shrine_at_mouse()
+			if shrine != null:
+				open_spell_research(shrine)
+			else:
+				_command_move(_cursor_hit)
 		Mode.RULER:
 			_ruler_click(_cursor_hit)
 		Mode.SCULPT:
@@ -578,11 +618,14 @@ func _spell_key(index: int) -> void:
 		hud.set_hint("")
 		_set_mode(mode)
 		return
+	var spell: Dictionary = SpellBook.SPELLS[index]
+	if not village.knows_spell(spell.id):
+		hud.set_hint("%s must be researched first: click a Shrine to research spells." % spell.name)
+		return
 	if mode != Mode.COMMAND:
 		_set_mode(Mode.COMMAND)
 	_armed = index
 	hud.set_spell(index)
-	var spell: Dictionary = SpellBook.SPELLS[index]
 	Input.set_custom_mouse_cursor(SpellCursors.image(spell.id), Input.CURSOR_ARROW, SpellCursors.hotspot())
 	if _is_judgement(index):
 		_show_last_action(index, true)
@@ -1206,16 +1249,20 @@ func _update_ui() -> void:
 	hud.set_resources(village, day_cycle.clock_text() if not _choosing else "")
 	var costs: Array[int] = []
 	var extras: Array[float] = []
+	var known: Array[bool] = []
 	for k in SpellBook.SPELLS.size():
 		costs.append(spell_cost(k))
 		extras.append(recent_extra(k))
-	hud.update_spells(village.amount("magicko"), costs, extras, not _choosing)
+		known.append(village.knows_spell(SpellBook.SPELLS[k].id))
+	hud.update_spells(village.amount("magicko"), costs, extras, not _choosing, known)
 	hud.update_creature(creature)
 	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():
 		hud.update_build_menu(village)
 	if hud.is_research_menu_open():
 		hud.update_research(village)
+	if hud.is_spell_research_open():
+		hud.update_spell_research(village)
 	if mode == Mode.FIELD and _field_dragging:
 		var cost: int = CropField.cost_for(_field_size).lumber
 		hud.set_hint("Field %d x %d m: %d lumber.  %s" % [roundi(_field_size.x), roundi(_field_size.y), cost,

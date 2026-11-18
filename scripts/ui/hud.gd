@@ -31,6 +31,10 @@ signal jobs_changed(role: String, change: int)
 signal quota_changed(kind: String, change: int)
 signal research_menu_requested
 signal research_selected(id: String)
+## A spell picked in the Shrine's research menu.
+signal spell_research_selected(id: String)
+## The dev menu's "Learn all spells".
+signal spells_requested
 signal resurrect_requested
 
 const SCULPT_NAMES := ["Raise", "Lower", "Flatten", "Smooth"]
@@ -88,10 +92,16 @@ var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_costs: Array[Label] = []
 var _spell_sparkles: Array[SpellSparkles] = []
+## The "Research" tag over a spell that has not been researched yet.
+var _spell_locks: Array[Label] = []
+var _spell_research_panel: PanelContainer
+var _spell_research_title: Label
+var _spell_research_rows := {}
 ## The creature's bars: stat -> [bar, label]
 var _creature_bars := {}
 var _build_panel: PanelContainer
 var _build_buttons := {}
+var _build_previews: Array[BuildingPreview] = []
 var _prompt_panel: PanelContainer
 var _prompt: Label
 var _sculpt_buttons: Array[Button] = []
@@ -118,6 +128,7 @@ func _ready() -> void:
 	_build_spell_bar(root)
 	_build_build_menu(root)
 	_build_research_menu(root)
+	_build_spell_research_menu(root)
 	_build_prompt(root)
 	_build_dev_menu(root)
 
@@ -304,8 +315,8 @@ func _build_spell_bar(root: Control) -> void:
 	var research := _button("Research (U)")
 	research.pressed.connect(func() -> void: research_menu_requested.emit())
 	menus.add_child(research)
-	# Each spell is a square (for its icon one day; for now the first letter
-	# of its name), with its key in the corner and its cost underneath.
+	# Each spell is a square with its sign (the one the mouse pointer turns
+	# into when it is in hand), its key in the corner and its cost underneath.
 	for k in SpellBook.SPELLS.size():
 		var spell: Dictionary = SpellBook.SPELLS[k]
 		var slot := VBoxContainer.new()
@@ -316,11 +327,25 @@ func _build_spell_bar(root: Control) -> void:
 		b.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE)
 		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		b.tooltip_text = "%s (key %d): %s" % [spell.name, k + 1, spell.hint]
-		var letter := _text((spell.name as String).left(1), 40)
-		letter.set_anchors_preset(Control.PRESET_FULL_RECT)
-		letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(letter)
+		var icon := TextureRect.new()
+		icon.texture = spell_icon(spell.id)
+		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+		icon.offset_left = 8
+		icon.offset_top = 8
+		icon.offset_right = -8
+		icon.offset_bottom = -8
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(icon)
+		var lock := _text("Research", 13)
+		lock.set_anchors_preset(Control.PRESET_FULL_RECT)
+		lock.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lock.add_theme_color_override("font_outline_color", Color.BLACK)
+		lock.add_theme_constant_override("outline_size", 4)
+		lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lock.visible = false
+		b.add_child(lock)
 		var key := _text(str(k + 1), 13)
 		key.position = Vector2(6, 2)
 		key.modulate = Color(1, 1, 1, 0.7)
@@ -342,6 +367,7 @@ func _build_spell_bar(root: Control) -> void:
 		_spell_buttons.append(b)
 		_spell_costs.append(cost_label)
 		_spell_sparkles.append(sparkles)
+		_spell_locks.append(lock)
 	# The creature's health, stamina and magicko, to the right of the spells.
 	var stats := VBoxContainer.new()
 	stats.add_theme_constant_override("separation", 3)
@@ -414,18 +440,32 @@ func _build_build_menu(root: Control) -> void:
 	for k in BuildingCatalog.BUILDINGS.size():
 		var info: Dictionary = BuildingCatalog.BUILDINGS[k]
 		var b := _button("")
-		b.custom_minimum_size = Vector2(250, 84)
-		var title: String = "%d  %s" % [k + 1, info.name] if k < 9 else (info.name as String)
+		b.custom_minimum_size = Vector2(330, 100)
+		var title: String = "%d  %s" % [k + 1, info.title] if k < 9 else (info.title as String)
 		var lines: Array[Control] = [_text(title, 16), _text(info.desc, 13)]
 		if not (info.cost as Dictionary).is_empty():
 			lines.append(ResourceIcon.cost_row(info.cost, 14))
-		b.add_child(_stacked(lines))
+		var row := HBoxContainer.new()
+		row.set_anchors_preset(Control.PRESET_FULL_RECT)
+		row.offset_left = 4
+		row.offset_right = -4
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(row)
+		# A picture of the model (the field and the bridge have none).
+		if info.role != "field" and info.role != "bridge":
+			var picture := BuildingPreview.make(info.kind, Vector2i(120, 92))
+			picture.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			row.add_child(picture)
+			_build_previews.append(picture)
+		var text := _stacked(lines)
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(text)
 		var kind: String = info.kind
 		b.pressed.connect(func() -> void: build_selected.emit(kind))
 		grid.add_child(b)
 		_build_buttons[kind] = b
 	var note := Label.new()
-	note.text = "Up to 5 villagers build each building: your Builders first, then unassigned Workers. The more a building costs, the longer it takes.\nWith no Storehouse, villagers carry what they gather to the middle of the village. What each building is for can be changed in Names.txt."
+	note.text = "Up to 5 villagers build each building: your Builders first, then unassigned Workers. The more a building costs, the longer it takes.\nWith no Storehouse, villagers carry what they gather to the middle of the village. What each building is for, and what it is called, can be changed in Names.txt."
 	note.add_theme_font_size_override("font_size", 13)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
@@ -508,6 +548,95 @@ func update_research(village: PlayerVillage) -> void:
 		b.modulate = Color.WHITE if done or running or village.can_afford(item.cost) else Color(1.0, 0.6, 0.6, 0.8)
 
 
+## The Shrine's menu (the Singing rocks; opened by clicking one): one
+## button for each spell to research, with what it costs, how long it
+## takes and how far along it is.
+func _build_spell_research_menu(root: Control) -> void:
+	_spell_research_panel = PanelContainer.new()
+	_spell_research_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_spell_research_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_spell_research_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_spell_research_panel.visible = false
+	root.add_child(_spell_research_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	_spell_research_panel.add_child(box)
+	_spell_research_title = _heading("")
+	box.add_child(_spell_research_title)
+	for spell in SpellBook.SPELLS:
+		if not SpellBook.needs_research(spell.id):
+			continue
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		box.add_child(row)
+		var icon := TextureRect.new()
+		icon.texture = spell_icon(spell.id)
+		icon.custom_minimum_size = Vector2(56, 56)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(icon)
+		var b := _button("")
+		b.custom_minimum_size = Vector2(430, 70)
+		var cost := SpellBook.research_cost(spell.id)
+		var lines: Array[Control] = [_text(spell.name, 16), _text("Takes %s min" % _number(SpellBook.research_seconds(spell.id) / 60.0), 13)]
+		if not cost.is_empty():
+			lines.append(ResourceIcon.cost_row(cost, 14))
+		b.add_child(_stacked(lines))
+		b.tooltip_text = spell.hint
+		var id: String = spell.id
+		b.pressed.connect(func() -> void: spell_research_selected.emit(id))
+		row.add_child(b)
+		var state := VBoxContainer.new()
+		state.alignment = BoxContainer.ALIGNMENT_CENTER
+		state.custom_minimum_size.x = 130
+		row.add_child(state)
+		var status := _text("", 15)
+		state.add_child(status)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.max_value = 1.0
+		bar.custom_minimum_size = Vector2(130, 8)
+		state.add_child(bar)
+		_spell_research_rows[id] = {"button": b, "status": status, "bar": bar}
+	var note := Label.new()
+	note.text = "Spells are researched here, one at a time. Fireball, Bless and Condemn need no research."
+	note.add_theme_font_size_override("font_size", 13)
+	note.modulate = Color(1, 1, 1, 0.75)
+	box.add_child(note)
+
+
+## Opens (or closes) the Shrine's menu; `title` is what the building is called.
+func show_spell_research(shown: bool, title := "") -> void:
+	_spell_research_panel.visible = shown
+	if title != "":
+		_spell_research_title.text = "%s: research spells  (Esc to close)" % title
+
+
+func is_spell_research_open() -> bool:
+	return _spell_research_panel.visible
+
+
+func update_spell_research(village: PlayerVillage) -> void:
+	for id: String in _spell_research_rows:
+		var row: Dictionary = _spell_research_rows[id]
+		var b := row.button as Button
+		var done := village.knows_spell(id)
+		var running: bool = village.spell_research.get("id", "") == id
+		var progress := village.spell_research_progress(id)
+		(row.bar as ProgressBar).value = progress
+		(row.bar as ProgressBar).visible = running
+		var status := row.status as Label
+		status.text = "Known" if done else ("%d%%" % floori(progress * 100.0) if running else "")
+		b.disabled = done or running
+		b.modulate = Color.WHITE if done or running or village.can_afford(SpellBook.research_cost(id)) else Color(1.0, 0.6, 0.6, 0.8)
+
+
+## The sign of spell `id`, as a texture (the mouse pointer's, see SpellCursors).
+static func spell_icon(id: String) -> Texture2D:
+	return ImageTexture.create_from_image(SpellCursors.image(id))
+
+
 func _build_prompt(root: Control) -> void:
 	_prompt_panel = PanelContainer.new()
 	_prompt_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -531,7 +660,13 @@ func _build_dev_menu(root: Control) -> void:
 	var dev := VBoxContainer.new()
 	dev.add_theme_constant_override("separation", 4)
 	_dev_panel.add_child(dev)
-	dev.add_child(_heading("Dev menu  (~ to hide)"))
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 16)
+	dev.add_child(top)
+	top.add_child(_heading("Dev menu  (~ to hide)"))
+	var version := _heading("Version %s" % ProjectSettings.get_setting("application/config/version", "?"))
+	version.modulate = Color(1, 1, 1, 0.85)
+	top.add_child(version)
 
 	dev.add_child(_heading("Gameplay"))
 	for s in SETTING_SLIDERS:
@@ -546,9 +681,15 @@ func _build_dev_menu(root: Control) -> void:
 	load.tooltip_text = "Reads a sliders .txt file and sets the sliders from it."
 	load.pressed.connect(func() -> void: sliders_load_requested.emit())
 	files.add_child(load)
+	var cheats := HBoxContainer.new()
+	dev.add_child(cheats)
 	var cheat := _button("Give 100 of everything")
 	cheat.pressed.connect(func() -> void: resources_requested.emit())
-	dev.add_child(cheat)
+	cheats.add_child(cheat)
+	var spells := _button("Learn all spells")
+	spells.tooltip_text = "Researches every spell at once, without a Shrine."
+	spells.pressed.connect(func() -> void: spells_requested.emit())
+	cheats.add_child(spells)
 
 	dev.add_child(_heading("Terrain tools"))
 	var sculpt := HBoxContainer.new()
@@ -624,7 +765,10 @@ func _setting_row(s: Array) -> Control:
 	slider.focus_mode = Control.FOCUS_NONE
 	row.add_child(slider)
 	var update := func(value: float) -> void:
-		label.text = "%s: %s %s" % [s[1], _number(value), s[5]]
+		if key == "villager_detail" and value >= Villager.ALWAYS_DETAILED:
+			label.text = "Villager detail: always"
+		else:
+			label.text = "%s: %s %s" % [s[1], _number(value), s[5]]
 	slider.value_changed.connect(func(value: float) -> void:
 		update.call(value)
 		setting_changed.emit(key, value))
@@ -719,8 +863,12 @@ func _update_jobs(village: PlayerVillage) -> void:
 		var w: Dictionary = _jobs[role]
 		var top := village.max_count(role)
 		var want: int = village.wanted[role]
-		(w.count as Label).text = "%d/%d" % [village.count(role), want]
-		(w.count as Label).tooltip_text = "Trained / wanted. Up to %d with your %s buildings, and only while %s free to train." % [top, ROLES[role][1],
+		# Trained or training (counted the moment one is asked for) / the
+		# most the buildings allow (0 without one).
+		var asked := maxi(want, village.count(role) + village.training_progress(role).size())
+		(w.count as Label).text = "%d/%d" % [asked, top]
+		(w.count as Label).tooltip_text = "%d trained, %d in training, of the %d your %s buildings allow. + trains one more, while %s free to train." % [
+			village.count(role), maxi(0, asked - village.count(role)), top, ROLES[role][1],
 			"a wizard is" if role == "necromancer" else "an unassigned worker is"]
 		# Archers appear once bows have been researched, and necromancers
 		# once there is a tower for them.
@@ -786,10 +934,13 @@ func set_spell(index: int) -> void:
 		_spell_buttons[k].set_pressed_no_signal(k == index)
 
 
-func update_spells(magicko: int, costs: Array[int], extras: Array[float], enabled: bool) -> void:
+## `known`: whether each spell has been researched (or needs no research).
+func update_spells(magicko: int, costs: Array[int], extras: Array[float], enabled: bool, known: Array[bool] = []) -> void:
 	for k in _spell_buttons.size():
+		var locked := k < known.size() and not known[k]
+		_spell_locks[k].visible = locked
 		var ready_now: bool = enabled and magicko >= costs[k]
-		_spell_buttons[k].modulate = Color.WHITE if ready_now else Color(1.0, 0.6, 0.6, 0.75)
+		_spell_buttons[k].modulate = Color(0.55, 0.55, 0.6, 0.8) if locked else (Color.WHITE if ready_now else Color(1.0, 0.6, 0.6, 0.75))
 		if _spell_costs[k] != null:
 			_spell_costs[k].text = str(costs[k])
 		_spell_sparkles[k].set_extra(extras[k])
@@ -797,6 +948,17 @@ func update_spells(magicko: int, costs: Array[int], extras: Array[float], enable
 
 func show_build_menu(shown: bool) -> void:
 	_build_panel.visible = shown
+	if shown:
+		for picture in _build_previews:
+			picture.draw_once()
+		_update_build_tooltips()
+
+
+## The asset names (the models') show only while the dev menu is open.
+func _update_build_tooltips() -> void:
+	for info in BuildingCatalog.BUILDINGS:
+		var b: Button = _build_buttons[info.kind]
+		b.tooltip_text = "Model: %s" % info.asset if Game.dev_menu and info.role != "field" and info.role != "bridge" else ""
 
 
 func is_build_menu_open() -> bool:
@@ -818,6 +980,7 @@ func set_settings(values: Dictionary) -> void:
 
 func set_dev_visible(shown: bool) -> void:
 	_dev_panel.visible = shown
+	_update_build_tooltips()
 
 
 func set_sculpt(index: int) -> void:

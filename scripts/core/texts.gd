@@ -24,6 +24,7 @@ const DEFAULTS := {
 	"balrog_grown": "The balrog is full grown. It will march with the next raid.",
 	"balrog_died": "The balrog is dead!",
 	"research_done": "The Blacksmith has finished: {research}.",
+	"spell_researched": "The Shrine has taught you a new spell: {spell}.",
 	"creature_died": "The {creature} has died! Bring it back to life at a Shrine for {animus} animus.",
 	"creature_resurrected": "The {creature} lives again!",
 	"resurrect_no_shrine": "The {creature} can only be brought back to life at a Shrine. Build one first.",

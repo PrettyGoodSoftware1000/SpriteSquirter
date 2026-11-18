@@ -84,12 +84,17 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    tower** turns wizards into necromancers, and a **Blacksmith** makes
    wheelbarrows and does research. The dev menu's construction rate makes
    all your building go faster or slower.
-   **Asset names and gameplay names.** Every building has an asset name
-   (its model: Stacked houses, Moon tower, Skull tower, Treehouse...) and
-   a gameplay name (what it does: Storehouse, Town guard, Necromancer
-   tower, Home...). `Names.txt`, next to `project.godot`, pairs them up,
-   one `Asset name = Gameplay name` per line; change the name after the =
-   and that model takes on that job. The asset names never change.
+   **Asset names, gameplay names and in-game names.** Every building has
+   an asset name (its model: Stacked houses, Moon tower, Skull tower,
+   Treehouse...), a gameplay name (what it does: Storehouse, Town guard,
+   Necromancer tower, Home...) and an in-game name (what players see it
+   called, such as Wizardry tower). `Names.txt`, next to `project.godot`,
+   pairs them up, one `Asset name = Gameplay name = In-game name` per
+   line; change the gameplay name and that model takes on that job. A
+   building with no in-game name is shown as "Name missing". The asset
+   names never change, and players never see them: the build menu shows
+   one, as a tooltip, only while the dev menu is open. The build menu
+   shows a picture of each building.
    **Treehouses and rope bridges.** There are four treehouses (Treehouse,
    Lookout treehouse, Twin treehouse, Great treehouse): houses on a deck
    up a bright-leaved tree, with a ladder. Pick **Rope bridge** in the
@@ -119,8 +124,10 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    you have for them (a bar fills behind the count towards the next
    birth) and the time of day. **Workers** is the number of villagers you
    have not set to anything: they gather whatever is most needed by
-   themselves. Below it, **Builders**, then each resource with what came
-   in (or went out) over the last minute. Beside lumber, stone and food,
+   themselves. Below it, **Builders**, then each resource with its income
+   over the last minute: only what came in. Paying for a building (taken
+   from the stores the moment it is placed), research or a spell does not
+   change it. Food's can go below zero, since everyone eats all the time. Beside lumber, stone and food,
    **+** takes one Worker and makes it a Lumberjack, Miner or Farmer at
    once (Builders the same way; never a warrior, archer or wizard), and
    **-** sends one back to the Workers. Hold the mouse over a + or - to see
@@ -133,6 +140,10 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    asked for); a necromancer needs a free wizard.
 4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
    at the bottom of the village panel (the - and + buttons).
+   The count beside each, such as **Warriors 1/4**, is how many are
+   trained or training (it goes up the moment you press +) of the most
+   your buildings allow: 0/0 with no Town guard, 0/4 as soon as one
+   stands.
    Each Town guard allows 4 warriors and trains one at a time, taking
    15 seconds each; each Wizardry tower allows 2 wizards and trains one
    at a time, taking 45 seconds each (the dev menu's training time slider
@@ -314,7 +325,12 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    judged). Only a long trip away from where you sent it counts as
    exploring: the higher its affinity for that, the more often it goes.
 9. **Cast spells** with keys 1 to 8 or the squares on the spell bar (each
-   shows the first letter of its spell for now). The spell goes into your
+   shows its spell's sign, the one the pointer turns into). Fireball,
+   Bless and Condemn are ready from the start; the others must first be
+   **researched at a Shrine** (the Singing rocks): click the Shrine to
+   open its menu. Each costs animus and takes a minute or two
+   (`spell_research_...` in `balancing.txt`), one at a time; until then
+   its square is greyed out and says "Research". The spell goes into your
    hand and the pointer changes: a flame for Fireball, sparks for Chain
    Lightning, a cloud dripping water for Rain, roots for Roots, a skull
    dripping blood for Blood Sacrifice. Click to cast it (Shift+click casts
@@ -373,6 +389,8 @@ In the game, press **Esc** and **Show controls** for this list.
 
 ### Dev menu (~)
 
+The version number is shown at the top of the dev menu.
+
 | Control | Action |
 |---|---|
 | Day length | Minutes for a whole day and night |
@@ -387,8 +405,9 @@ In the game, press **Esc** and **Show controls** for this list.
 | Construction rate | How many times as fast your buildings go up |
 | Training time | Multiplies every training time |
 | Starting influence / Influence per person | How far the village's influence reaches at first, and how much further for every villager |
-| Villager detail within | Villagers nearer the camera than this are drawn in full detail (default 60 m; lower it on a slow machine) |
+| Villager detail within | Villagers nearer the camera than this are drawn in full detail. At the top of the slider (the default) they always are; lower it on a slow machine |
 | Give 100 of everything | For testing |
+| Learn all spells | Researches every spell at once, for testing |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; Ctrl + mouse wheel (or `[` and `]`) changes the brush size |
 | New random world (N) | Generate a brand-new island of the same size |
 | Weather (L) | Meadow day, golden hour, dawn, night (until the next part of the day) |

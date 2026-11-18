@@ -4,10 +4,13 @@ extends RefCounted
 ## their names, what they cost and what they are for.
 ##
 ## Every building has an asset name (the model, built by BuildingFactory
-## from its `kind`) and a gameplay name (what it does). Names.txt in the
-## project folder pairs them up, one "Asset name = Gameplay name" per
-## line, so the owner can change what any model is used for. The asset
-## names never change. Costs are read from balancing.txt and go with the
+## from its `kind`), a gameplay name (what it does) and an in-game name
+## (what players see it called). Names.txt in the project folder pairs
+## them up, one "Asset name = Gameplay name = In-game name" per line, so
+## the owner can change what any model is used for and what it is called.
+## The asset names never change, and players only see them in the build
+## menu's tooltips while the dev menu is open. A building with no in-game
+## name is shown as MISSING_NAME. Costs are read from balancing.txt and go with the
 ## gameplay name (cost_<gameplay name>_<resource>).
 ##
 ## Roles (what the code asks about):
@@ -24,6 +27,8 @@ extends RefCounted
 ##   bridge a rope bridge, hung between two treehouses instead of placed (RopeBridge)
 
 const NAMES_PATH := "res://Names.txt"
+## What a building with no in-game name is called.
+const MISSING_NAME := "Name missing"
 ## Housing every village has before it builds anything.
 const BASE_HOUSING := 0
 
@@ -65,9 +70,9 @@ const GAMEPLAY := {
 }
 ## Menu entries that are not placed like buildings.
 const SPECIAL := [
-	{"kind": "field", "name": "Wheat field", "asset": "Wheat field", "gameplay": "", "role": "field", "cost": {},
+	{"kind": "field", "name": "Wheat field", "asset": "Wheat field", "title": "Wheat field", "gameplay": "", "role": "field", "cost": {},
 		"desc": "Drag a square. 1 lumber per 10 m2"},
-	{"kind": "bridge", "name": "Rope bridge", "asset": "Rope bridge", "gameplay": "", "role": "bridge", "cost": {},
+	{"kind": "bridge", "name": "Rope bridge", "asset": "Rope bridge", "title": "Rope bridge", "gameplay": "", "role": "bridge", "cost": {},
 		"desc": "Joins 2 treehouses. 1 lumber a metre"},
 ]
 ## What the goblins put up (see GoblinRaids).
@@ -79,7 +84,7 @@ const COST_RESOURCES := ["lumber", "stone", "food", "bones"]
 
 ## The build menu, in order: the special entries, then every asset that has
 ## a gameplay name. Each is a Dictionary with kind, name (the asset name),
-## asset, gameplay, role, housing, desc and cost.
+## asset, title (the in-game name), gameplay, role, housing, desc and cost.
 static var BUILDINGS: Array = []
 ## Every asset, in the menu or not: kind -> its entry.
 static var _all := {}
@@ -92,8 +97,10 @@ static func apply_balance() -> void:
 	_all = {}
 	for pair: Array in ASSETS:
 		var kind: String = pair[0]
-		var gameplay: String = wanted.get((pair[1] as String).to_lower(), DEFAULT_GAMEPLAY[kind])
-		var entry := {"kind": kind, "name": pair[1], "asset": pair[1], "gameplay": "", "role": "", "housing": 0, "desc": "", "cost": {}}
+		var names: Array = wanted.get((pair[1] as String).to_lower(), [DEFAULT_GAMEPLAY[kind], ""])
+		var gameplay: String = names[0]
+		var title: String = names[1] if names[1] != "" else MISSING_NAME
+		var entry := {"kind": kind, "name": pair[1], "asset": pair[1], "title": title, "gameplay": "", "role": "", "housing": 0, "desc": "", "cost": {}}
 		var key := gameplay.strip_edges().to_lower()
 		if key != "" and not GAMEPLAY.has(key):
 			push_warning("Names.txt: there is no gameplay name '%s' (for %s), so it is a Decoration" % [gameplay, pair[1]])
@@ -113,10 +120,12 @@ static func apply_balance() -> void:
 	for entry: Dictionary in SPECIAL:
 		_all[entry.kind] = entry
 	for kind: String in GOBLIN_NAMES:
-		_all[kind] = {"kind": kind, "name": GOBLIN_NAMES[kind], "asset": GOBLIN_NAMES[kind], "gameplay": "", "role": "", "housing": 0, "desc": "", "cost": {}}
+		_all[kind] = {"kind": kind, "name": GOBLIN_NAMES[kind], "asset": GOBLIN_NAMES[kind], "title": GOBLIN_NAMES[kind],
+			"gameplay": "", "role": "", "housing": 0, "desc": "", "cost": {}}
 
 
-## Asset name (lower case) -> the gameplay name written beside it in Names.txt.
+## Asset name (lower case) -> [gameplay name, in-game name] as written
+## beside it in Names.txt (either can be empty).
 static func _read_names() -> Dictionary:
 	var out := {}
 	var file := FileAccess.open(NAMES_PATH, FileAccess.READ)
@@ -134,7 +143,7 @@ static func _read_names() -> Dictionary:
 		if not known.has(asset):
 			push_warning("Names.txt: there is no asset called '%s'" % line.get_slice("=", 0).strip_edges())
 			continue
-		out[asset] = line.get_slice("=", 1).strip_edges()
+		out[asset] = [line.get_slice("=", 1).strip_edges(), line.get_slice("=", 2).strip_edges() if line.count("=") >= 2 else ""]
 	return out
 
 
@@ -142,6 +151,11 @@ static func find(kind: String) -> Dictionary:
 	if _all.is_empty():
 		apply_balance()
 	return _all.get(kind, {})
+
+
+## What players see building `kind` called (its in-game name).
+static func title(kind: String) -> String:
+	return find(kind).get("title", MISSING_NAME)
 
 
 static func housing(kind: String) -> int:

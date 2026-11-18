@@ -1,10 +1,14 @@
 # SpriteSquirter building names
 #
-# Each line is:   Asset name = Gameplay name
+# Each line is:   Asset name = Gameplay name = In-game name
 #
-# The asset name is the model. It never changes.
+# The asset name is the model. It never changes, and players never see it
+# (it shows in the build menu, when you point at a building, only while
+# the dev menu is open).
+# The in-game name is what players see the building called. A building
+# with no in-game name is shown as "Name missing".
 # The gameplay name decides what the building does. Write one of these
-# after the = sign, save the file, and start the game again:
+# after the first = sign, save the file, and start the game again:
 #
 #   Home               room for more villagers (home_housing in balancing.txt)
 #   Cottage            a smaller home (cottage_housing)
@@ -19,16 +23,17 @@
 # What a building costs goes with its gameplay name (see balancing.txt).
 # Treehouses can be joined by rope bridges whatever their gameplay name.
 
-Treehouse = Home
-Lookout treehouse = Home
-Twin treehouse = Home
-Great treehouse = Home
-Stacked houses = Storehouse
-Moon tower = Wizardry tower
-Blacksmith = Blacksmith
-Mushroom cottage = Cottage
-Singing rocks = Shrine
-Skull tower = Necromancer tower
-Windmill = Granary
-Crystal tower = Decoration
-Tall house = Town guard
+# Asset name        = Gameplay name     = In-game name
+Treehouse           = Home              =
+Lookout treehouse   = Home              =
+Twin treehouse      = Home              =
+Great treehouse     = Home              =
+Stacked houses      = Storehouse        =
+Moon tower          = Wizardry tower    = Wizardry tower
+Blacksmith          = Blacksmith        =
+Mushroom cottage    = Cottage           =
+Singing rocks       = Shrine            =
+Skull tower         = Necromancer tower =
+Windmill            = Granary           =
+Crystal tower       = Decoration        =
+Tall house          = Town guard        =

@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS := {
 	"creature_food": 20.0, # food a full-grown creature eats per minute
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size
 	"goblin_build_speed": 1.0, # how many times as fast the goblins start and finish buildings
-	"villager_detail": 60.0, # metres from the camera within which villagers are drawn in full detail
+	"villager_detail": 300.0, # metres from the camera within which villagers are drawn in full detail (300: always)
 	"construction_rate": 1.0, # how many times as fast the village's buildings go up
 	"training_time": 1.0, # training times are multiplied by this
 	"influence_start": 45.0, # radius in metres of a new village's influence

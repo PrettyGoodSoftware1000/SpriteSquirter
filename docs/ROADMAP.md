@@ -129,6 +129,14 @@ stage.
 - Weights in balancing.txt written as percentages
 - Dev menu: save the sliders to a readable .txt file, and load them back
 
+## Version 0.21: Spells researched at the Shrine ✅
+- Spells other than Fireball, Bless and Condemn are researched at the Shrine (Singing rocks): click it
+- Spell bar shows each spell's sign; the build menu shows a picture of each building
+- In-game building names in Names.txt ("Name missing" without one); model names only in the dev menu
+- Version number in the dev menu; villagers always drawn in full detail
+- Warriors / wizards counts: trained or training out of what the buildings allow (0/0, then 0/4)
+- Resource rates show income only; building costs are taken when placed
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

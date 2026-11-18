@@ -90,6 +90,8 @@ const BLOOD_BOOST := 2.0
 const BLOOD_REACH := 9.0
 
 signal research_done(id: String)
+## A spell has been researched at the Shrine (see SpellBook).
+signal spell_researched(id: String)
 ## Another Balance "stored_per_lesson" of `kind` has been carried in: the
 ## creature learns a little about harvesting it.
 signal lesson(kind: String)
@@ -106,6 +108,10 @@ var wanted := {"warrior": 0, "archer": 0, "wizard": 0, "necromancer": 0}
 var researched := {}
 ## The research under way: {"id": ..., "t": seconds done}, or empty.
 var research := {}
+## Spells researched at the Shrine: id -> true.
+var spells_known := {}
+## The spell being researched at the Shrine: {"id": ..., "t": seconds done}, or empty.
+var spell_research := {}
 ## True while the village has a Blacksmith: loads go home in wheelbarrows.
 var barrows := false
 ## How many villagers the player has set to each job (Villager.pin): the
@@ -117,8 +123,12 @@ var quota := {"lumber": 0, "stone": 0, "food": 0, "build": 0}
 var gatherers := {"lumber": 0, "stone": 0, "food": 0}
 
 var _stored := {}
-## Each resource's amount, once a second for the last minute.
+## Each resource's income so far (what came in, less what is eaten as it
+## goes: see _flow_add), sampled once a second for the last minute.
 var _history := {}
+## Each resource's income so far. Paying for buildings, research and spells
+## does not count: only what comes in, and food eaten all the time.
+var _flow := {}
 var _history_timer := 0.0
 ## Seconds with no food, and towards the next death from hunger.
 var hungry_for := 0.0
@@ -429,6 +439,61 @@ func _update_research(delta: float) -> void:
 	research_done.emit(id)
 
 
+# --- Spells researched at the Shrine (the Singing rocks) ------------------------
+
+## True if spell `id` can be cast: it needs no research, or has had it.
+func knows_spell(id: String) -> bool:
+	return not SpellBook.needs_research(id) or spells_known.has(id)
+
+
+## Starts researching spell `id` at the Shrine. Returns why it can't, or
+## "" if it began. One spell at a time, paid for up front.
+func start_spell_research(id: String) -> String:
+	if knows_spell(id):
+		return "You know that spell already."
+	if shrines().is_empty():
+		return "Spells are researched at a Shrine: build one first."
+	if not spell_research.is_empty():
+		return "The Shrine is busy with %s." % SpellBook.find(spell_research.id).name
+	var cost := SpellBook.research_cost(id)
+	var short := shortfall(cost)
+	if short != "":
+		return "Need %s more." % short
+	spend(cost)
+	spell_research = {"id": id, "t": 0.0}
+	return ""
+
+
+## 0..1 for the spell being researched, 1 for one known, else 0.
+func spell_research_progress(id: String) -> float:
+	if knows_spell(id):
+		return 1.0
+	if spell_research.get("id", "") == id:
+		return clampf(spell_research.t / maxf(0.01, SpellBook.research_seconds(id)), 0.0, 1.0)
+	return 0.0
+
+
+## Research goes on while a Shrine stands.
+func _update_spell_research(delta: float) -> void:
+	if spell_research.is_empty() or shrines().is_empty():
+		return
+	spell_research.t += delta
+	var id: String = spell_research.id
+	if spell_research.t < SpellBook.research_seconds(id):
+		return
+	spell_research = {}
+	spells_known[id] = true
+	spell_researched.emit(id)
+
+
+## Every spell, researched at once (the dev menu).
+func learn_all_spells() -> void:
+	for spell in SpellBook.SPELLS:
+		if SpellBook.needs_research(spell.id):
+			spells_known[spell.id] = true
+	spell_research = {}
+
+
 ## Food the creature eats per minute: its full appetite once grown, in
 ## proportion to its size before that, and less again while it is young.
 func creature_upkeep() -> float:
@@ -530,12 +595,22 @@ func spend(cost: Dictionary) -> bool:
 	return true
 
 
-func give(res: String, value: float) -> void:
-	var now: float = resources.get(res, 0.0) + value
+## Adds (or, with a negative `value`, takes away) some of `res`. What
+## comes in counts towards the rate shown beside it unless `income` is
+## false (the dev menu's gift).
+func give(res: String, value: float, income := true) -> void:
+	var before: float = resources.get(res, 0.0)
+	var now: float = before + value
 	if value > 0.0 and STORED.has(res):
 		# Whatever does not fit is lost (but nothing already stored is).
-		now = minf(now, maxf(capacity(res), resources.get(res, 0.0)))
+		now = minf(now, maxf(capacity(res), before))
 	resources[res] = now
+	if value > 0.0 and income:
+		_flow_add(res, now - before)
+
+
+func _flow_add(res: String, value: float) -> void:
+	_flow[res] = _flow.get(res, 0.0) + value
 
 
 ## How much of `res` the village can keep: Balance "storehouse_holds" for
@@ -559,13 +634,14 @@ func capacity(res: String) -> float:
 	return most
 
 
-## How much of `res` came in (or, if negative, went out) over the last
-## minute, from samples taken once a second.
+## How much of `res` came in over the last minute (for food, less what was
+## eaten, so it can be negative), from samples taken once a second. What is
+## paid for buildings, research and spells does not count.
 func last_minute(res: String) -> int:
 	var samples: Array = _history.get(res, [])
 	if samples.is_empty():
 		return 0
-	return floori(resources.get(res, 0.0)) - floori(samples[0])
+	return roundi(_flow.get(res, 0.0) - float(samples[0]))
 
 
 ## Keeps a minute of samples of every resource.
@@ -576,7 +652,7 @@ func _sample(delta: float) -> void:
 	_history_timer = 1.0
 	for res in RESOURCES:
 		var samples: Array = _history.get(res, [])
-		samples.append(resources.get(res, 0.0))
+		samples.append(_flow.get(res, 0.0))
 		while samples.size() > 61:
 			samples.pop_front()
 		_history[res] = samples
@@ -642,10 +718,14 @@ func _process(delta: float) -> void:
 		barrows = has_blacksmith()
 		_manage_army()
 	_update_research(delta)
+	_update_spell_research(delta)
 
 
 func _eat(delta: float) -> void:
-	give("food", -food_upkeep() / 60.0 * delta)
+	var eaten := food_upkeep() / 60.0 * delta
+	give("food", -eaten)
+	# (Eating goes on all the time, so it counts against the food rate.)
+	_flow_add("food", -eaten)
 	if resources.food > 0.0:
 		hungry_for = 0.0
 		_starve_timer = 0.0

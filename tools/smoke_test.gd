@@ -149,6 +149,32 @@ func _run() -> void:
 		var gnomes := SpellBook.index_of("gnomes")
 		village.give("magicko", 100.0)
 		var magicko_before := village.amount("magicko")
+		# Spells are researched at the Shrine first.
+		play._spell_key(gnomes)
+		_check(play._armed < 0 and not village.knows_spell("gnomes") and village.knows_spell("fireball") and village.knows_spell("bless"),
+			"a spell must be researched before it is cast (Fireball, Bless and Condemn need none)")
+		_check(village.shrines().is_empty() and village.start_spell_research("gnomes") != "", "spells are researched at a Shrine")
+		var shrine := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
+		game.world_root.add_child(shrine)
+		shrine.global_position = village.center + Vector3(14, 0, 10)
+		shrine.add_to_group("player_buildings")
+		play._cursor_hit = shrine.global_position
+		play._on_left_click()
+		_check(play.hud.is_spell_research_open(), "clicking a Shrine opens its spell research")
+		play.hud.show_spell_research(false)
+		village.give("animus", 10.0)
+		var animus_before := village.amount("animus")
+		_check(village.start_spell_research("gnomes") == "" and village.amount("animus") == animus_before - roundi(Balance.num("spell_research_gnomes_animus")),
+			"researching a spell costs animus")
+		_check(village.start_spell_research("rain") != "", "one spell at a time")
+		village.spell_research.t = SpellBook.research_seconds("gnomes") - 0.5
+		await _wait(1.0)
+		_check(village.knows_spell("gnomes") and not village.knows_spell("rain"), "the Shrine teaches the spell")
+		village.learn_all_spells()
+		_check(village.knows_spell("rain") and village.knows_spell("lightning"), "the dev menu can teach every spell")
+		shrine.queue_free()
+		play._cursor_hit = spot
+		magicko_before = village.amount("magicko")
 		play._spell_key(gnomes)
 		play._cursor_hit = spot
 		play._click_spell()
@@ -181,6 +207,14 @@ func _run() -> void:
 	play.raids.end_raid()
 	@warning_ignore("integer_division")
 	var guards_before := village.max_count("warrior") / PlayerVillage.WARRIORS_PER_GUARD
+	# Paying for something leaves the rate beside a resource alone.
+	var stone_rate := village.last_minute("stone")
+	village.spend({"stone": 10})
+	_check(village.last_minute("stone") == stone_rate, "paying for something does not change a resource's rate (%d)" % stone_rate)
+	village.give("stone", 10.0)
+	if guards_before == 0:
+		play.hud.set_resources(village, "")
+		_check((play.hud._jobs.warrior.count as Label).text == "0/0", "Warriors 0/0 without a Town guard (%s)" % (play.hud._jobs.warrior.count as Label).text)
 	var tower := BuildingFactory.create("tall_house", RandomNumberGenerator.new())
 	game.world_root.add_child(tower)
 	tower.set_meta("kind", "tall_house")
@@ -193,7 +227,13 @@ func _run() -> void:
 	_check(village.wanted.warrior == mini(village.max_count("warrior"), free_before),
 		"no more warriors are wanted than there are free workers (%d wanted, %d free)" % [village.wanted.warrior, free_before])
 	village.set_wanted("warrior", 0)
+	play.hud.set_resources(village, "")
+	_check((play.hud._jobs.warrior.count as Label).text == "%d/%d" % [village.count("warrior"), village.max_count("warrior")],
+		"a Town guard makes it 0/4 at once (%s)" % (play.hud._jobs.warrior.count as Label).text)
 	village.set_wanted("warrior", 1)
+	play.hud.set_resources(village, "")
+	_check((play.hud._jobs.warrior.count as Label).text == "%d/%d" % [maxi(1, village.count("warrior")), village.max_count("warrior")],
+		"asking for a warrior counts it at once, before it is trained (%s)" % (play.hud._jobs.warrior.count as Label).text)
 	_check(is_equal_approx(village.train_seconds("warrior"), 15.0), "a warrior trains in a quarter of a minute")
 	Game.settings.training_time = 2.0
 	_check(is_equal_approx(village.train_seconds("warrior"), 30.0), "the training time slider stretches it")
@@ -555,6 +595,22 @@ func _run() -> void:
 		and BuildingCatalog.find("singing_rocks").gameplay == "Shrine" and BuildingCatalog.find("windmill").gameplay == "Granary"
 		and BuildingCatalog.find("necro_tower").name == "Skull tower"
 		and FileAccess.file_exists(BuildingCatalog.NAMES_PATH), "Names.txt pairs asset names with gameplay names")
+	_check(BuildingCatalog.title("moon_tower") == "Wizardry tower" and BuildingCatalog.title("treehouse") == BuildingCatalog.MISSING_NAME
+		and BuildingCatalog.title("field") == "Wheat field", "in-game names come from Names.txt; a building without one says Name missing")
+	play.hud.show_build_menu(true)
+	await _wait(0.3)
+	_check(play.hud._build_previews.size() == BuildingCatalog.BUILDINGS.size() - 2, "the build menu shows a picture of each building (%d)" % play.hud._build_previews.size())
+	Game.dev_menu = true
+	play.hud.set_dev_visible(true)
+	_check((play.hud._build_buttons["store"] as Button).tooltip_text.contains("Stacked houses"), "with the dev menu open, the build menu tells the model's name")
+	Game.dev_menu = false
+	play.hud.set_dev_visible(false)
+	_check((play.hud._build_buttons["store"] as Button).tooltip_text == "", "and not otherwise")
+	play.hud.show_build_menu(false)
+	var all_near := true
+	for v in get_tree().get_nodes_in_group("villagers"):
+		all_near = all_near and (v as Villager)._near
+	_check(all_near, "every villager and goblin is drawn in full detail, however far away")
 
 	# Treehouse Homes, and a rope bridge between two of them.
 	var homes: Array[Destructible] = []
@@ -934,7 +990,6 @@ func _run() -> void:
 	beast.mind.process_mode = Node.PROCESS_MODE_DISABLED
 	beast.drop_load()
 	beast.stamina = beast.max_stamina * 0.5
-	var stamina_then := beast.stamina
 	var walk_to := beast.global_position
 	for k in 24:
 		var a := TAU * k / 24.0
@@ -943,8 +998,14 @@ func _run() -> void:
 			walk_to = p
 			break
 	beast.move_to(walk_to)
+	# (Measured once it is under way: standing to turn, it gets its breath back.)
+	for k in 8:
+		if beast.speed > 0.6:
+			break
+		await _wait(0.25)
+	var stamina_then := beast.stamina
 	var top_speed := 0.0
-	for k in 6:
+	for k in 4:
 		await _wait(0.5)
 		top_speed = maxf(top_speed, beast.speed)
 	_check(beast.stamina < stamina_then, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s)" % [
@@ -1148,6 +1209,9 @@ func _run() -> void:
 	squirrel.mind.process_mode = Node.PROCESS_MODE_DISABLED
 	squirrel.drop_load()
 	squirrel.stamina = squirrel.max_stamina
+	squirrel._tired = false
+	squirrel.running = false
+	squirrel.has_target = false
 	var run_to := squirrel.global_position
 	for k in 24:
 		var a := TAU * k / 24.0

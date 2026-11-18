@@ -149,7 +149,7 @@ func _update_visual() -> void:
 	else:
 		_rising.position.y = -(_height + BuildingFactory.SINK) * (1.0 - progress)
 	_outline_material.albedo_color.a = lerpf(0.3, 0.08, progress)
-	_label.text = "%s  %d%%" % [BuildingCatalog.find(kind).get("name", kind.capitalize()), floori(progress * 100.0)]
+	_label.text = "%s  %d%%" % [BuildingCatalog.title(kind), floori(progress * 100.0)]
 
 
 func _complete() -> void:

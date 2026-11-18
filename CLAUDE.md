@@ -41,6 +41,21 @@
   (`ActionTable._parse_condition()`); a new kind of condition needs code
   there and in `CreatureMind.passes()`, never a sentence in the code.
 
+## Design principles
+
+- Creatures have personalities and are trainable, and both matter:
+  personality traits (`<kind>_<trait>_personality` in `balancing.txt`,
+  100% average) are born in and last for life, and Bless and Condemn
+  train affinities on top. Two creatures with the same training still
+  behave differently, and enough training can override a creature's
+  nature. New creature behaviour should keep both levers.
+- The creature is tactical only as far as the player trains it: nothing
+  hard-wires a sensible reaction (for example, there is no built-in
+  "run when badly hurt"); its affinities for the rows of `Actions.csv`
+  and its personality decide.
+- Weights and personalities are written as percentage multipliers in
+  `balancing.txt`, so people can read them.
+
 ## Branches
 
 - Never create a branch, or choose a name for one, without asking the

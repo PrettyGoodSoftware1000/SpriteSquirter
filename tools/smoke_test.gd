@@ -31,6 +31,12 @@ func _run() -> void:
 	# fetching food or casting spells in the middle of the others.
 	for id: String in CreatureMind.SPELLS + CreatureMind.HARVESTS:
 		Balance.values["knowledge_" + id] = 1.0e9
+	# The creature always notices, and never learns extra, so the
+	# knowledge checks are exact (its personality's part is checked below).
+	Balance.values["notice_chance"] = 100.0
+	Balance.values["bonus_knowledge_chance"] = 0.0
+	# Untrained creatures now run from a fight now and then; the tests want them to stay.
+	Balance.values["flee_chance"] = 0.0
 	# No balrog until its own checks at the end, and the tortoise keeps
 	# out of its shell until then too.
 	Balance.values["balrogs"] = 0.0
@@ -272,6 +278,19 @@ func _run() -> void:
 			bait.append(g)
 	var c := play.creature
 	var ahead := Vector3(sin(c.heading), 0, cos(c.heading))
+	# It will not stomp beside a villager or a building, so stand it
+	# somewhere clear first (where it wandered to is down to chance).
+	if not c._stomp_is_safe(c.global_position + ahead * 4.0):
+		for k in 48:
+			var a := TAU * k / 16.0
+			var p := village.center + Vector3(cos(a), 0, sin(a)) * (25.0 + 10.0 * floorf(k / 16.0))
+			if not game.terrain.is_inside(p.x, p.z) or not game.terrain.is_dry(p.x, p.z):
+				continue
+			p.y = game.terrain.get_height(p.x, p.z)
+			if c._stomp_is_safe(p + ahead * 4.0) and c._stomp_is_safe(p):
+				c.global_position = p
+				c.has_target = false
+				break
 	for k in bait.size():
 		(bait[k] as Villager).global_position = c.global_position + ahead * 4.0 + Vector3(k - 1.5, 0, 0)
 		(bait[k] as Villager).snared_until = game.now + 60.0
@@ -412,6 +431,7 @@ func _run() -> void:
 	# The tortoise's shell: a fifth of the harm, and something to bless or curse.
 	Balance.values["shell_damage_share"] = Balance.DEFAULTS["shell_damage_share"]
 	beast.hp = beast.max_hp
+	beast.used["health"] = 0.0  # (so these hits do not happen to level its health up)
 	beast.mind.behavior["shell"] = 100.0
 	beast.mind.behavior["shell_health_full"] = 100.0
 	beast._shell_think_at = 0.0
@@ -854,15 +874,46 @@ func _run() -> void:
 	beast.place(stand, beast.heading)
 	for option: Dictionary in mind._spell_options("fireball"):
 		fire_options[option.facts.target] = option.base
-	_check(is_equal_approx(fire_options.get("villager", -1.0), Balance.num("tortoise_mischief_weight")),
+	_check(is_equal_approx(fire_options.get("villager", -1.0), Balance.num("mischief_weight") * mind.personality("mischief")),
 		"fireball at a villager or one of our buildings is a rare choice, as rare as the tortoise's mischief weight (%s)" % str(fire_options))
 	village.resources.magicko = 500.0
 	var blood_bases := []
 	for option: Dictionary in mind._spell_options("blood"):
 		blood_bases.append(option.base)
-	_check(blood_bases.is_empty() or blood_bases[0] == (1.0 if village.population() >= village.housing() else Balance.num("tortoise_mischief_weight")),
+	_check(blood_bases.is_empty() or is_equal_approx(blood_bases[0], 1.0 if village.population() >= village.housing() else Balance.num("mischief_weight") * mind.personality("mischief")),
 		"a sacrifice with plenty of magicko is mischief unless housing is full (%s)" % str(blood_bases))
-	_check(Balance.num("squirrel_flee_weight") > Balance.num("tortoise_flee_weight"), "each creature has its own flee weight")
+	# Personality traits: written as percentages, 100% average.
+	_check(is_equal_approx(Balance.parse_number("150%"), 1.5) and is_equal_approx(Balance.num("raven_spellcaster_personality"), 1.5)
+		and is_equal_approx(Balance.num("tortoise_observant_personality"), 1.5) and is_equal_approx(Balance.num("tortoise_knowledgeSeeker_personality"), 1.5)
+		and is_equal_approx(Balance.num("raven_knowledgeSeeker_personality"), 1.5) and is_equal_approx(Balance.num("squirrel_flee_personality"), 1.5),
+		"personalities are read as percentages (raven spellcaster, tortoise observant and knowledge seeker, raven knowledge seeker, squirrel flee)")
+	_check(not Balance.DEFAULTS.has("flee_chance_near_death") and Balance.DEFAULTS.has("flee_chance"), "how hurt it is no longer sets a base chance to run")
+	# Observant: with no chance to notice, it learns nothing; knowledge
+	# seeker: with every chance of extra, it learns twice as much.
+	var stone_known: float = mind.knowledge.stone
+	var stone_needed := Balance.num("knowledge_stone")
+	Balance.values["knowledge_stone"] = 1.0e9
+	mind.knowledge.stone = 0.0
+	var learn_then: float = 0.0
+	Balance.values["notice_chance"] = 0.0
+	mind._on_lesson("stone")
+	_check(is_equal_approx(mind.knowledge.stone, learn_then), "a creature that does not notice learns nothing")
+	Balance.values["notice_chance"] = 100.0
+	Balance.values["bonus_knowledge_chance"] = 100.0
+	mind._on_lesson("stone")
+	_check(is_equal_approx(mind.knowledge.stone, learn_then + 2.0 * Balance.num("knowledge_per_lesson")), "a knowledge seeker sometimes learns extra (%.0f)" % (mind.knowledge.stone - learn_then))
+	Balance.values["bonus_knowledge_chance"] = 0.0
+	mind.knowledge.stone = stone_known
+	Balance.values["knowledge_stone"] = stone_needed
+	# The dev menu's sliders go to a text file and back.
+	var slider_path := "user://sliders_test.txt"
+	var day_then: float = game.settings.day_minutes
+	_check(SliderFile.save(slider_path, game.settings) == "" and FileAccess.get_file_as_string(slider_path).contains("Day length = "),
+		"the sliders save as a readable text file")
+	game.settings.day_minutes = 3.0
+	play.load_sliders(slider_path)
+	_check(is_equal_approx(game.settings.day_minutes, day_then), "and load back from it (day length %.1f)" % game.settings.day_minutes)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(slider_path))
 	# Using a stat levels it up: 100 used for the first level, 200 more for the next.
 	var start_level: int = beast.levels.magicko
 	beast.used.magicko = 0.0
@@ -879,7 +930,9 @@ func _run() -> void:
 	beast.levels.stamina = 20
 	_check(is_equal_approx(beast.level_cost("stamina"), 1000.0), "and a level never costs more than 1,000")
 	beast.levels.stamina = 0
-	# The tortoise tires as it walks.
+	# The tortoise tires as it walks (its mind kept from sending it elsewhere).
+	beast.mind.process_mode = Node.PROCESS_MODE_DISABLED
+	beast.drop_load()
 	beast.stamina = beast.max_stamina * 0.5
 	var stamina_then := beast.stamina
 	var walk_to := beast.global_position
@@ -897,6 +950,7 @@ func _run() -> void:
 	_check(beast.stamina < stamina_then, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s)" % [
 		stamina_then, beast.stamina, top_speed, game.now < beast.snared_until, beast._alert, beast.hiding])
 	beast.has_target = false
+	beast.mind.process_mode = Node.PROCESS_MODE_INHERIT
 	# Exploring is a long trip.
 	var home_then := beast.mind.home
 	_check(beast.mind._explore() and beast.target.distance_to(home_then) >= Balance.num("explore_least") - 0.1 and beast.mind.last_action == "explore",
@@ -1092,6 +1146,8 @@ func _run() -> void:
 	_check(squirrel.size > 0.17 and squirrel.size < 0.2, "the squirrel grows towards full size over 30 minutes (%.3f after 1 minute)" % squirrel.size)
 	# A long way is run, on all fours, and that uses stamina.
 	squirrel.mind.process_mode = Node.PROCESS_MODE_DISABLED
+	squirrel.drop_load()
+	squirrel.stamina = squirrel.max_stamina
 	var run_to := squirrel.global_position
 	for k in 24:
 		var a := TAU * k / 24.0

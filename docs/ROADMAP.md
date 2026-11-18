@@ -123,6 +123,12 @@ stage.
 - Each creature has its own mischief weight and flee weight in balancing.txt; the squirrel runs more readily
 - A blood sacrifice with magicko low or housing full is ordinary; only one when magicko is plentiful is mischief
 
+## Version 0.20: Personalities ✅
+- Personality traits for each creature, as percentages: flee, mischief, spellcaster, observant, knowledgeSeeker
+- No built-in "run when hurt": how hurt it is matters only as far as it is trained
+- Weights in balancing.txt written as percentages
+- Dev menu: save the sliders to a readable .txt file, and load them back
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

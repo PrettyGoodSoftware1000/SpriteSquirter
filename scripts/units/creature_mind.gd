@@ -3,8 +3,16 @@ extends Node
 ## What the creature knows, likes and decides for itself. It is a child of
 ## the Creature, which does the moving and the fighting.
 ##
+## Personality: each creature is born with traits that last its whole
+## life (Balance "<kind>_<trait>_personality", 100% being average; see
+## personality()): how readily it runs from a fight, does mischief, casts
+## spells, notices things to learn from, and learns extra from them. Bless
+## and Condemn train what it does on top of these.
+##
 ## Knowledge: watching the player cast a spell, or the villagers store
-## resources, adds knowledge towards doing it itself. With enough, the
+## resources, may add knowledge towards doing it itself (if it notices:
+## its observant personality; with a chance of extra: its knowledgeSeeker
+## personality). With enough, the
 ## creature casts the spell when it suits (each spell costs the creature
 ## its own magicko, Balance "creature_cost_...", and has a short
 ## cooldown) or fetches trees, boulders and food for the storehouse.
@@ -103,9 +111,23 @@ func _on_lesson(kind: String) -> void:
 	_learn(kind, Balance.num("knowledge_per_lesson"), "watched_store", {"amount": int(Balance.num("stored_per_lesson")), "resource": kind})
 
 
+## One of the creature's personality traits ("flee", "mischief",
+## "spellcaster", "observant", "knowledgeSeeker"): a multiplier, 1 average.
+func personality(quality: String) -> float:
+	return maxf(0.0, Balance.num(creature.kind + "_" + quality + "_personality"))
+
+
+## Something to learn from happened: it learns `points` towards `id` if it
+## notices (Balance "notice_chance" times its observant personality), and
+## sometimes extra on top ("bonus_knowledge_chance" times its
+## knowledgeSeeker personality: "bonus_knowledge" more).
 func _learn(id: String, points: float, saw: String, fill: Dictionary) -> void:
 	if learned(id):
 		return
+	if randf() >= Balance.num("notice_chance") * personality("observant"):
+		return
+	if randf() < Balance.num("bonus_knowledge_chance") * personality("knowledgeSeeker"):
+		points *= 1.0 + Balance.num("bonus_knowledge")
 	knowledge[id] += points
 	fill["have"] = int(minf(knowledge[id], needed(id)))
 	fill["need"] = int(needed(id))
@@ -356,14 +378,15 @@ func health_word() -> String:
 	return "near_death"
 
 
-## In a fight, now and then: run from it, the likelier the more hurt it is
-## and the higher its affinity for running from battle (as hurt as it is).
+## In a fight, now and then: run from it, as readily as its flee
+## personality and its affinities for running at its present health say.
 func _consider_fleeing() -> bool:
 	if creature.is_fleeing() or not _enemy_close():
 		return false
 	var facts := {"health": creature.health_share(), "battle": true}
-	# (How readily it runs is also its personality: Balance "<kind>_flee_weight".)
-	var chance := Balance.num("flee_chance_" + health_word()) * Balance.num(creature.kind + "_flee_weight") * weight("flee", facts)
+	# How hurt it is matters only as far as it has been trained to care
+	# (its affinities for running at that health); the rest is personality.
+	var chance := Balance.num("flee_chance") * personality("flee") * weight("flee", facts)
 	if randf() >= chance or not creature.run_from_battle():
 		return false
 	_drop_task()
@@ -478,9 +501,9 @@ func _explore() -> bool:
 ## in turn: picks at random between holding off (Balance
 ## "spell_hold_weight") and each place it could cast it, weighted by how
 ## much it is for (useful places: 1; mischief, such as fireball at a
-## villager, the creature's "<kind>_mischief_weight") times its affinity
-## for doing that. Casts
-## the first one picked.
+## villager, "mischief_weight" times its mischief personality), its
+## spellcaster personality, and its affinity for doing that. Casts the
+## first one picked.
 func _try_spells() -> bool:
 	if not is_instance_valid(Game.village) or not Game.village.founded:
 		return false
@@ -493,7 +516,7 @@ func _try_spells() -> bool:
 		var choices := _spell_options(spell)
 		for k in choices.size():
 			var choice: Dictionary = choices[k]
-			options[k] = float(choice.base) * weight(spell, choice.facts)
+			options[k] = float(choice.base) * personality("spellcaster") * weight(spell, choice.facts)
 		var picked: Variant = pick(options)
 		if typeof(picked) == TYPE_STRING:
 			continue
@@ -507,14 +530,14 @@ func _try_spells() -> bool:
 
 ## Where the creature could cast `spell` now, each {pos, facts, base}:
 ## what it would be aimed at (see passes()) and how much it is for
-## (1 for a use the spell is meant for, its personality's Balance
-## "<kind>_mischief_weight" for mischief).
+## (1 for a use the spell is meant for; for mischief, Balance
+## "mischief_weight" times its mischief personality).
 func _spell_options(spell: String) -> Array:
 	var out: Array = []
 	var village := Game.village
 	var tree := get_tree()
 	var battle := _battle_raging()
-	var mischief := Balance.num(creature.kind + "_mischief_weight")
+	var mischief := Balance.num("mischief_weight") * personality("mischief")
 	var reach := 45.0
 	match spell:
 		"fireball":

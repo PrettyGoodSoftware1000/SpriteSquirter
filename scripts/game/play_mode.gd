@@ -160,6 +160,8 @@ func _ready() -> void:
 	hud.grass_requested.connect(_cycle_grass)
 	hud.ruler_requested.connect(func() -> void: _set_mode(Mode.COMMAND if mode == Mode.RULER else Mode.RULER))
 	hud.setting_changed.connect(func(key: String, value: float) -> void: Game.settings[key] = value)
+	hud.sliders_save_requested.connect(func() -> void: _slider_dialog(true))
+	hud.sliders_load_requested.connect(func() -> void: _slider_dialog(false))
 	hud.jobs_changed.connect(func(role: String, change: int) -> void:
 		village.set_wanted(role, village.wanted[role] + change))
 	hud.resources_requested.connect(func() -> void:
@@ -737,6 +739,44 @@ func _site_near(p: Vector3) -> ConstructionSite:
 			best_d = d
 			best = site
 	return best
+
+
+# --- Saving and loading the sliders ------------------------------------------------
+
+## Opens a file box to save the dev menu's sliders to a .txt file, or to
+## load them from one (see SliderFile). It starts in the game's folder.
+func _slider_dialog(saving: bool) -> void:
+	var box := FileDialog.new()
+	box.access = FileDialog.ACCESS_FILESYSTEM
+	box.file_mode = FileDialog.FILE_MODE_SAVE_FILE if saving else FileDialog.FILE_MODE_OPEN_FILE
+	box.filters = PackedStringArray(["*.txt ; Text files"])
+	box.title = "Save sliders" if saving else "Load sliders"
+	box.use_native_dialog = true
+	box.current_dir = ProjectSettings.globalize_path("res://") if OS.has_feature("editor") else OS.get_executable_path().get_base_dir()
+	if saving:
+		box.current_file = "sliders %s.txt" % Time.get_datetime_string_from_system(false, true).replace(":", "-")
+	box.file_selected.connect(func(path: String) -> void:
+		if saving:
+			save_sliders(path)
+		else:
+			load_sliders(path)
+		box.queue_free())
+	box.canceled.connect(box.queue_free)
+	add_child(box)
+	box.popup_centered_ratio(0.6)
+
+
+func save_sliders(path: String) -> void:
+	var problem := SliderFile.save(path, Game.settings)
+	hud.set_hint(problem if problem != "" else "Sliders saved to %s" % path)
+
+
+func load_sliders(path: String) -> void:
+	var loaded := SliderFile.load_values(path)
+	for key: String in loaded:
+		Game.settings[key] = loaded[key]
+	hud.set_settings(Game.settings)
+	hud.set_hint("Loaded %d sliders from %s" % [loaded.size(), path] if not loaded.is_empty() else "No sliders found in %s" % path)
 
 
 # --- Influence ------------------------------------------------------------------

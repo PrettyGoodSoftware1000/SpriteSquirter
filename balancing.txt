@@ -235,20 +235,20 @@ judge_cooldown_80 = 720         # ...80 or more.
 affinity_spread = 25
 
 # Each check in a fight (every 5 seconds), the chance the creature runs
-# from it, at an affinity of 0 and a flee weight of 1 (see the personality
-# traits below). It grows with a higher affinity and shrinks with a lower one.
-flee_chance_unharmed = 0.05
-flee_chance_slightly = 0.1      # slightly injured: under 95% health
-flee_chance_badly = 0.2         # badly injured: under 60% health
-flee_chance_near_death = 0.4    # near death: under 25% health
+# from it, at an affinity of 0 and a flee personality of 100%. How hurt it
+# is makes no difference by itself: the player trains it (Bless and
+# Condemn on the running-from-battle rows of Actions.csv) to run when it
+# is badly hurt and stand firm when it is not.
+flee_chance = 10%
 # Exploring: now and then, left alone, the creature sets off on a long
 # trip, up to half the map away, and then comes back. Only that counts as
 # exploring (for Bless and Condemn); short walks round where it was sent do not.
 # Left alone, it picks what to do at random: a short wander (this weight),
 # exploring (this weight, times its affinity's weight), or fetching
 # something it has learned to fetch (its affinity's weight: 1 at 0).
-wander_weight = 1
-explore_weight = 0.25
+wander_weight = 100%
+explore_weight = 25%
+explore_least = 40              # metres: the shortest trip that counts as exploring
 
 # Spells the creature knows: each second it weighs holding off against
 # every place it could cast each one. A use the spell is meant for weighs
@@ -258,33 +258,72 @@ explore_weight = 0.25
 # magicko is plentiful and there is room for more villagers) weighs the
 # creature's mischief weight (below). Each is then multiplied by its
 # affinity's weight, so blessing mischief makes more of it.
-spell_hold_weight = 1
-rain_enemies_weight = 0.3
+spell_hold_weight = 100%
+mischief_weight = 0.05%         # a mischief cast's weight, for a creature of average mischief (see mischief personality below)
+rain_enemies_weight = 30%
 creature_blood_magicko = 25     # below this much village magicko (or with no room for more villagers) a blood sacrifice is an ordinary thing to do
 
+# Watching and learning: each time the creature sees you cast a spell, or
+# the villagers store another lesson's worth of a resource, it notices it
+# (and learns from it) with this chance, for a creature of average
+# observance (see observant personality below)...
+notice_chance = 60%
+# ...and when it does, this is the chance it learns extra, for an average
+# knowledge seeker (see knowledgeSeeker personality below), and how much
+# extra (100% doubles what it learned).
+bonus_knowledge_chance = 25%
+bonus_knowledge = 100%
+
 # --- Personality traits ---------------------------------------------------------
-# Mischief weight: how readily the creature does mischief with the spells it
-# knows. Roughly, for each spell it knows, at an affinity of 0:
-#   0       never
-#   0.0005  rarely: about once every 10 to 30 minutes
-#   0.005   now and then: about once every 1 to 3 minutes
-#   0.05    all the time: as often as its magicko and the spell's rest allow
-# Each Bless of a mischief action makes that action about 1.5 times as
-# likely as this, each Condemn about 1.5 times less likely.
-tortoise_mischief_weight = 0.0005
-squirrel_mischief_weight = 0.0005
-raven_mischief_weight = 0.0005
-# Flee weight: how readily the creature runs from a fight. It multiplies the
-# flee_chance numbers above. Every 5 seconds of a fight, near death:
-#   0     never runs
-#   0.5   20% chance: it usually holds out for half a minute or so
-#   1     40% chance: it usually runs within 10 to 15 seconds
-#   2     80% chance: it runs almost at once (and 1 in 10 checks even unharmed)
-tortoise_flee_weight = 1
-squirrel_flee_weight = 1.5      # a nervous creature
-raven_flee_weight = 1
-explore_least = 40              # metres: the shortest trip that counts as exploring
+# Every creature is born with these, and they last its whole life; Bless
+# and Condemn train what it does on top of them. 100% is average. Each one
+# multiplies a chance:
+#   0%    never
+#   50%   half as often as average
+#   100%  average
+#   150%  half as often again as average
+#   200%  twice as often as average
+#
+# flee_personality: how readily it runs from a fight (it multiplies
+#   flee_chance above, then its affinity for running at that health does
+#   the rest). At 100%, untrained: 10% each 5-second check, so it usually
+#   runs within about 50 seconds of fighting; at 200%: 20% (about 25 s);
+#   at 50%: 5% (about 100 s); at 0% it never runs, however it is trained.
+# mischief_personality: how readily it does mischief with the spells it
+#   knows (it multiplies mischief_weight above). At 100%, untrained: about
+#   once every 10 to 30 minutes for each spell it knows; at 1000%: every
+#   1 to 3 minutes; at 0%: never.
+# spellcaster_personality: how readily it casts any spell it knows, useful
+#   or mischief (against spell_hold_weight). At 100%, with goblins to hit
+#   and nothing trained: it casts about half the times it thinks of it
+#   (every second); at 150%: 60%; at 50%: a third; at 0% it never casts.
+# observant_personality: how readily it notices you casting a spell or the
+#   villagers storing a resource, and learns from it (it multiplies
+#   notice_chance above). At 100%: it notices 60% of the time; at 150%:
+#   90%; at 50%: 30%. (It can never notice more than every time.)
+# knowledgeSeeker_personality: the chance of learning extra when it does
+#   notice something (it multiplies bonus_knowledge_chance). At 100%: 25%
+#   of the time it learns twice as much; at 150%: 37.5%; at 0%: never. It
+#   only speeds up learning new abilities: it does not change its
+#   affinities, how Bless and Condemn work, or how likely it is to do
+#   anything.
+tortoise_flee_personality = 100%
+tortoise_mischief_personality = 100%
+tortoise_spellcaster_personality = 100%
+tortoise_observant_personality = 150%        # watchful
+tortoise_knowledgeSeeker_personality = 150%  # curious
+squirrel_flee_personality = 150%             # a nervous creature
+squirrel_mischief_personality = 100%
+squirrel_spellcaster_personality = 100%
+squirrel_observant_personality = 100%
+squirrel_knowledgeSeeker_personality = 100%
+raven_flee_personality = 100%
+raven_mischief_personality = 100%
+raven_spellcaster_personality = 150%         # a natural spellcaster
+raven_observant_personality = 100%
+raven_knowledgeSeeker_personality = 150%     # curious
+
 
 # Spells
 spell_recent_seconds = 10       # a spell costs more for this long after it is cast...
-spell_recent_extra = 0.5        # ...this much more (0.5 is 50%) for each cast, added up
+spell_recent_extra = 50%        # ...this much more for each cast, added up

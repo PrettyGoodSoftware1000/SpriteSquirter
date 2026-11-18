@@ -24,11 +24,16 @@ const DEFAULTS := {
 	"cooldown_fireball": 30.0, "cooldown_rain": 30.0, "cooldown_roots": 30.0, "cooldown_blood": 60.0,
 	"affinity_start": 0.0, "bless_points": 10.0, "condemn_points": 10.0, "affinity_spread": 25.0,
 	"judge_cooldown": 60.0, "judge_cooldown_30": 180.0, "judge_cooldown_60": 360.0, "judge_cooldown_80": 720.0,
-	"wander_weight": 1.0, "explore_weight": 0.25, "spell_hold_weight": 1.0,
-	"tortoise_mischief_weight": 0.0005, "squirrel_mischief_weight": 0.0005, "raven_mischief_weight": 0.0005,
-	"tortoise_flee_weight": 1.0, "squirrel_flee_weight": 1.5, "raven_flee_weight": 1.0,
+	"wander_weight": 1.0, "explore_weight": 0.25, "spell_hold_weight": 1.0, "mischief_weight": 0.0005,
+	"notice_chance": 0.6, "bonus_knowledge_chance": 0.25, "bonus_knowledge": 1.0,
+	"tortoise_flee_personality": 1.0, "tortoise_mischief_personality": 1.0, "tortoise_spellcaster_personality": 1.0,
+	"tortoise_observant_personality": 1.5, "tortoise_knowledgeSeeker_personality": 1.5,
+	"squirrel_flee_personality": 1.5, "squirrel_mischief_personality": 1.0, "squirrel_spellcaster_personality": 1.0,
+	"squirrel_observant_personality": 1.0, "squirrel_knowledgeSeeker_personality": 1.0,
+	"raven_flee_personality": 1.0, "raven_mischief_personality": 1.0, "raven_spellcaster_personality": 1.5,
+	"raven_observant_personality": 1.0, "raven_knowledgeSeeker_personality": 1.5,
 	"rain_enemies_weight": 0.3, "creature_blood_magicko": 25.0, "gnome_count": 5.0, "gnome_distance": 50.0, "gnome_speed": 9.0, "gnome_work": 1.0,
-	"flee_chance_unharmed": 0.05, "flee_chance_slightly": 0.1, "flee_chance_badly": 0.2, "flee_chance_near_death": 0.4,
+	"flee_chance": 0.1,
 	"explore_least": 40.0,
 	"build_work_per_resource": 5.0,
 	"cost_home_lumber": 40.0, "cost_home_stone": 15.0,
@@ -78,7 +83,18 @@ static func num(key: String) -> float:
 	return values.get(key, DEFAULTS.get(key, 0.0))
 
 
-## Reads balancing.txt. Lines look like "goblin_health = 30  # note".
+## A number as written in balancing.txt: "30", "2.5", or a percentage
+## ("150%" is 1.5). NAN if it is not a number.
+static func parse_number(text: String) -> float:
+	var t := text.strip_edges()
+	if t.ends_with("%"):
+		var n := t.trim_suffix("%").strip_edges()
+		return n.to_float() / 100.0 if n.is_valid_float() else NAN
+	return t.to_float() if t.is_valid_float() else NAN
+
+
+## Reads balancing.txt. Lines look like "goblin_health = 30  # note", or
+## with a percentage, "tortoise_flee_personality = 150%".
 static func load_file() -> void:
 	values = DEFAULTS.duplicate()
 	var file := FileAccess.open(PATH, FileAccess.READ)
@@ -92,12 +108,13 @@ static func load_file() -> void:
 		var parts := line.split("=")
 		var key := parts[0].strip_edges()
 		var text := parts[1].strip_edges() if parts.size() == 2 else ""
-		if key.begins_with("cost_") and text.is_valid_float():
+		var number := parse_number(text)
+		if key.begins_with("cost_") and not is_nan(number):
 			# Any building can be given a cost in any resource.
-			values[key] = text.to_float()
+			values[key] = number
 		elif not DEFAULTS.has(key):
 			push_warning("balancing.txt: there is nothing called '%s'" % key)
-		elif not text.is_valid_float():
+		elif is_nan(number):
 			push_warning("balancing.txt: '%s' needs a number, so the built-in %s is used" % [key, DEFAULTS[key]])
 		else:
-			values[key] = text.to_float()
+			values[key] = number

@@ -23,6 +23,8 @@ signal mood_selected(index: int)
 signal palette_selected(index: int)
 signal grass_requested
 signal ruler_requested
+signal sliders_save_requested
+signal sliders_load_requested
 signal setting_changed(key: String, value: float)
 signal resources_requested
 signal jobs_changed(role: String, change: int)
@@ -534,6 +536,16 @@ func _build_dev_menu(root: Control) -> void:
 	dev.add_child(_heading("Gameplay"))
 	for s in SETTING_SLIDERS:
 		dev.add_child(_setting_row(s))
+	var files := HBoxContainer.new()
+	dev.add_child(files)
+	var save := _button("Save sliders as simple human readable .txt file")
+	save.tooltip_text = "Writes every slider above to a text file, one per line (Day length = 8 min), so you can keep track of settings."
+	save.pressed.connect(func() -> void: sliders_save_requested.emit())
+	files.add_child(save)
+	var load := _button("Load sliders")
+	load.tooltip_text = "Reads a sliders .txt file and sets the sliders from it."
+	load.pressed.connect(func() -> void: sliders_load_requested.emit())
+	files.add_child(load)
 	var cheat := _button("Give 100 of everything")
 	cheat.pressed.connect(func() -> void: resources_requested.emit())
 	dev.add_child(cheat)

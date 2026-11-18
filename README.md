@@ -233,11 +233,15 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    up to half the map away, and back. When goblins raid, or hang about within 50 m of
    the village, it chases them, turning 30% faster in a fight. A line of
    text floats up from its head when it does something ("The creature ate
-   2 goblins"). In a fight it may **run from battle**, more readily the
-   more hurt it is, and more readily still if that is its nature: the
+   2 goblins"). In a fight it may **run from battle**: how hurt it is
+   only matters as far as you have trained it to care (Bless and Condemn
+   on the running-from-battle rows), and the rest is its nature: the
    squirrel, being nervous, runs half as readily again as the others.
    **What it learns.** Each time you cast Fireball, Rain, Roots, Chain
-   Lightning or Blood Sacrifice the creature gains 25 knowledge of that spell; at 100 it has
+   Lightning or Blood Sacrifice the creature may notice (60% of the time
+   for an average creature; the tortoise is more watchful) and gain 25
+   knowledge of that spell, and now and then twice that (the tortoise and
+   the raven are keener to learn); at 100 it has
    learned it and casts it by itself when it suits (fireball at a knot of
    enemies away from your buildings, roots on a crowd of raiders, rain on a
    fire in the village, a blood sacrifice when magicko has run dry and
@@ -286,11 +290,21 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    and there is room for more villagers (with magicko low, or no room
    left, a sacrifice is ordinary). It does them now and then, rarely at
    first; bless one and it gets likelier, condemn it and it all but stops.
-   **Personality traits.** Each creature has its own mischief weight and
-   flee weight in `balancing.txt` (`tortoise_mischief_weight`,
-   `squirrel_flee_weight`, ...): how readily it does mischief and how
-   readily it runs from a fight. The notes there say what different
-   values do.
+   **Personality traits.** Each creature is born with a personality that
+   lasts its whole life, and you train it on top of that. In
+   `balancing.txt` each creature has five traits, written as percentages
+   (100% is average): **flee** (how readily it runs from a fight),
+   **mischief** (how readily it does mischief), **spellcaster** (how
+   readily it casts any spell it knows; the raven is a natural, at 150%),
+   **observant** (how often it notices you casting a spell or the
+   villagers storing a resource, and learns from it; the tortoise is
+   watchful, at 150%) and **knowledgeSeeker** (the chance it learns extra
+   when it does; the tortoise and the raven are curious, at 150%). A
+   knowledge seeker only learns new abilities faster: it changes nothing
+   about its affinities or what it chooses to do. The notes in the file
+   say what different values do. Two creatures with the same training
+   still behave differently, and enough training can override a creature's
+   nature.
    **How it chooses.** Every choice the creature makes is made at random,
    weighted by its affinities: the higher the affinity, the likelier, and a
    low one makes a thing unlikely but never impossible. What it does under
@@ -380,6 +394,8 @@ In the game, press **Esc** and **Show controls** for this list.
 | Weather (L) | Meadow day, golden hour, dawn, night (until the next part of the day) |
 | Nature palette (P) | Recolour grass, trees, rocks and water instantly |
 | Grass detail (G) | High / Medium / Low / Off, for slower machines |
+| Save sliders as simple human readable .txt file | Writes every slider to a text file you name, one per line (`Day length = 8 min`), so you can keep track of settings |
+| Load sliders | Reads such a file back and sets the sliders from it (you can edit the numbers in it first) |
 | Ruler | Click a point, move the mouse: a line shows the distance (straight across, and the rise or fall). Click to keep it, click again for another; right-click or Esc to stop |
 
 The dev menu also shows the FPS and object counts. The gameplay settings are
@@ -429,6 +445,9 @@ their way to keep off steep ground and round cliffs and water, unless
 there is no other way.
 
 ## Balancing
+
+Numbers can be written as percentages too (`150%` is 1.5): the weights and
+personality traits are.
 
 `balancing.txt`, in the game's folder next to `project.godot`, holds the
 numbers you may want to tune: the health and damage of villagers,
@@ -586,6 +605,35 @@ python3 tools/bake_creature.py raven 0.09
 ```bash
 python3 tools/bake_creature.py balrog 0.09
 ```
+
+### Making a build other people can play
+
+Godot exports a game to a file people run without Godot installed.
+
+1. **Export templates (once).** In Godot: **Editor > Manage Export
+   Templates > Download and Install** (about 1 GB, for this version of Godot).
+2. **Presets.** **Project > Export... > Add...**, and add **Windows
+   Desktop**, **macOS** and, if you like, **Linux**.
+3. **The text files.** On each preset's **Resources** tab, put
+   `*.txt, *.csv` in **Filters to export non-resource files/folders**.
+   Without this, `balancing.txt`, `Names.txt`, `Announcements.txt` and
+   `Actions.csv` are left out of the build and it runs on its built-in
+   numbers.
+4. **Windows.** Pick the Windows preset, tick **Embed PCK** on its
+   Options tab (one .exe instead of an .exe and a .pck), then **Export
+   Project...** and save `SpriteSquirter.exe`. Zip it and share the zip.
+   Windows may warn that the program is unrecognised: players click **More
+   info > Run anyway** (only a code-signing certificate removes that).
+5. **Mac.** Pick the macOS preset, set a **Bundle Identifier** on its
+   Options tab (for example `com.yourname.spritesquirter`), then **Export
+   Project...** and save a `.zip` (or `.dmg`). It runs on Intel and Apple
+   Silicon Macs. Unsigned, macOS blocks it at first: players **right-click
+   the app > Open > Open** (or, on newer macOS, **System Settings > Privacy
+   & Security > Open Anyway**). Signing and notarising with an Apple
+   Developer account ($99 a year) removes that.
+6. **Graphics.** The game uses Godot's Forward+ renderer: players need a
+   graphics card from the last ten years or so (Vulkan on Windows, Metal
+   on a Mac).
 
 ### Smoke test
 

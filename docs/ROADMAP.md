@@ -119,6 +119,10 @@ stage.
 - [enemy name] and [a or an] are filled in; conditions are read by key words, numbers as written
 - Mischief: fireball at villagers, trees or your own buildings, spells cast at nothing, needless sacrifices, rare until blessed
 
+## Version 0.19: Personality traits ✅
+- Each creature has its own mischief weight and flee weight in balancing.txt; the squirrel runs more readily
+- A blood sacrifice with magicko low or housing full is ordinary; only one when magicko is plentiful is mischief
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

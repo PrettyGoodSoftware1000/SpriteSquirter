@@ -849,10 +849,20 @@ func _run() -> void:
 	Balance.values["spell_hold_weight"] = Balance.DEFAULTS["spell_hold_weight"]
 	# Mischief: a fireball at a villager is possible, but rare until blessed.
 	var fire_options := {}
+	# (Stood by the village, so there are villagers and buildings in reach.)
+	var stand := village.people()[0].global_position + Vector3(12, 0, 0)
+	beast.place(stand, beast.heading)
 	for option: Dictionary in mind._spell_options("fireball"):
 		fire_options[option.facts.target] = option.base
-	_check(fire_options.has("villager") and fire_options.villager < 0.01 and fire_options.has("our_building"),
-		"fireball at a villager or one of our buildings is a rare choice (%s)" % str(fire_options))
+	_check(is_equal_approx(fire_options.get("villager", -1.0), Balance.num("tortoise_mischief_weight")),
+		"fireball at a villager or one of our buildings is a rare choice, as rare as the tortoise's mischief weight (%s)" % str(fire_options))
+	village.resources.magicko = 500.0
+	var blood_bases := []
+	for option: Dictionary in mind._spell_options("blood"):
+		blood_bases.append(option.base)
+	_check(blood_bases.is_empty() or blood_bases[0] == (1.0 if village.population() >= village.housing() else Balance.num("tortoise_mischief_weight")),
+		"a sacrifice with plenty of magicko is mischief unless housing is full (%s)" % str(blood_bases))
+	_check(Balance.num("squirrel_flee_weight") > Balance.num("tortoise_flee_weight"), "each creature has its own flee weight")
 	# Using a stat levels it up: 100 used for the first level, 200 more for the next.
 	var start_level: int = beast.levels.magicko
 	beast.used.magicko = 0.0
@@ -908,6 +918,9 @@ func _run() -> void:
 	for other: String in ["food", "stone"] + CreatureMind.SPELLS:
 		Balance.values["knowledge_" + other] = 1.0e9
 	mind.behavior.explore = -100.0
+	# (Nothing else to choose between: a short wander is as likely as
+	# fetching, and would only slow the check down.)
+	Balance.values["wander_weight"] = 0.0
 	mind._idle_timer = 0.0
 	mind._away = false
 	# (Standing still, so it is at home when it next thinks.)
@@ -932,6 +945,7 @@ func _run() -> void:
 			break
 	for other: String in ["food", "stone"] + CreatureMind.SPELLS:
 		Balance.values["knowledge_" + other] = Balance.DEFAULTS["knowledge_" + other]
+	Balance.values["wander_weight"] = Balance.DEFAULTS["wander_weight"]
 	_check(fetched, "the creature fetches a tree for the storehouse (task %s, last action %s, knocked out %s, speed %.1f, %.0f m from the village)" % [
 		mind._task, mind.last_action, beast.knocked_out, beast.speed, beast.global_position.distance_to(village.center)])
 	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT

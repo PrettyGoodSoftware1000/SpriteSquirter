@@ -235,8 +235,8 @@ judge_cooldown_80 = 720         # ...80 or more.
 affinity_spread = 25
 
 # Each check in a fight (every 5 seconds), the chance the creature runs
-# from it, at an affinity of 0. It grows with a higher affinity and
-# shrinks with a lower one.
+# from it, at an affinity of 0 and a flee weight of 1 (see the personality
+# traits below). It grows with a higher affinity and shrinks with a lower one.
 flee_chance_unharmed = 0.05
 flee_chance_slightly = 0.1      # slightly injured: under 95% health
 flee_chance_badly = 0.2         # badly injured: under 60% health
@@ -254,13 +254,35 @@ explore_weight = 0.25
 # every place it could cast each one. A use the spell is meant for weighs
 # 1 (rain on enemies, to wet them for chain lightning, rain_enemies_weight);
 # mischief (fireball at a villager, a tree or your own building, roots or
-# lightning on your people, a spell cast at nothing, a needless sacrifice)
-# weighs mischief_weight. Each is then multiplied by its affinity's weight,
-# so blessing mischief makes more of it.
+# lightning on your people, a spell cast at nothing, a sacrifice when
+# magicko is plentiful and there is room for more villagers) weighs the
+# creature's mischief weight (below). Each is then multiplied by its
+# affinity's weight, so blessing mischief makes more of it.
 spell_hold_weight = 1
-mischief_weight = 0.0005
 rain_enemies_weight = 0.3
-creature_blood_magicko = 25     # below this much village magicko a blood sacrifice is what the spell is for
+creature_blood_magicko = 25     # below this much village magicko (or with no room for more villagers) a blood sacrifice is an ordinary thing to do
+
+# --- Personality traits ---------------------------------------------------------
+# Mischief weight: how readily the creature does mischief with the spells it
+# knows. Roughly, for each spell it knows, at an affinity of 0:
+#   0       never
+#   0.0005  rarely: about once every 10 to 30 minutes
+#   0.005   now and then: about once every 1 to 3 minutes
+#   0.05    all the time: as often as its magicko and the spell's rest allow
+# Each Bless of a mischief action makes that action about 1.5 times as
+# likely as this, each Condemn about 1.5 times less likely.
+tortoise_mischief_weight = 0.0005
+squirrel_mischief_weight = 0.0005
+raven_mischief_weight = 0.0005
+# Flee weight: how readily the creature runs from a fight. It multiplies the
+# flee_chance numbers above. Every 5 seconds of a fight, near death:
+#   0     never runs
+#   0.5   20% chance: it usually holds out for half a minute or so
+#   1     40% chance: it usually runs within 10 to 15 seconds
+#   2     80% chance: it runs almost at once (and 1 in 10 checks even unharmed)
+tortoise_flee_weight = 1
+squirrel_flee_weight = 1.5      # a nervous creature
+raven_flee_weight = 1
 explore_least = 40              # metres: the shortest trip that counts as exploring
 
 # Spells

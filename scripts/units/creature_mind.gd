@@ -362,7 +362,8 @@ func _consider_fleeing() -> bool:
 	if creature.is_fleeing() or not _enemy_close():
 		return false
 	var facts := {"health": creature.health_share(), "battle": true}
-	var chance := Balance.num("flee_chance_" + health_word()) * weight("flee", facts)
+	# (How readily it runs is also its personality: Balance "<kind>_flee_weight".)
+	var chance := Balance.num("flee_chance_" + health_word()) * Balance.num(creature.kind + "_flee_weight") * weight("flee", facts)
 	if randf() >= chance or not creature.run_from_battle():
 		return false
 	_drop_task()
@@ -477,7 +478,8 @@ func _explore() -> bool:
 ## in turn: picks at random between holding off (Balance
 ## "spell_hold_weight") and each place it could cast it, weighted by how
 ## much it is for (useful places: 1; mischief, such as fireball at a
-## villager, "mischief_weight") times its affinity for doing that. Casts
+## villager, the creature's "<kind>_mischief_weight") times its affinity
+## for doing that. Casts
 ## the first one picked.
 func _try_spells() -> bool:
 	if not is_instance_valid(Game.village) or not Game.village.founded:
@@ -505,14 +507,14 @@ func _try_spells() -> bool:
 
 ## Where the creature could cast `spell` now, each {pos, facts, base}:
 ## what it would be aimed at (see passes()) and how much it is for
-## (1 for a use the spell is meant for, Balance "mischief_weight" for
-## mischief).
+## (1 for a use the spell is meant for, its personality's Balance
+## "<kind>_mischief_weight" for mischief).
 func _spell_options(spell: String) -> Array:
 	var out: Array = []
 	var village := Game.village
 	var tree := get_tree()
 	var battle := _battle_raging()
-	var mischief := Balance.num("mischief_weight")
+	var mischief := Balance.num(creature.kind + "_mischief_weight")
 	var reach := 45.0
 	match spell:
 		"fireball":
@@ -575,11 +577,13 @@ func _spell_options(spell: String) -> Array:
 					"facts": {"target": "enemy", "enemy": _enemy_name_near(raiders, RainCloud.RADIUS * 0.6), "battle": battle}})
 			out.append({"pos": _empty_spot(), "base": mischief, "facts": {"target": "nothing", "battle": battle}})
 		"blood":
-			# A sacrifice is meant for when magicko has run low and there are
-			# people to spare; at any other time it is mischief.
+			# A sacrifice is meant for when magicko has run low, or there is
+			# no room for more villagers, and there are people to spare; at
+			# any other time it is mischief.
 			if village.population() >= 12 and not village.blood_active():
 				var low := village.amount("magicko") < Balance.num("creature_blood_magicko")
-				out.append({"pos": village.center, "base": 1.0 if low else mischief,
+				var full := village.population() >= village.housing()
+				out.append({"pos": village.center, "base": 1.0 if low or full else mischief,
 					"facts": {"magicko": village.amount("magicko"), "housing_free": village.population() < village.housing(), "battle": battle}})
 	return out
 

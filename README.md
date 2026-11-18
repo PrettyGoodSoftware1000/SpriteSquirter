@@ -234,7 +234,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    the village, it chases them, turning 30% faster in a fight. A line of
    text floats up from its head when it does something ("The creature ate
    2 goblins"). In a fight it may **run from battle**, more readily the
-   more hurt it is.
+   more hurt it is, and more readily still if that is its nature: the
+   squirrel, being nervous, runs half as readily again as the others.
    **What it learns.** Each time you cast Fireball, Rain, Roots, Chain
    Lightning or Blood Sacrifice the creature gains 25 knowledge of that spell; at 100 it has
    learned it and casts it by itself when it suits (fireball at a knot of
@@ -281,9 +282,15 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    that is not still waiting; if every one is waiting, they say how long.
    **Mischief.** Some rows are things the creature should not do: fireball
    at a villager, a tree or your own building, roots or lightning on your
-   people, a spell cast at nothing, a sacrifice when magicko is plentiful.
-   It does them now and then, rarely at first; bless one and it gets
-   likelier, condemn it and it all but stops.
+   people, a spell cast at nothing, a sacrifice when magicko is plentiful
+   and there is room for more villagers (with magicko low, or no room
+   left, a sacrifice is ordinary). It does them now and then, rarely at
+   first; bless one and it gets likelier, condemn it and it all but stops.
+   **Personality traits.** Each creature has its own mischief weight and
+   flee weight in `balancing.txt` (`tortoise_mischief_weight`,
+   `squirrel_flee_weight`, ...): how readily it does mischief and how
+   readily it runs from a fight. The notes there say what different
+   values do.
    **How it chooses.** Every choice the creature makes is made at random,
    weighted by its affinities: the higher the affinity, the likelier, and a
    low one makes a thing unlikely but never impossible. What it does under
@@ -432,7 +439,7 @@ lightning, the giant bat, the raven's flying, the balrog, the creature's stamina
 how many villagers build one building, training times, how fast farmers
 work, how much stone a boulder holds, fireball damage, how much knowledge the creature needs to learn
 each thing, the cost and cooldown of each spell it casts, the size of a bless
-or curse, how readily the creature runs from battle, and the soft
+or condemn, each creature's personality (mischief and flee weights), and the soft
 cooldown of your spells. Open it in any text editor, change a number, save, and start
 the game again. Each line reads `name = number`, with a note after `#`.
 

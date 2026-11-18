@@ -218,9 +218,20 @@ var _auto := false
 var _turning := false
 var _crouch := 0.0
 var _jaw_want := 0.0
-## Where the arms point: x outwards, y up, z forwards.
-var _arm_pose := Vector3(0.3, -1.0, 0.12)
+## Where the arms point: x outwards, y up, z forwards. Each arm follows
+## _arm_want unless _arm_one has a pose of its own for it (a punch with
+## one fist, a throw with one hand).
+var _arm_poses: Array[Vector3] = [Vector3(0.3, -1.0, 0.12), Vector3(0.3, -1.0, 0.12)]
 var _arm_want := Vector3(0.3, -1.0, 0.12)
+var _arm_one: Array = [null, null]
+## The fist the next punch is thrown with: they take turns.
+var _punch_hand := 0
+## The hand that throws (the other stays down).
+const THROW_HAND := 1
+## The magic acorn being thrown (forest seeding): where it is to land
+## (null when there is none), and how far through the throw it is.
+var _toss_to: Variant = null
+var _toss_t := 0.0
 
 ## Goblins in reach or raiders in sight.
 var _alert := false
@@ -244,7 +255,7 @@ var _hurt_timer := 0.0
 var _twitch := 0.0
 var _twitch_timer := 0.0
 var _glance_timer := 0.0
-var _fore_blend := 1.0
+var _fore_blends: Array[float] = [1.0, 1.0]
 var _say_free_at := 0.0
 ## Metres above the ground, and 0..1 how far into its flying pose it is.
 var _alt := 0.0
@@ -266,7 +277,7 @@ var _shell_think_at := 0.0
 func _ready() -> void:
 	_spec = _species()
 	max_speed = _spec.speed
-	_arm_pose = _spec.arm
+	_arm_poses = [_spec.arm, _spec.arm]
 	_arm_want = _spec.arm
 	_build()
 	_grow(0.0)
@@ -725,6 +736,7 @@ func _cancel_action() -> void:
 	_stomp_leg = -1
 	_crouch = 0.0
 	_arm_want = _spec.arm
+	_arm_one = [null, null]
 
 
 ## Takes `node` (already somewhere in the world) into its arms.
@@ -787,6 +799,7 @@ func _process(delta: float) -> void:
 	_cast_timer = maxf(0.0, _cast_timer - delta)
 	_grow(delta)
 	_update_stats(delta)
+	_update_toss(delta)
 	if hiding and (Game.now - _last_hit_at > Balance.num("shell_calm_seconds") or Game.now - _hid_at > Balance.num("shell_max_seconds")):
 		# Nothing has hit it for a while (or it cannot stay in for ever).
 		hiding = false
@@ -997,7 +1010,8 @@ func _update_attacks(delta: float) -> void:
 	var hunt_d := HUNT_RANGE
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
-		if g.state == Villager.State.HELD:
+		# (A charmed goblin is on our side for now.)
+		if g.state == Villager.State.HELD or (not hostile and g.charmed()):
 			continue
 		var d := _flat(g.global_position, global_position)
 		if d < REACH * size + 1.0:
@@ -1074,24 +1088,54 @@ func _update_attacks(delta: float) -> void:
 		_action_cooldown = 0.8
 
 
-## A blow at the other giant with both fists.
+## Forest seeding: turns to `spot` and tosses a magic acorn there with one
+## hand (see MagicAcorn).
+func toss_acorn(spot: Vector3) -> void:
+	_toss_to = spot
+	_toss_t = 0.0
+	has_target = false
+	_look_at = spot
+
+
+func _update_toss(delta: float) -> void:
+	if _toss_to == null:
+		return
+	var spot: Vector3 = _toss_to
+	var before := _toss_t
+	_toss_t += delta
+	var to := spot - global_position
+	heading = lerp_angle(heading, atan2(to.x, to.z), minf(1.0, delta * 6.0))
+	# Wind up behind the shoulder, then over and forward.
+	_arm_one[THROW_HAND] = Vector3(0.35, 0.9, -0.35) if _toss_t < 0.5 else Vector3(0.15, 0.3, 1.0)
+	if before < 0.5 and _toss_t >= 0.5:
+		MagicAcorn.toss(_hand_pos(THROW_HAND), spot)
+	if _toss_t >= 0.95:
+		_toss_to = null
+		_arm_one[THROW_HAND] = null
+
+
+## A punch at the other giant, with one fist and then the other.
 func _start_strike() -> void:
 	_action = Action.STRIKE
 	_action_t = 0.0
 	_struck = false
 	_jaw_want = 0.45
+	_punch_hand = 1 - _punch_hand
 
 
 func _update_strike(delta: float) -> void:
 	_action_t += delta
+	var other := 1 - _punch_hand
 	if _action_t < STRIKE_LANDS - 0.15:
-		# Fists up and back...
-		_arm_want = Vector3(0.45, 0.95, -0.25)
+		# The fist drawn back, the other up on guard...
+		_arm_one[_punch_hand] = Vector3(0.5, 0.45, -0.5)
+		_arm_one[other] = Vector3(0.2, 0.2, 0.9)
 		_crouch = 0.0
 	else:
-		# ...and down on its head.
-		_arm_want = Vector3(0.12, -0.25, 1.0)
-		_crouch = 0.35
+		# ...and thrown at its head, the guard pulled back.
+		_arm_one[_punch_hand] = Vector3(0.0, 0.2, 1.0)
+		_arm_one[other] = Vector3(0.35, -0.1, 0.45)
+		_crouch = 0.3
 	if not _struck and _action_t >= STRIKE_LANDS:
 		_struck = true
 		var rival := _rival()
@@ -1102,10 +1146,12 @@ func _update_strike(delta: float) -> void:
 			Game.shake(0.7 * size, at)
 	if _action_t >= STRIKE_TIME:
 		_action = Action.NONE
-		_action_cooldown = 1.0
+		# (Quick to follow up with the other fist.)
+		_action_cooldown = 0.5
 		_crouch = 0.0
 		_jaw_want = 0.0
 		_arm_want = _spec.arm
+		_arm_one = [null, null]
 
 
 ## A stomp hurts everything round the foot, so it is only allowed when no
@@ -1239,10 +1285,15 @@ func _start_grab(near: Array[Villager]) -> void:
 
 
 ## Reach down, pick the goblins up, then eat them one by one or hurl them.
+## Eating takes both hands; a throw is with one (THROW_HAND), the other
+## hanging at its side.
 func _update_grab(delta: float) -> void:
 	var before := _action_t
 	_action_t += delta
 	var t := _action_t
+	if not _eating:
+		# Whatever the throwing arm is told below, the other stays down.
+		_arm_one[1 - THROW_HAND] = _spec.arm
 	if t < 0.7:
 		_crouch = 1.0
 		_arm_want = Vector3(0.2, -0.75, 0.9)
@@ -1291,7 +1342,9 @@ func _update_grab(delta: float) -> void:
 		var g := _held[i]
 		if not is_instance_valid(g) or g.state != Villager.State.HELD:
 			continue
-		var hand := _hand_pos(i % 2) + Vector3(0.0, -0.6 + 0.35 * (i >> 1), 0.0) * size
+		# (In both fists to eat; all in one to throw.)
+		var hand := _hand_pos(i % 2) + Vector3(0.0, -0.6 + 0.35 * (i >> 1), 0.0) * size if _eating \
+			else _hand_pos(THROW_HAND) + Vector3(0.0, -0.5 + 0.25 * i, 0.0) * size
 		if _eating and t > 1.5:
 			hand = hand.lerp(mouth, 0.6)
 		g.global_position = _held_from[i].lerp(hand, lift)
@@ -1309,6 +1362,7 @@ func _end_grab() -> void:
 	_crouch = 0.0
 	_jaw_want = 0.0
 	_arm_want = _spec.arm
+	_arm_one = [null, null]
 
 
 func _hand_pos(k: int) -> Vector3:
@@ -1402,13 +1456,15 @@ func _update_body(delta: float) -> void:
 	if prone > 0.0:
 		# Both front paws reach and pull together, one a little behind.
 		swing_targets = [lerpf(swing_targets[0], 0.75 * sin(_gallop + 1.6), prone), lerpf(swing_targets[1], 0.75 * sin(_gallop + 2.1), prone)]
-	_arm_pose = _arm_pose.lerp(_arm_want, 1.0 - exp(-9.0 * delta))
-	_fore_blend = lerpf(_fore_blend, 1.0 if _arm_want == _spec.arm else 0.0, blend)
 	for k in 2:
+		var aim: Vector3 = _arm_one[k] if _arm_one[k] != null else _arm_want
+		_arm_poses[k] = _arm_poses[k].lerp(aim, 1.0 - exp(-9.0 * delta))
+		_fore_blends[k] = lerpf(_fore_blends[k], 1.0 if aim == _spec.arm else 0.0, blend)
+		var arm_pose := _arm_poses[k]
 		var side := "l" if k == 0 else "r"
 		_arm_swing[k] = lerpf(_arm_swing[k], swing_targets[k], blend)
 		var rest_dir: Vector3 = (_rest["arm_lower_" + side] - _rest["arm_upper_" + side]).normalized()
-		var hang := Vector3(_side(k) * _arm_pose.x, _arm_pose.y, _arm_pose.z).normalized()
+		var hang := Vector3(_side(k) * arm_pose.x, arm_pose.y, arm_pose.z).normalized()
 		var upper := Quaternion(Vector3.RIGHT, _arm_swing[k]) * Quaternion(rest_dir, hang)
 		_skel.set_bone_pose_rotation(_bone["arm_upper_" + side], upper)
 		var bend: float = _spec.elbow * (1.0 - 0.6 * prone) - 0.3 * maxf(-_arm_swing[k], 0.0) - 0.1 * pace
@@ -1419,7 +1475,7 @@ func _update_body(delta: float) -> void:
 			var fore: Vector3 = _spec.fore
 			var want := upper.inverse() * Vector3(_side(k) * fore.x, fore.y, fore.z).normalized()
 			var rest_lower: Vector3 = (_rest["hand_" + side] - _rest["arm_lower_" + side]).normalized()
-			lower = lower.slerp(Quaternion(rest_lower, want), _fore_blend)
+			lower = lower.slerp(Quaternion(rest_lower, want), _fore_blends[k])
 		_skel.set_bone_pose_rotation(_bone["arm_lower_" + side], lower)
 
 	# Tail: a lazy wave that trails behind turns and bounces with each step.

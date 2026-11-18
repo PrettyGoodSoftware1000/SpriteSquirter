@@ -60,6 +60,7 @@ const DEFAULTS := {
 	"brought_food": "The creature brought food to the storehouse: +{amount} food",
 	"stomped": "The creature stomped {them}",
 	"threw": "The creature threw {them}",
+	"forest_seeded": "The creature tossed a magic acorn!",
 	"ate": "The creature ate {them}",
 	"fled": "The creature ran from the battle!",
 	"cast_water": "The creature cast rain on the crops",

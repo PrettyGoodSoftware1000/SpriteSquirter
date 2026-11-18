@@ -37,6 +37,8 @@ func _run() -> void:
 	Balance.values["bonus_knowledge_chance"] = 0.0
 	# Untrained creatures now run from a fight now and then; the tests want them to stay.
 	Balance.values["flee_chance"] = 0.0
+	# No saplings until their own checks (so the trees stay as they were).
+	game.settings.sapling_rate = 0.0
 	# No balrog until its own checks at the end, and the tortoise keeps
 	# out of its shell until then too.
 	Balance.values["balrogs"] = 0.0
@@ -151,8 +153,8 @@ func _run() -> void:
 		var magicko_before := village.amount("magicko")
 		# Spells are researched at the Shrine first.
 		play._spell_key(gnomes)
-		_check(play._armed < 0 and not village.knows_spell("gnomes") and village.knows_spell("fireball") and village.knows_spell("bless"),
-			"a spell must be researched before it is cast (Fireball, Bless and Condemn need none)")
+		_check(play._armed < 0 and not village.knows_spell("gnomes") and not village.knows_spell("fireball") and village.spell_order.is_empty()
+			and not play.hud._spell_slots[gnomes].visible, "every spell must be researched before it is on the spell bar or cast")
 		_check(village.shrines().is_empty() and village.start_spell_research("gnomes") != "", "spells are researched at a Shrine")
 		var shrine := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
 		game.world_root.add_child(shrine)
@@ -162,16 +164,23 @@ func _run() -> void:
 		play._on_left_click()
 		_check(play.hud.is_spell_research_open(), "clicking a Shrine opens its spell research")
 		play.hud.show_spell_research(false)
-		village.give("animus", 10.0)
-		var animus_before := village.amount("animus")
-		_check(village.start_spell_research("gnomes") == "" and village.amount("animus") == animus_before - roundi(Balance.num("spell_research_gnomes_animus")),
-			"researching a spell costs animus")
+		village.give("magicko", 100.0)
+		var magicko_then := village.amount("magicko")
+		_check(village.start_spell_research("gnomes") == "" and village.amount("magicko") == magicko_then - 50,
+			"researching a spell costs 50 magicko")
 		_check(village.start_spell_research("rain") != "", "one spell at a time")
 		village.spell_research.t = SpellBook.research_seconds("gnomes") - 0.5
 		await _wait(1.0)
-		_check(village.knows_spell("gnomes") and not village.knows_spell("rain"), "the Shrine teaches the spell")
+		_check(village.knows_spell("gnomes") and not village.knows_spell("rain") and village.spell_order == ["gnomes"]
+			and play.hud._spell_slots[gnomes].visible, "the Shrine teaches the spell, and it appears on the spell bar")
 		village.learn_all_spells()
-		_check(village.knows_spell("rain") and village.knows_spell("lightning"), "the dev menu can teach every spell")
+		play.hud.set_spell_order(village.spell_order)
+		_check(village.knows_spell("rain") and village.knows_spell("charm") and village.spell_order[0] == "gnomes",
+			"the dev menu can teach every spell (after the ones already known)")
+		# The spell bar's order can be changed, and the keys follow it.
+		play.hud.spell_moved.emit(SpellBook.index_of("fireball"), gnomes)
+		_check(village.spell_order[0] == "fireball" and village.spell_order[1] == "gnomes" and play._key_of(SpellBook.index_of("fireball")) == 1
+			and play.hud._spell_keys[SpellBook.index_of("fireball")].text == "1", "dragging a spell on the bar moves it, and its key with it")
 		shrine.queue_free()
 		play._cursor_hit = spot
 		magicko_before = village.amount("magicko")
@@ -253,12 +262,14 @@ func _run() -> void:
 	_check(village.soldiers() == 0 and village.training_progress("warrior").is_empty(), "warriors go back to work when no longer wanted")
 
 	# Wizards: a Wizardry tower (the Moon tower) trains them; they make magicko.
+	# (The village site may have come with towers of its own.)
+	var wizards_allowed := village.max_count("wizard")
 	var rocks := BuildingFactory.create("moon_tower", RandomNumberGenerator.new())
 	game.world_root.add_child(rocks)
 	rocks.set_meta("kind", "moon_tower")
 	rocks.global_position = village.center + Vector3(-12, 0, 10)
 	rocks.add_to_group("player_buildings")
-	_check(village.max_count("wizard") == PlayerVillage.WIZARDS_PER_ROCKS, "a Wizardry tower allows 2 wizards")
+	_check(village.max_count("wizard") == wizards_allowed + PlayerVillage.WIZARDS_PER_ROCKS, "a Wizardry tower allows 2 wizards (%d)" % village.max_count("wizard"))
 	village.set_wanted("wizard", 1)
 	# Training pauses while the recruit fights or flees, so allow for a raid.
 	for k in 30:
@@ -774,7 +785,14 @@ func _run() -> void:
 	play.creature.mind.process_mode = Node.PROCESS_MODE_INHERIT
 	await _wait(0.5)
 
-	# A giant bat carries a villager off to the cave during a raid.
+	# A giant bat carries a villager off to the cave during a raid. (With
+	# nobody to shoot it down: archers and wizards always go for a bat.)
+	village.set_wanted("wizard", 0)
+	village.set_wanted("archer", 0)
+	village.set_wanted("necromancer", 0)
+	for node in get_tree().get_nodes_in_group("skeletons"):
+		node.queue_free()
+	await _wait(1.0)
 	var before_bat := village.population()
 	play.raids.raiding = true
 	var bat := play.raids.launch_bat()
@@ -787,17 +805,113 @@ func _run() -> void:
 			await _wait(2.0)
 			if not is_instance_valid(bat):
 				break
-		_check(taken[0] and village.population() == before_bat - 1, "it snatches a villager and takes it into the cave (%d -> %d)" % [before_bat, village.population()])
+		_check(taken[0] and village.population() == before_bat - 1, "it snatches a villager and takes it into the cave (%d -> %d, shot down %s)" % [
+			before_bat, village.population(), is_instance_valid(bat) and not bat.is_alive()])
 	var doomed := play.raids.launch_bat()
 	if doomed:
 		doomed.take_hit(Balance.num("bat_health") + 1.0, null)
 		_check(not doomed.is_alive() and not doomed.is_in_group("bats"), "a bat with no health left falls out of the sky")
 	play.raids.raiding = false
 
+	# Saplings: a planted one is not a tree to chop until it has grown.
+	var sprout_at := village.center + Vector3(30, 0, -26)
+	sprout_at.y = game.terrain.get_height(sprout_at.x, sprout_at.z)
+	var sprout := Sapling.plant(sprout_at)
+	await _wait(0.2)
+	_check(sprout.is_in_group("saplings") and not sprout.is_in_group("trees") and sprout.scale.x < 0.3, "a sapling starts small, and is not chopped")
+	(sprout.get_node("Sapling") as Sapling)._age = 1.0e9
+	await _wait(1.2)
+	_check(sprout.is_in_group("trees") and not sprout.is_in_group("saplings") and sprout.scale.x > 0.8, "a sapling grows into a tree")
+	var saplings_before := get_tree().get_nodes_in_group("saplings").size()
+	game.settings.sapling_rate = 60.0
+	var knelt := false
+	var most_kneeling := 0.0
+	for k in 70:
+		await _wait(1.0)
+		for v in village.people():
+			knelt = knelt or v.job == "plant"
+		for v in village._planting:
+			most_kneeling = maxf(most_kneeling, village._planting[v])
+		if get_tree().get_nodes_in_group("saplings").size() > saplings_before:
+			break
+	game.settings.sapling_rate = 0.0
+	_check(knelt and get_tree().get_nodes_in_group("saplings").size() > saplings_before, "villagers kneel and plant saplings (knelt %s for up to %.0f s, %d saplings, %d sites)" % [
+		knelt, most_kneeling, get_tree().get_nodes_in_group("saplings").size(), get_tree().get_nodes_in_group("construction_sites").size()])
+	for node in get_tree().get_nodes_in_group("saplings"):
+		node.queue_free()
+
+	# Charm Offensive: half the goblins caught in it fight their own kind.
+	var charm_at := village.center + Vector3(-40, 0, 30)
+	charm_at.y = game.terrain.get_height(charm_at.x, charm_at.z)
+	var pair: Array[Villager] = []
+	for k in 2:
+		pair.append(WorldPopulator.spawn_villager(game.world_root, game.terrain, charm_at, 2.0, true))
+	await _wait(0.2)
+	Balance.values["charm_share"] = 1.0
+	pair[0].global_position = charm_at
+	pair[1].global_position = charm_at + Vector3(30, 0, 0)
+	var charm := CharmOffensive.new()
+	game.world_root.add_child(charm)
+	var charmed_count := charm.cast(charm_at)
+	Balance.values["charm_share"] = Balance.DEFAULTS["charm_share"]
+	_check(charmed_count == 1 and pair[0].charmed() and not pair[1].charmed() and pair[0]._pink_eyes.size() == 2,
+		"Charm Offensive charms the goblins in it, and their eyes turn pink")
+	_check(pair[0]._nearest_goblin(100.0) == pair[1] and pair[1]._nearest_goblin(100.0) != pair[0], "a charmed goblin goes for its own kind")
+	pair[0].charmed_until = 0.0
+	await _wait(0.6)
+	_check(not pair[0].charmed() and pair[0]._pink_eyes.is_empty(), "the charm wears off")
+	for g in pair:
+		g.queue_free()
+
+	# A giant bat falls to a single arrow, and drops its villager.
+	var downed := GiantBat.new()
+	downed.cave = Node3D.new()
+	game.world_root.add_child(downed.cave)
+	game.world_root.add_child(downed)
+	downed.global_position = village.center + Vector3(0, 12, 0)
+	downed.take_hit(1.0, village.people()[0])
+	_check(not downed.is_alive(), "one arrow or firebolt brings a giant bat down")
+	downed.cave.queue_free()
+
+	# The magic tree: magicko from it, rising as it grows, seeds and pixies.
+	var magic := MagicTree.new()
+	game.world_root.add_child(magic)
+	magic.global_position = village.center + Vector3(-30, 0, -30)
+	var tiny_rate := magic.magicko_rate()
+	magic._age = 1.0e9
+	await _wait(0.2)
+	_check(is_equal_approx(tiny_rate, 5.0) and is_equal_approx(magic.magicko_rate(), 50.0), "a magic tree gives 5 magicko a second tiny, 50 full grown")
+	var magicko_now := village.amount("magicko")
+	await _wait(1.0)
+	_check(village.amount("magicko") >= magicko_now + 40, "and the village gets it (%d more in a second)" % (village.amount("magicko") - magicko_now))
+	magic._pixie_due = 0.0
+	magic._drop_seed()
+	await _wait(3.0)
+	var pixies := 0
+	for child in magic.get_children():
+		if child is Pixie:
+			pixies += 1
+	_check(pixies == 1, "pixies fly about the magic tree")
+	_check(not get_tree().get_nodes_in_group("saplings").is_empty(), "the magic tree drops seeds that become saplings")
+	_check(not magic.is_in_group("trees"), "nobody can chop the magic tree")
+	magic.queue_free()
+	for node in get_tree().get_nodes_in_group("saplings"):
+		node.queue_free()
+
+	# Punches take turns between the fists.
+	beast._start_strike()
+	var first_fist := beast._punch_hand
+	beast._action = Creature.Action.NONE
+	beast._start_strike()
+	_check(beast._punch_hand != first_fist, "the creature punches with one fist and then the other")
+	beast._action = Creature.Action.NONE
+	beast._arm_one = [null, null]
+
 	# Bless and Curse: the key takes the spell in hand and says what the
 	# creature last did; a click casts it; the key again puts it away. Each
 	# thing it does is judged once.
 	var bless := SpellBook.index_of("bless")
+	village.learn_all_spells()
 	beast.mind.did("explore")
 	play._spell_key(bless)
 	_check(play._armed == bless and play._judge_prompt and play.hud._prompt.text.contains("exploring"), "pressing Bless shows the creature's last action")
@@ -1229,6 +1343,30 @@ func _run() -> void:
 	await _wait(1.0)
 	_check(not squirrel.running and squirrel.has_target, "out of stamina, it drops back to a walk")
 	squirrel.has_target = false
+	# Forest seeding: a magic acorn within half the influence of the centre,
+	# then a 15, 30 and 60 minute wait; Bless and Condemn count 30 for it.
+	var smind := squirrel.mind
+	var seed_at: Variant = smind.seed_spot()
+	var sv := play.village
+	_check(seed_at != null and Vector2((seed_at as Vector3).x - sv.center.x, (seed_at as Vector3).z - sv.center.z).length() <= sv.influence() * 0.5,
+		"the squirrel finds a spot for a magic tree within half the influence")
+	if seed_at != null:
+		squirrel.toss_acorn(seed_at)
+		await _wait(3.0)
+		var grew := false
+		for node in get_tree().get_nodes_in_group("magic_trees"):
+			grew = grew or (node as Node3D).global_position.distance_to(seed_at) < 1.0
+		_check(grew, "the squirrel tosses a magic acorn, and a magic tree grows where it lands")
+	var waits: Array[int] = []
+	for k in 3:
+		smind.seeded()
+		waits.append(roundi((smind.seed_ready_at - Game.now) / 60.0))
+	_check(waits == [15, 30, 60], "forest seeding waits 15, then 30, then 60 minutes (%s)" % str(waits))
+	smind.did("seed", {"battle": false})
+	var seed_before: float = smind.behavior.get(smind.judge_target(), 0.0)
+	var seed_action := smind.judge_target()
+	smind.judge(1)
+	_check(seed_action != "" and is_equal_approx(smind.behavior[seed_action], seed_before + 30.0), "Bless counts 30 for forest seeding (%s)" % seed_action)
 
 	# 6. The raven, which flies, and the goblins' balrog.
 	game.creature_kind = "raven"

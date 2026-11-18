@@ -3,8 +3,8 @@ extends Node3D
 ## A giant armoured bat that flies out of a goblin cave during a raid,
 ## snatches one of the player's villagers at random and carries it back to
 ## the cave, where the villager is lost. A fireball or chain lightning can
-## bring it down (Balance "bat_health"); the villager it was carrying then
-## drops and lives. GoblinRaids launches them: set `cave` first.
+## bring it down (Balance "bat_health"), and a single arrow or wizard's
+## firebolt always does; the villager it was carrying then drops and lives. GoblinRaids launches them: set `cave` first.
 
 signal took(victim: Villager)
 
@@ -47,6 +47,9 @@ func go_home() -> void:
 func take_hit(amount: float, _from: Node3D) -> void:
 	if state == State.FALL:
 		return
+	# One arrow or firebolt from the village's archers and wizards is enough.
+	if _from is Villager:
+		amount = maxf(amount, hp)
 	hp -= amount
 	if hp > 0.0:
 		return

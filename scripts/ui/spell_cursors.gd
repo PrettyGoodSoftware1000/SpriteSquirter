@@ -89,6 +89,10 @@ static func _draw(id: String) -> Image:
 		"bless":
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 20.0, 5.0), Color(1.0, 0.85, 0.25))
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 9.0, 3.0), Color(1.0, 0.98, 0.8), false)
+		"charm":
+			# A pink heart with a shine on it.
+			_shape(img, func(p: Vector2) -> float: return _heart(p, Vector2(24, 25), 1.0), Color(1.0, 0.42, 0.7))
+			_shape(img, func(p: Vector2) -> float: return p.distance_to(Vector2(17, 17)) - 3.2, Color(1.0, 0.85, 0.93), false)
 		"condemn":
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 20.0, 5.0), Color(0.75, 0.06, 0.1))
 			_shape(img, func(p: Vector2) -> float: return p.distance_to(Vector2(24, 24)) - 4.5, Color(0.2, 0.0, 0.05), false)
@@ -125,6 +129,15 @@ static func _flame(p: Vector2, base: Vector2, r1: float, r2: float, tall: float)
 	if k > a * tall:
 		return q.distance_to(Vector2(0.0, tall)) - r2
 	return q.dot(Vector2(a, b)) - r1
+
+
+## A heart centred on `c`, about 36 pixels across at `s` 1: two round lobes
+## over a point.
+static func _heart(p: Vector2, c: Vector2, s: float) -> float:
+	var q := (p - c) / s
+	var lobes := minf(q.distance_to(Vector2(-7.5, -6.0)) - 9.5, q.distance_to(Vector2(7.5, -6.0)) - 9.5)
+	var point := (absf(q.x) + absf(q.y - 1.0)) / sqrt(2.0) - 11.5
+	return minf(lobes, maxf(point, -q.y - 6.0)) * s
 
 
 static func _segment(p: Vector2, a: Vector2, b: Vector2) -> float:

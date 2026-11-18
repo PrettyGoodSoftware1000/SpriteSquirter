@@ -50,5 +50,7 @@ func _process(delta: float) -> void:
 
 
 func _alive() -> bool:
+	if _target is GiantBat:
+		return (_target as GiantBat).is_alive()
 	var giant := _target as Creature
 	return not giant.knocked_out if giant else (_target as Villager).is_alive()

@@ -794,8 +794,6 @@ static func _build_goblin_hut(b: Destructible, rng: RandomNumberGenerator) -> fl
 
 # --- Treehouse ------------------------------------------------------------------
 
-const CROWN_COLORS := [Color(0.86, 0.2, 0.56), Color(0.52, 0.26, 0.82), Color(0.98, 0.56, 0.12), Color(0.24, 0.36, 0.86),
-	Color(0.95, 0.76, 0.16), Color(0.7, 0.16, 0.42)]
 const ROPE := Color(0.76, 0.62, 0.4)
 const BONE := Color(0.9, 0.86, 0.72)
 const INK := Color(0.04, 0.03, 0.05)
@@ -827,10 +825,11 @@ static func _tree_body(b: Destructible, rng: RandomNumberGenerator, deck: float,
 	var noise := FastNoiseLite.new()
 	noise.seed = rng.randi()
 	noise.frequency = 0.3
-	var first := rng.randi() % CROWN_COLORS.size()
+	# The leaves take the nature palette's colours, like the trees around
+	# them (one bunch a shade darker than the other).
 	var leaves := [MeshBuilder.new(), MeshBuilder.new()]
-	leaves[0].color = CROWN_COLORS[first]
-	leaves[1].color = CROWN_COLORS[(first + 1 + rng.randi() % (CROWN_COLORS.size() - 1)) % CROWN_COLORS.size()]
+	leaves[0].color = Color(1, 1, 1)
+	leaves[1].color = Color(0.86, 0.86, 0.86)
 	leaves[0].add_blob(Vector3(3.2, 2.3, 3.2) * spread * rng.randf_range(0.92, 1.08), Transform3D(Basis(), crown + Vector3(0, 1.3, 0)), noise, 0.2, 9, 14)
 	var boughs := rng.randi_range(3, 4)
 	var spin := rng.randf() * TAU
@@ -844,9 +843,8 @@ static func _tree_body(b: Destructible, rng: RandomNumberGenerator, deck: float,
 		var r := rng.randf_range(1.7, 2.2) * spread
 		leaves[(k + 1) % 2].add_blob(Vector3(r, r * 0.8, r), Transform3D(Basis(), tip + Vector3(0, r * 0.45, 0)), noise, 0.2, 8, 12)
 	_part(b, mb.commit(), Art.paint("bark"))
-	var leaf := Art.surface("hide", Color(1, 1, 1), Color(0.8, 0.8, 0.8), {"ink": 0.45})
 	for builder: MeshBuilder in leaves:
-		_part(b, builder.commit(), leaf)
+		_part(b, builder.commit(), Art.nature("leaf"))
 	return crown
 
 

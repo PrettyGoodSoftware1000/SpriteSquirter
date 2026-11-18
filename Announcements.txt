@@ -60,6 +60,7 @@ stomped = The creature stomped {them}
 threw = The creature threw {them}
 ate = The creature ate {them}
 fled = The creature ran from the battle!
+forest_seeded = The creature tossed a magic acorn!
 cast_water = The creature cast rain on the crops
 hid_in_shell = The {creature} hid in its shell ({health}% health)
 gnomes_came = Gnomish Subcontractors are on their way!

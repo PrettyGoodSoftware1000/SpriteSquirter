@@ -66,6 +66,12 @@ var _ready_at := {}
 var _judged_at := {}
 ## The fetching job under way: {"kind", "action", "node", "stage"}, or empty.
 var _task := {}
+## Forest seeding: how many magic acorns it has thrown, and when (Game.now)
+## it may throw the next.
+var seeds_thrown := 0
+var seed_ready_at := 0.0
+## How far it throws a magic acorn.
+const SEED_THROW := 14.0
 var _think_timer := 1.0
 var _idle_timer := 8.0
 var _flee_timer := FLEE_CHECK_SECONDS
@@ -314,6 +320,9 @@ func judge(sign_value: int) -> String:
 		var general: Array = ActionTable.column(last_action)
 		return Texts.line("judge_cooling", {"creature": who, "action": describe(general.back().id), "seconds": ceili(soonest_judgement())})
 	var points := Balance.num("bless_points") if sign_value > 0 else -Balance.num("condemn_points")
+	# A rare action can count for more: Balance "<action>_judge_points".
+	if Balance.num(last_action + "_judge_points") > 0.0:
+		points = Balance.num(last_action + "_judge_points") * signf(sign_value)
 	behavior[target] = clampf(behavior.get(target, 0.0) + points, -100.0, 100.0)
 	_judged_at[target] = Game.now
 	var value := roundi(behavior[target])
@@ -400,7 +409,7 @@ func _enemy_close() -> bool:
 	var near := Creature.REACH * creature.size + 6.0
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
-		if g.is_alive() and g.state != Villager.State.HELD and creature._flat(g.global_position, creature.global_position) < near:
+		if g.is_alive() and g.state != Villager.State.HELD and not g.charmed() and creature._flat(g.global_position, creature.global_position) < near:
 			return true
 	var rival := creature._rival()
 	return rival != null and creature._flat(rival.global_position, creature.global_position) - 2.0 * rival.size < near
@@ -448,6 +457,11 @@ func _choose_idle() -> void:
 		return
 	var options := {"wander": Balance.num("wander_weight"), "explore": Balance.num("explore_weight") * weight("explore", {"battle": _battle_raging()})}
 	var facts := {}
+	# The squirrel's forest seeding: rare (Balance "forest_seed_weight"),
+	# as keen as its nature and training, and only off its cooldown.
+	if creature.kind == "squirrel" and Game.now >= seed_ready_at and is_instance_valid(Game.village) and Game.village.founded:
+		facts["seed"] = {"battle": _battle_raging()}
+		options["seed"] = Balance.num("forest_seed_weight") * personality("forestSeeder") * weight("seed", facts["seed"])
 	if creature.size >= 0.3:
 		for kind: String in HARVESTS:
 			if learned(kind) and _harvest_target(kind) != null:
@@ -460,8 +474,79 @@ func _choose_idle() -> void:
 		"explore":
 			if not _explore():
 				_wander()
+		"seed":
+			var spot: Variant = seed_spot()
+			if spot == null:
+				_wander()
+			else:
+				_task = {"kind": "seed", "spot": spot, "facts": facts["seed"], "stage": "go"}
 		_:
 			_task = {"kind": choice, "facts": facts[choice], "node": _harvest_target(choice), "stage": "go"}
+
+
+# --- Forest seeding (the squirrel) -----------------------------------------------
+
+## Somewhere to plant a magic tree: within half the village's influence of
+## its centre, on dry, level ground clear of buildings, trees and fields,
+## and well away from any other magic tree. Null if nowhere is found.
+func seed_spot() -> Variant:
+	var village := Game.village
+	if not is_instance_valid(village) or not village.founded:
+		return null
+	var terrain := Game.terrain
+	var reach := village.influence() * 0.5
+	for attempt in 24:
+		var a := randf() * TAU
+		var p := village.center + Vector3(cos(a), 0.0, sin(a)) * sqrt(randf()) * reach
+		if not terrain.is_inside(p.x, p.z) or not terrain.is_dry(p.x, p.z) or terrain.get_normal(p.x, p.z).y < 0.85:
+			continue
+		p.y = terrain.get_height(p.x, p.z)
+		if village._crowded(p, get_tree()):
+			continue
+		var crowded := false
+		for node in get_tree().get_nodes_in_group("buildings") + get_tree().get_nodes_in_group("construction_sites"):
+			var b := node as Node3D
+			var footprint: float = b.get("footprint") if b.get("footprint") != null else 4.0
+			if Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < footprint + 6.0:
+				crowded = true
+				break
+		for node in get_tree().get_nodes_in_group("magic_trees"):
+			if Vector2((node as Node3D).global_position.x - p.x, (node as Node3D).global_position.z - p.z).length() < 20.0:
+				crowded = true
+				break
+		if not crowded:
+			return p
+	return null
+
+
+## Off to where the magic tree is to go, then the acorn is thrown there.
+func _update_seeding() -> void:
+	var spot: Vector3 = _task.spot
+	if _task.stage == "go":
+		var d := Vector2(spot.x - creature.global_position.x, spot.z - creature.global_position.z).length()
+		if d > SEED_THROW:
+			if not creature.has_target or creature.target.distance_to(spot) > 1.0:
+				creature.auto_move(spot)
+			return
+		creature.has_target = false
+		creature.toss_acorn(spot)
+		seeded()
+		did("seed", _task.facts, Texts.line("forest_seeded"))
+		_task.stage = "toss"
+		_task.t = Game.now
+		return
+	if Game.now - float(_task.t) > 1.5:
+		_task = {}
+		_away = true
+		_idle_timer = randf_range(4.0, 8.0)
+
+
+## A magic acorn has been thrown: the next must wait Balance
+## "forest_seed_cooldown_1" minutes after the first, "..._2" after the
+## second and "..._3" after any more.
+func seeded() -> void:
+	seeds_thrown += 1
+	seed_ready_at = Game.now + Balance.num("forest_seed_cooldown_%d" % mini(seeds_thrown, 3)) * 60.0
 
 
 ## A short walk to somewhere near home. (This is not exploring.)
@@ -787,6 +872,9 @@ func _update_task() -> void:
 		return
 	var kind: String = _task.kind
 	var village := Game.village
+	if kind == "seed":
+		_update_seeding()
+		return
 	if not is_instance_valid(village) or not is_instance_valid(_task.node):
 		_drop_task()
 		return

@@ -31,6 +31,8 @@ signal jobs_changed(role: String, change: int)
 signal quota_changed(kind: String, change: int)
 signal research_menu_requested
 signal research_selected(id: String)
+## Spell `index` was dragged onto spell `onto` on the spell bar.
+signal spell_moved(index: int, onto: int)
 ## A spell picked in the Shrine's research menu.
 signal spell_research_selected(id: String)
 ## The dev menu's "Learn all spells".
@@ -61,6 +63,7 @@ const SETTING_SLIDERS := [
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 	["goblin_build_speed", "Goblin build speed", 0.25, 10.0, 0.25, "x"],
+	["sapling_rate", "Saplings planted", 0.0, 20.0, 0.5, "a minute"],
 	["villager_detail", "Villager detail within", 0.0, 300.0, 10.0, "m"],
 	["construction_rate", "Construction rate", 0.25, 10.0, 0.25, "x"],
 	["training_time", "Training time", 0.1, 3.0, 0.1, "x"],
@@ -92,8 +95,11 @@ var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_costs: Array[Label] = []
 var _spell_sparkles: Array[SpellSparkles] = []
-## The "Research" tag over a spell that has not been researched yet.
-var _spell_locks: Array[Label] = []
+## Each spell's square and cost (shown only once it is known, in
+## the village's order), and the key number in its corner.
+var _spell_slots: Array[Control] = []
+var _spell_keys: Array[Label] = []
+var _spell_row: HBoxContainer
 var _spell_research_panel: PanelContainer
 var _spell_research_title: Label
 var _spell_research_rows := {}
@@ -317,16 +323,25 @@ func _build_spell_bar(root: Control) -> void:
 	menus.add_child(research)
 	# Each spell is a square with its sign (the one the mouse pointer turns
 	# into when it is in hand), its key in the corner and its cost underneath.
+	# Only the spells the village knows are shown, in its order; drag one
+	# onto another to move it there.
+	_spell_row = HBoxContainer.new()
+	_spell_row.add_theme_constant_override("separation", 8)
+	row.add_child(_spell_row)
 	for k in SpellBook.SPELLS.size():
 		var spell: Dictionary = SpellBook.SPELLS[k]
 		var slot := VBoxContainer.new()
 		slot.add_theme_constant_override("separation", 1)
-		row.add_child(slot)
-		var b := _button("")
+		slot.visible = false
+		_spell_row.add_child(slot)
+		var b := SpellButton.new()
+		b.spell_index = k
+		b.on_drop = func(from: int, onto: int) -> void: spell_moved.emit(from, onto)
+		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
 		b.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE)
 		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		b.tooltip_text = "%s (key %d): %s" % [spell.name, k + 1, spell.hint]
+		b.tooltip_text = "%s: %s" % [spell.name, spell.hint]
 		var icon := TextureRect.new()
 		icon.texture = spell_icon(spell.id)
 		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -338,14 +353,6 @@ func _build_spell_bar(root: Control) -> void:
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(icon)
-		var lock := _text("Research", 13)
-		lock.set_anchors_preset(Control.PRESET_FULL_RECT)
-		lock.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lock.add_theme_color_override("font_outline_color", Color.BLACK)
-		lock.add_theme_constant_override("outline_size", 4)
-		lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lock.visible = false
-		b.add_child(lock)
 		var key := _text(str(k + 1), 13)
 		key.position = Vector2(6, 2)
 		key.modulate = Color(1, 1, 1, 0.7)
@@ -367,7 +374,8 @@ func _build_spell_bar(root: Control) -> void:
 		_spell_buttons.append(b)
 		_spell_costs.append(cost_label)
 		_spell_sparkles.append(sparkles)
-		_spell_locks.append(lock)
+		_spell_slots.append(slot)
+		_spell_keys.append(key)
 	# The creature's health, stamina and magicko, to the right of the spells.
 	var stats := VBoxContainer.new()
 	stats.add_theme_constant_override("separation", 3)
@@ -431,7 +439,6 @@ func _build_build_menu(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	_build_panel.add_child(box)
-	box.add_child(_heading("Build  (pick one, then place its outline or draw the field;  B / Esc to close)"))
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 8)
@@ -464,11 +471,6 @@ func _build_build_menu(root: Control) -> void:
 		b.pressed.connect(func() -> void: build_selected.emit(kind))
 		grid.add_child(b)
 		_build_buttons[kind] = b
-	var note := Label.new()
-	note.text = "Up to 5 villagers build each building: your Builders first, then unassigned Workers. The more a building costs, the longer it takes.\nWith no Storehouse, villagers carry what they gather to the middle of the village. What each building is for, and what it is called, can be changed in Names.txt."
-	note.add_theme_font_size_override("font_size", 13)
-	note.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(note)
 
 
 ## The Blacksmith's research: one button for each thing to learn, with what
@@ -563,12 +565,17 @@ func _build_spell_research_menu(root: Control) -> void:
 	_spell_research_panel.add_child(box)
 	_spell_research_title = _heading("")
 	box.add_child(_spell_research_title)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 8)
+	box.add_child(grid)
 	for spell in SpellBook.SPELLS:
 		if not SpellBook.needs_research(spell.id):
 			continue
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		box.add_child(row)
+		grid.add_child(row)
 		var icon := TextureRect.new()
 		icon.texture = spell_icon(spell.id)
 		icon.custom_minimum_size = Vector2(56, 56)
@@ -577,7 +584,7 @@ func _build_spell_research_menu(root: Control) -> void:
 		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(icon)
 		var b := _button("")
-		b.custom_minimum_size = Vector2(430, 70)
+		b.custom_minimum_size = Vector2(300, 70)
 		var cost := SpellBook.research_cost(spell.id)
 		var lines: Array[Control] = [_text(spell.name, 16), _text("Takes %s min" % _number(SpellBook.research_seconds(spell.id) / 60.0), 13)]
 		if not cost.is_empty():
@@ -589,18 +596,18 @@ func _build_spell_research_menu(root: Control) -> void:
 		row.add_child(b)
 		var state := VBoxContainer.new()
 		state.alignment = BoxContainer.ALIGNMENT_CENTER
-		state.custom_minimum_size.x = 130
+		state.custom_minimum_size.x = 90
 		row.add_child(state)
 		var status := _text("", 15)
 		state.add_child(status)
 		var bar := ProgressBar.new()
 		bar.show_percentage = false
 		bar.max_value = 1.0
-		bar.custom_minimum_size = Vector2(130, 8)
+		bar.custom_minimum_size = Vector2(90, 8)
 		state.add_child(bar)
 		_spell_research_rows[id] = {"button": b, "status": status, "bar": bar}
 	var note := Label.new()
-	note.text = "Spells are researched here, one at a time. Fireball, Bless and Condemn need no research."
+	note.text = "Every spell is researched here, one at a time, before it appears on the spell bar.\nDrag the spells on the bar to put them in the order you like."
 	note.add_theme_font_size_override("font_size", 13)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
@@ -934,16 +941,47 @@ func set_spell(index: int) -> void:
 		_spell_buttons[k].set_pressed_no_signal(k == index)
 
 
-## `known`: whether each spell has been researched (or needs no research).
-func update_spells(magicko: int, costs: Array[int], extras: Array[float], enabled: bool, known: Array[bool] = []) -> void:
+func update_spells(magicko: int, costs: Array[int], extras: Array[float], enabled: bool) -> void:
 	for k in _spell_buttons.size():
-		var locked := k < known.size() and not known[k]
-		_spell_locks[k].visible = locked
 		var ready_now: bool = enabled and magicko >= costs[k]
-		_spell_buttons[k].modulate = Color(0.55, 0.55, 0.6, 0.8) if locked else (Color.WHITE if ready_now else Color(1.0, 0.6, 0.6, 0.75))
+		_spell_buttons[k].modulate = Color.WHITE if ready_now else Color(1.0, 0.6, 0.6, 0.75)
 		if _spell_costs[k] != null:
 			_spell_costs[k].text = str(costs[k])
 		_spell_sparkles[k].set_extra(extras[k])
+
+
+## Shows the spells in `order` (ids) on the spell bar, in that order, each
+## with its key (1, 2, ...); the rest are hidden.
+func set_spell_order(order: Array[String]) -> void:
+	for k in SpellBook.SPELLS.size():
+		var at := order.find(SpellBook.SPELLS[k].id)
+		_spell_slots[k].visible = at >= 0
+		if at >= 0:
+			_spell_row.move_child(_spell_slots[k], at)
+			_spell_keys[k].text = str(at + 1)
+
+
+## A spell's square: drag it onto another to swap places on the bar.
+class SpellButton extends Button:
+	var spell_index := -1
+	var on_drop: Callable
+
+	func _get_drag_data(_at: Vector2) -> Variant:
+		var icon := TextureRect.new()
+		icon.texture = Hud.spell_icon(SpellBook.SPELLS[spell_index].id)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.size = Vector2(56, 56)
+		icon.modulate = Color(1, 1, 1, 0.8)
+		set_drag_preview(icon)
+		return {"spell": spell_index}
+
+	func _can_drop_data(_at: Vector2, data: Variant) -> bool:
+		return data is Dictionary and (data as Dictionary).has("spell")
+
+	func _drop_data(_at: Vector2, data: Variant) -> void:
+		var from := int((data as Dictionary).spell)
+		if from != spell_index:
+			on_drop.call(from, spell_index)
 
 
 func show_build_menu(shown: bool) -> void:

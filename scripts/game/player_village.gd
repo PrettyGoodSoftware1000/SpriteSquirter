@@ -110,6 +110,9 @@ var researched := {}
 var research := {}
 ## Spells researched at the Shrine: id -> true.
 var spells_known := {}
+## The spells known, in spell-bar order (the order they were learned, until
+## the player drags them about). Key 1 casts the first.
+var spell_order: Array[String] = []
 ## The spell being researched at the Shrine: {"id": ..., "t": seconds done}, or empty.
 var spell_research := {}
 ## True while the village has a Blacksmith: loads go home in wheelbarrows.
@@ -137,6 +140,10 @@ var blood_until := 0.0
 
 var _assign_timer := 0.0
 var _army_timer := 0.0
+## Towards the next sapling (Game.settings.sapling_rate a minute), and how
+## long each villager planting one has been at it.
+var _plant_due := 0.0
+var _planting := {}
 var _starve_timer := 0.0
 ## Training building -> {"v": the trainee, "t": seconds trained, "role": ...}
 var _training := {}
@@ -482,15 +489,28 @@ func _update_spell_research(delta: float) -> void:
 	if spell_research.t < SpellBook.research_seconds(id):
 		return
 	spell_research = {}
-	spells_known[id] = true
+	_learn_spell(id)
 	spell_researched.emit(id)
+
+
+func _learn_spell(id: String) -> void:
+	spells_known[id] = true
+	if not spell_order.has(id):
+		spell_order.append(id)
+
+
+## Moves spell `id` to place `to` on the spell bar.
+func move_spell(id: String, to: int) -> void:
+	if not spell_order.has(id):
+		return
+	spell_order.erase(id)
+	spell_order.insert(clampi(to, 0, spell_order.size()), id)
 
 
 ## Every spell, researched at once (the dev menu).
 func learn_all_spells() -> void:
 	for spell in SpellBook.SPELLS:
-		if SpellBook.needs_research(spell.id):
-			spells_known[spell.id] = true
+		_learn_spell(spell.id)
 	spell_research = {}
 
 
@@ -658,6 +678,76 @@ func _sample(delta: float) -> void:
 		_history[res] = samples
 
 
+# --- Planting saplings ------------------------------------------------------------
+
+## Now and then (Game.settings.sapling_rate a minute) an unassigned worker
+## or a lumberjack kneels for Balance "plant_seconds" and plants a sapling,
+## so the forest grows back where it is cut.
+func _plan_planting(delta: float) -> void:
+	for v in _planting.keys():
+		if not is_instance_valid(v) or (v as Villager).job != "plant":
+			_planting.erase(v)
+	var rate: float = Game.settings.get("sapling_rate", 0.0)
+	if rate <= 0.0 or not founded:
+		return
+	_plant_due += delta * rate / 60.0
+	if _plant_due < 1.0:
+		return
+	_plant_due -= 1.0
+	var planters: Array[Villager] = []
+	for v in people():
+		if v.can_work() and (v.pin == "" or v.pin == "lumber") and (v.job == "" or v.job == "lumber") \
+				and not v._delivering and v.state != Villager.State.FIGHT:
+			planters.append(v)
+	if planters.is_empty():
+		return
+	var v: Villager = planters[randi() % planters.size()]
+	var spot: Variant = _sapling_spot(v.global_position)
+	if spot == null:
+		return
+	v.assign_job("plant", spot, self)
+	_planting[v] = 0.0
+
+
+## Somewhere near `near` to plant a tree: dry, not steep, clear of trees,
+## rocks, buildings and fields, and within reach of the village. Null if
+## nowhere is found.
+func _sapling_spot(near: Vector3) -> Variant:
+	var terrain := Game.terrain
+	var tree := get_tree()
+	for attempt in 12:
+		var a := randf() * TAU
+		var d := randf_range(4.0, 14.0)
+		var p := near + Vector3(cos(a) * d, 0.0, sin(a) * d)
+		if not terrain.is_inside(p.x, p.z) or not terrain.is_dry(p.x, p.z) or terrain.get_normal(p.x, p.z).y < 0.85:
+			continue
+		if Vector2(p.x - center.x, p.z - center.z).length() > WORK_REACH * 0.9:
+			continue
+		p.y = terrain.get_height(p.x, p.z)
+		if _crowded(p, tree):
+			continue
+		return p
+	return null
+
+
+func _crowded(p: Vector3, tree: SceneTree) -> bool:
+	for group in ["trees", "saplings", "rocks"]:
+		for node in tree.get_nodes_in_group(group):
+			var n := node as Node3D
+			if Vector2(n.global_position.x - p.x, n.global_position.z - p.z).length() < 3.0:
+				return true
+	for group in ["buildings", "construction_sites"]:
+		for node in tree.get_nodes_in_group(group):
+			var n := node as Node3D
+			var reach: float = n.get("footprint") if n.get("footprint") != null else 4.0
+			if Vector2(n.global_position.x - p.x, n.global_position.z - p.z).length() < reach + 3.0:
+				return true
+	for node in tree.get_nodes_in_group("fields"):
+		if (node as CropField).contains(p):
+			return true
+	return false
+
+
 ## How far the village's influence reaches from its centre:
 ## Game.settings.influence_start, and influence_per_person more for every
 ## villager. Buildings go up, and the player's spells are cast, inside it.
@@ -719,6 +809,7 @@ func _process(delta: float) -> void:
 		_manage_army()
 	_update_research(delta)
 	_update_spell_research(delta)
+	_plan_planting(delta)
 
 
 func _eat(delta: float) -> void:
@@ -785,6 +876,13 @@ func work(v: Villager, delta: float) -> void:
 						v.become_necromancer(post.global_position)
 					_:
 						v.become_wizard(post.global_position)
+		"plant":
+			_planting[v] = _planting.get(v, 0.0) + delta
+			if _planting[v] >= Balance.num("plant_seconds"):
+				_planting.erase(v)
+				var ahead := Vector3(sin(v.rotation.y), 0.0, cos(v.rotation.y))
+				Sapling.plant(v.global_position + ahead * 0.9)
+				v.clear_job()
 		"food":
 			v.gather("food", Game.settings.food_rate / 60.0 * delta * tool_bonus("food") * Balance.num("farmer_speed"))
 		"farm":
@@ -876,7 +974,7 @@ func _assign_jobs() -> void:
 			farming += 1
 	# The villagers the player set to a job keep to it.
 	for v in workers:
-		if v.job == "build" or not counts.has(v.pin) or v.job == v.pin or (v.pin == "food" and v.job == "farm"):
+		if v.job == "build" or v.job == "plant" or not counts.has(v.pin) or v.job == v.pin or (v.pin == "food" and v.job == "farm"):
 			continue
 		var was := v.job
 		if _give_job(v, v.pin, per_target):
@@ -924,7 +1022,8 @@ func _next_builder(workers: Array[Villager], at: Vector3, desperate: bool) -> Vi
 		var best: Villager = null
 		var best_d := INF
 		for v in workers:
-			if v.job == "build" or (wanted != "any" and v.pin != wanted):
+			# (Someone kneeling to plant a sapling finishes it first.)
+			if v.job == "build" or v.job == "plant" or (wanted != "any" and v.pin != wanted):
 				continue
 			var d := v.global_position.distance_to(at)
 			if d < best_d:

@@ -137,6 +137,16 @@ stage.
 - Warriors / wizards counts: trained or training out of what the buildings allow (0/0, then 0/4)
 - Resource rates show income only; building costs are taken when placed
 
+## Version 0.22: Forest seeding and charm ✅
+- Food's rate takes off what is eaten; the others show income only
+- Creatures and the balrog punch with alternate fists; small foes thrown one-handed
+- Villagers kneel and plant saplings (rate in balancing.txt and the dev menu); saplings grow in 2 days
+- The squirrel's forest seeding: a magic acorn, a giant magic tree (5 to 50 magicko a second), seeds and pixies; 15/30/60 min cooldown; judged ±30
+- Treehouse leaves follow the nature palette; ghost bridges while placing a treehouse
+- One arrow or firebolt downs a giant bat, and shooters go for it first
+- Charm Offensive spell; every spell researched at the Shrine for 50 magicko; spell bar in learned order, drag to reorder
+- Build menu: heading and note removed
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

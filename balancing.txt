@@ -107,20 +107,24 @@ storehouse_holds = 300              # of each, for every Storehouse
 granary_holds = 300                 # more food, for every Granary
 animus_per_shrine = 1               # animus each Shrine makes a minute
 
+# --- Saplings -----------------------------------------------------------------
+# Now and then an unassigned worker or a lumberjack kneels and plants a
+# sapling, so the forest grows back. The dev menu's "Saplings planted"
+# slider starts at saplings_per_minute.
+saplings_per_minute = 2         # saplings the village plants a minute
+plant_seconds = 20              # how long a villager kneels to plant one
+sapling_grow_days = 2           # days (of the day length) for a sapling to grow into a tree
+
 # --- Spells researched at the Shrine ----------------------------------------
 # Click a Shrine (the Singing rocks) to research spells, one at a time.
-# Fireball, Bless and Condemn need no research. Each costs animus, paid
-# when it starts, and takes this many seconds while a Shrine stands.
-spell_research_rain_animus = 2
-spell_research_rain_seconds = 60
-spell_research_roots_animus = 3
-spell_research_roots_seconds = 90
-spell_research_lightning_animus = 5
-spell_research_lightning_seconds = 120
-spell_research_blood_animus = 3
-spell_research_blood_seconds = 90
-spell_research_gnomes_animus = 4
-spell_research_gnomes_seconds = 120
+# Every spell must be researched before it appears on the spell bar.
+spell_research_magicko = 50     # magicko each spell costs to research, paid when it starts
+spell_research_seconds = 30     # how long each takes, while a Shrine stands
+
+# --- Charm Offensive ----------------------------------------------------------
+charm_radius = 8                # metres across the spot, from its middle
+charm_seconds = 60              # how long a charmed goblin fights for you
+charm_share = 50%               # of the goblins caught in it, the share that are charmed
 
 # Building time. A building needs this many seconds of work for every unit
 # of resource it costs, shared between the villagers building it. A Home
@@ -265,6 +269,24 @@ wander_weight = 100%
 explore_weight = 25%
 explore_least = 40              # metres: the shortest trip that counts as exploring
 
+# Forest seeding (the squirrel only): now and then it tosses a magic acorn
+# within half the village's influence of its centre, and a giant magic
+# tree grows there. A rare choice (this weight, times its forestSeeder
+# personality, times its affinity's weight), and after each one it must
+# wait: 15 minutes after the first, 30 after the second, 60 after that.
+forest_seed_weight = 10%
+forest_seed_cooldown_1 = 15     # minutes
+forest_seed_cooldown_2 = 30
+forest_seed_cooldown_3 = 60
+seed_judge_points = 30          # Bless and Condemn move its affinity this much at a time (a rare action)
+# The magic tree: magicko it gives the village a SECOND, tiny and full
+# grown, how many days it takes to grow, and how often it drops a seed
+# that becomes a sapling.
+magic_tree_magicko_small = 5
+magic_tree_magicko_full = 50
+magic_tree_grow_days = 2
+magic_tree_seed_minutes = 2
+
 # Spells the creature knows: each second it weighs holding off against
 # every place it could cast each one. A use the spell is meant for weighs
 # 1 (rain on enemies, to wet them for chain lightning, rain_enemies_weight);
@@ -332,6 +354,7 @@ squirrel_mischief_personality = 100%
 squirrel_spellcaster_personality = 100%
 squirrel_observant_personality = 100%
 squirrel_knowledgeSeeker_personality = 100%
+squirrel_forestSeeder_personality = 100%     # how keen it is on forest seeding (only the squirrel does it)
 raven_flee_personality = 100%
 raven_mischief_personality = 100%
 raven_spellcaster_personality = 150%         # a natural spellcaster

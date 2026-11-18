@@ -53,6 +53,8 @@ const CARRY_CAPACITY := 2.0
 const BARROW_CAPACITY := 6.0
 ## Archers shoot an arrow every ARROW_SECONDS at goblins within ARCHER_RANGE.
 const ARCHER_RANGE := 22.0
+## How far off archers and wizards spot a giant bat to shoot down.
+const BAT_SIGHT := 50.0
 static var ARROW_SECONDS := 1.5
 static var ARROW_DAMAGE := 12.0
 static var ARCHER_HEALTH := 1.5
@@ -149,7 +151,8 @@ var wet_until := 0.0
 ## Walks at SLOWED_SPEED until Game.now passes this (roots, on your own people).
 var slowed_until := 0.0
 
-## Current job: "", "lumber", "stone", "food", "farm", "build" or "train".
+## Current job: "", "lumber", "stone", "food", "farm", "build", "train" or
+## "plant" (kneeling to plant a sapling).
 ## The job the player set this worker to: "lumber", "stone", "food",
 ## "build" (a builder), or "" for an unassigned worker.
 var pin := ""
@@ -193,6 +196,10 @@ var _in_reach := false
 var _attack_timer := 0.0
 var _think_timer := randf() * 0.4
 var _hit_flash := 0.0
+## A goblin charmed by Charm Offensive fights its own kind until then
+## (Game.now), with pink eyes.
+var charmed_until := 0.0
+var _pink_eyes: Array[MeshInstance3D] = []
 var _raid_goal := Vector3.ZERO
 ## Which way a raider turns to get round water or the island's edge.
 var _steer := 1.0 if randf() < 0.5 else -1.0
@@ -1291,6 +1298,8 @@ func _process(delta: float) -> void:
 	_think_timer -= delta
 	if _think_timer <= 0.0:
 		_think_timer = 0.4
+		if not _pink_eyes.is_empty() and not charmed():
+			_uncharm()
 		_think()
 		var cam := get_viewport().get_camera_3d()
 		if cam:
@@ -1866,6 +1875,14 @@ func _think() -> void:
 		return
 	if necromancer and job != "train" and (state == State.IDLE or state == State.WALK or state == State.FIGHT) and _look_for_body():
 		return
+	if goblin and charmed():
+		# Charmed: it goes for the nearest goblin that is not.
+		if state == State.FIGHT and _foe_ok():
+			return
+		var rival := _nearest_goblin(AGGRO * 2.0)
+		if rival != null:
+			_engage(rival)
+		return
 	if goblin:
 		if not raiding or (state == State.FIGHT and _foe_ok() and (_foe is Villager or _foe is Creature)):
 			return
@@ -1884,6 +1901,12 @@ func _think() -> void:
 			if building:
 				_engage(building)
 		return
+	# Anyone who can shoot always goes for a giant bat first.
+	if owned and (archer or wizard) and not (_foe is GiantBat and _foe_ok()):
+		var bat := _nearest_bat(BAT_SIGHT)
+		if bat != null:
+			_engage(bat)
+			return
 	var goblins := get_tree().get_nodes_in_group("goblins")
 	var fiend := _fiend()
 	if (goblins.is_empty() and fiend == null) or (state == State.FIGHT and _foe_ok()):
@@ -1894,6 +1917,8 @@ func _think() -> void:
 	var best_d := INF
 	for node in goblins:
 		var g := node as Villager
+		if g.charmed():
+			continue
 		# An enemy is a raider, or a goblin that has walked into the village.
 		# When one is close, every grown-up nearby turns out to fight it.
 		var close := owned and g.threatens_village()
@@ -1942,12 +1967,26 @@ func threatens_village() -> bool:
 	return d < (PlayerVillage.DEFEND_RADIUS if raiding else PlayerVillage.INTRUDER_RADIUS)
 
 
+## The nearest giant bat in the air within `reach`, or null.
+func _nearest_bat(reach: float) -> GiantBat:
+	var best: GiantBat = null
+	var best_d := reach
+	for node in get_tree().get_nodes_in_group("bats"):
+		var bat := node as GiantBat
+		var d := _flat_to(bat.global_position)
+		if bat.is_alive() and d < best_d:
+			best_d = d
+			best = bat
+	return best
+
+
 func _nearest_villager(reach: float) -> Villager:
 	var best: Villager = null
 	var best_d := reach
 	for node in get_tree().get_nodes_in_group("villagers"):
 		var v := node as Villager
-		if v.goblin or v.state == State.DEAD:
+		# (A goblin's victims include goblins that have been charmed.)
+		if (v.goblin and not v.charmed()) or v.state == State.DEAD:
 			continue
 		var d := _flat_to(v.global_position)
 		if d < best_d:
@@ -1984,11 +2023,20 @@ func _engage(foe: Node3D) -> void:
 
 
 func _foe_ok() -> bool:
-	if not is_instance_valid(_foe) or (goblin and not raiding):
+	if not is_instance_valid(_foe) or (goblin and not raiding and not charmed()):
 		return false
+	if _foe is GiantBat:
+		return (_foe as GiantBat).is_alive()
 	var v := _foe as Villager
 	if v:
-		return v.state != State.DEAD and v.state != State.HELD and (goblin or v.raiding or v.threatens_village())
+		if v.state == State.DEAD or v.state == State.HELD:
+			return false
+		if goblin:
+			# Goblins fight charmed goblins, and charmed goblins fight goblins.
+			return v.charmed() != charmed() if v.goblin else not charmed()
+		return not v.charmed() and (v.raiding or v.threatens_village())
+	if charmed():
+		return false
 	var beast := _foe as Creature
 	if beast:
 		if beast.hostile:
@@ -2008,10 +2056,10 @@ func _update_fight(delta: float) -> void:
 		return
 	var to := _foe.global_position - global_position
 	to.y = 0.0
-	if wizard and (_foe is Villager or _foe is Creature):
+	if wizard and (_foe is Villager or _foe is Creature or _foe is GiantBat):
 		_cast_at(_foe, to, delta)
 		return
-	if archer and (_foe is Villager or _foe is Creature):
+	if archer and (_foe is Villager or _foe is Creature or _foe is GiantBat):
 		_shoot_at(_foe, to, delta)
 		return
 	var reach := 2.6 if ogre else 1.2
@@ -2262,6 +2310,13 @@ func _animate_work(blend: float) -> void:
 			knee = 0.8
 			arms = [-0.75 + 0.3 * sin(_work_phase), -0.75 + 0.3 * sin(_work_phase + 1.7)]
 			elbows = [0.45 + 0.3 * sin(_work_phase + 0.8), 0.45 + 0.3 * sin(_work_phase + 2.5)]
+		"plant":
+			# Down on its knees, working the soil with both hands.
+			lean = 0.4
+			thigh = -1.15
+			knee = 2.1
+			arms = [-0.95 + 0.25 * sin(_work_phase * 0.8), -0.95 + 0.25 * sin(_work_phase * 0.8 + 2.0)]
+			elbows = [0.7 + 0.2 * sin(_work_phase * 0.8 + 1.0), 0.7 + 0.2 * sin(_work_phase * 0.8 + 3.0)]
 		"build":
 			# The hammer comes up at the elbow and down on the nail.
 			var hammer := 0.5 + 0.5 * sin(_work_phase * 1.6)
@@ -2305,6 +2360,65 @@ func _animate_fight(blend: float) -> void:
 			elbow = 0.55 if soldier else 0.3 + 0.9 * (1.0 - wind)
 		# A fighting stance: one foot forward, both knees a little bent.
 		_pose(k, 0.3 * s, 0.14 if s > 0.0 else 0.42, arm, elbow, -0.1, blend, minf(1.0, blend * 2.0))
+
+
+## True while Charm Offensive has this goblin fighting its own kind.
+func charmed() -> bool:
+	return goblin and Game.now < charmed_until
+
+
+## Charms this goblin for `seconds`: its eyes turn pink and it turns on the
+## other goblins, who turn on it.
+func charm(seconds: float) -> void:
+	if not goblin or state == State.DEAD:
+		return
+	charmed_until = Game.now + seconds
+	_foe = null
+	if state == State.FIGHT:
+		state = State.IDLE
+	if _pink_eyes.is_empty():
+		var eye := SphereMesh.new()
+		eye.radius = 0.055
+		eye.height = 0.11
+		eye.radial_segments = 8
+		eye.rings = 4
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(1.0, 0.35, 0.75)
+		eye.material = mat
+		for sx in [-1.0, 1.0]:
+			var mi := MeshInstance3D.new()
+			mi.mesh = eye
+			mi.position = Vector3(sx * 0.105, 1.62, 0.27)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_torso.add_child(mi)
+			_pink_eyes.append(mi)
+	Game.effects.spawn_dust(global_position + Vector3.UP * 1.6, 0.3)
+
+
+func _uncharm() -> void:
+	for mi in _pink_eyes:
+		if is_instance_valid(mi):
+			mi.queue_free()
+	_pink_eyes.clear()
+	_foe = null
+	if state == State.FIGHT:
+		state = State.IDLE
+
+
+## The nearest goblin that is not charmed, within `reach`.
+func _nearest_goblin(reach: float) -> Villager:
+	var best: Villager = null
+	var best_d := reach
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g == self or g.charmed() or g.state == State.DEAD or g.state == State.HELD:
+			continue
+		var d := _flat_to(g.global_position)
+		if d < best_d:
+			best_d = d
+			best = g
+	return best
 
 
 func is_alive() -> bool:

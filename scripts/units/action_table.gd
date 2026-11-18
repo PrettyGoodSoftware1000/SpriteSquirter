@@ -35,7 +35,7 @@ const CATEGORY_WORDS := [
 	["lumber", ["wood", "lumber"]], ["stone", ["stone"]], ["food", ["food"]],
 	["stomp", ["stomp"]], ["throw", ["throw"]], ["eat", ["eat"]],
 	["fireball", ["fireball"]], ["lightning", ["lightning"]], ["roots", ["root"]],
-	["rain", ["rain"]], ["blood", ["sacrific", "blood"]], ["explore", ["explor"]],
+	["rain", ["rain"]], ["blood", ["sacrific", "blood"]], ["seed", ["seeding", "acorn"]], ["explore", ["explor"]],
 	["flee", ["running", "flee", "ran from"]], ["shell", ["shell", "hid"]],
 ]
 ## Placeholders in a sentence that are not conditions.

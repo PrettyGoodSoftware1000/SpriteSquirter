@@ -68,6 +68,9 @@ var _ghost: Destructible
 var _ghost_valid := false
 var _ghost_problem := ""
 var _ghost_material := StandardMaterial3D.new()
+## While a treehouse is being placed: see-through bridges from it to every
+## treehouse a rope bridge could join it to from there.
+var _place_bridges: Node3D
 var _rng := RandomNumberGenerator.new()
 ## Seconds the influence wall stays up after a spell was aimed outside it.
 var _wall_flash := 0.0
@@ -153,9 +156,16 @@ func _ready() -> void:
 	hud.research_menu_requested.connect(_toggle_research_menu)
 	hud.research_selected.connect(_on_research_selected)
 	hud.spell_research_selected.connect(_on_spell_research_selected)
-	hud.spells_requested.connect(func() -> void: village.learn_all_spells())
+	hud.spells_requested.connect(func() -> void:
+		village.learn_all_spells()
+		hud.set_spell_order(village.spell_order))
+	hud.spell_moved.connect(func(index: int, onto: int) -> void:
+		village.move_spell(SpellBook.SPELLS[index].id, village.spell_order.find(SpellBook.SPELLS[onto].id))
+		hud.set_spell_order(village.spell_order))
 	village.spell_researched.connect(func(id: String) -> void:
+		hud.set_spell_order(village.spell_order)
 		_announce(Texts.line("spell_researched", {"spell": SpellBook.find(id).name})))
+	hud.set_spell_order(village.spell_order)
 	village.research_done.connect(func(id: String) -> void:
 		_announce(Texts.line("research_done", {"research": (Research.find(id).name as String).to_lower()})))
 	hud.regenerate_requested.connect(_regenerate)
@@ -285,8 +295,9 @@ func _on_key(key: InputEventKey) -> void:
 		if number >= 0 and number < mini(9, BuildingCatalog.BUILDINGS.size()):
 			_start_placing(BuildingCatalog.BUILDINGS[number].kind)
 			return
-	elif number >= 0 and number < SpellBook.SPELLS.size():
-		_spell_key(number)
+	elif number >= 0 and number < village.spell_order.size():
+		# The keys go by the spell bar, which shows the spells known.
+		_spell_key(SpellBook.index_of(village.spell_order[number]))
 		return
 	match code:
 		KEY_B, KEY_BACKSPACE:
@@ -395,11 +406,15 @@ func _set_mode(m: Mode) -> void:
 	if m != Mode.PLACE and _ghost != null:
 		_ghost.queue_free()
 		_ghost = null
+	if m != Mode.PLACE:
+		_clear_place_bridges()
 	hud.set_sculpt(sculpt_brush if m == Mode.SCULPT else -1)
 	match m:
 		Mode.COMMAND:
-			hud.set_hint("Click or right-click the ground to walk the %s there. Keys 1-%d take a spell in hand. B or Backspace opens the build menu." \
-				% [(Creature.SPECIES[Game.creature_kind].name as String).to_lower(), SpellBook.SPELLS.size()])
+			hud.set_hint("Click or right-click the ground to walk the %s there. %s B or Backspace opens the build menu." \
+				% [(Creature.SPECIES[Game.creature_kind].name as String).to_lower(),
+				"Keys 1-%d take a spell in hand." % village.spell_order.size() if not village.spell_order.is_empty()
+				else "Click a Shrine to research spells."])
 		Mode.PLACE:
 			hud.set_hint(_place_hint())
 		Mode.SCULPT:
@@ -630,10 +645,15 @@ func _spell_key(index: int) -> void:
 	if _is_judgement(index):
 		_show_last_action(index, true)
 		hud.set_hint("Click anywhere to %s the %s for what it last did.  Press %d again to cancel." % [
-			(spell.name as String).to_lower(), creature.species_name().to_lower() if creature else "creature", index + 1])
+			(spell.name as String).to_lower(), creature.species_name().to_lower() if creature else "creature", _key_of(index)])
 	else:
 		hud.set_hint("Click to cast %s inside your village's influence.  Shift+click keeps it in hand.  Press %d again, right-click or Esc to cancel." % [
-			spell.name, index + 1])
+			spell.name, _key_of(index)])
+
+
+## The key that casts spell `index`: its place on the spell bar.
+func _key_of(index: int) -> int:
+	return village.spell_order.find(SpellBook.SPELLS[index].id) + 1
 
 
 func _on_spell_button(index: int) -> void:
@@ -693,7 +713,7 @@ func _show_last_action(index: int, armed: bool) -> void:
 	else:
 		var target := mind.judge_target()
 		var shown: String = target if target != "" else (ActionTable.column(mind.last_action).back() as Dictionary).id
-		var fill := {"action": mind.describe(shown), "ago": int(ago), "key": index + 1,
+		var fill := {"action": mind.describe(shown), "ago": int(ago), "key": _key_of(index),
 			"spell": (spell.name as String).to_lower(), "creature": creature.species_name().to_lower()}
 		if target == "":
 			fill["seconds"] = ceili(mind.soonest_judgement())
@@ -767,6 +787,10 @@ func _cast(index: int) -> void:
 		"gnomes":
 			Gnome.summon(building_site)
 			_announce(Texts.line("gnomes_came"))
+		"charm":
+			var charm := CharmOffensive.new()
+			Game.world_root.add_child(charm)
+			charm.cast(target)
 	if creature:
 		creature.watch(target)
 
@@ -881,6 +905,7 @@ func _update_ghost() -> void:
 		return
 	if _cursor_hit == null:
 		_ghost.visible = false
+		_clear_place_bridges()
 		return
 	var p: Vector3 = _cursor_hit
 	_ghost.visible = true
@@ -889,6 +914,53 @@ func _update_ghost() -> void:
 	_ghost_problem = _placement_problem(p, _ghost.footprint)
 	_ghost_valid = _ghost_problem == ""
 	_ghost_material.albedo_color = Color(0.3, 1.0, 0.5, 0.4) if _ghost_valid else Color(1.0, 0.3, 0.3, 0.4)
+	_update_place_bridges()
+
+
+## Shows a see-through rope bridge from the treehouse being placed to each
+## treehouse it could be joined to from where it would stand.
+func _update_place_bridges() -> void:
+	if _ghost == null or not _ghost.visible or not _ghost.has_meta("deck_h"):
+		_clear_place_bridges()
+		return
+	if _place_bridges == null:
+		_place_bridges = Node3D.new()
+		add_child(_place_bridges)
+	if _bridge_ghost_materials.is_empty():
+		_refresh_bridge_ghosts_materials()
+	var used := 0
+	for b in _treehouses():
+		var centres := Vector2(b.global_position.x - _ghost.global_position.x, b.global_position.z - _ghost.global_position.z).length()
+		if centres < 9.5:
+			continue
+		var from := RopeBridge.deck_edge(_ghost, b.global_position)
+		var to := RopeBridge.deck_edge(b, _ghost.global_position)
+		var length := Vector2(to.x - from.x, to.z - from.z).length()
+		if length > Balance.num("bridge_max_length"):
+			continue
+		var plank: MeshInstance3D
+		if used < _place_bridges.get_child_count():
+			plank = _place_bridges.get_child(used) as MeshInstance3D
+		else:
+			plank = MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(1.2, 0.12, 1.0)
+			plank.mesh = box
+			plank.material_override = _bridge_ghost_materials[0]
+			plank.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_place_bridges.add_child(plank)
+		plank.visible = true
+		var span := to - from
+		plank.global_transform = Transform3D(Basis.looking_at(span, Vector3.UP).scaled(Vector3(1.0, 1.0, span.length())), (from + to) * 0.5)
+		used += 1
+	for k in range(used, _place_bridges.get_child_count()):
+		(_place_bridges.get_child(k) as Node3D).visible = false
+
+
+func _clear_place_bridges() -> void:
+	if _place_bridges != null:
+		_place_bridges.queue_free()
+		_place_bridges = null
 
 
 ## Why a building can't go at `p`, or "" if it can.
@@ -939,7 +1011,7 @@ func _place_building(keep_placing: bool) -> void:
 	var h := terrain.average_height(p, footprint)
 	# Level a pad for the building, blending out into the surrounding ground.
 	terrain.apply_brush(Vector3(p.x, h, p.z), footprint + 3.0, Terrain.Brush.FLATTEN, 1.0, h, footprint / (footprint + 3.0))
-	for node in get_tree().get_nodes_in_group("trees"):
+	for node in get_tree().get_nodes_in_group("trees") + get_tree().get_nodes_in_group("saplings"):
 		var t := node as Destructible
 		if Vector2(t.global_position.x - p.x, t.global_position.z - p.z).length() < footprint + 1.5:
 			t.fell()
@@ -999,13 +1071,7 @@ func _refresh_bridge_ghosts() -> void:
 	if mode != Mode.BRIDGE:
 		return
 	if _bridge_ghost_materials.is_empty():
-		for color: Color in [Color(0.3, 1.0, 0.5, 0.38), Color(1.0, 0.9, 0.25, 0.45)]:
-			var mat := StandardMaterial3D.new()
-			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			mat.albedo_color = color
-			mat.no_depth_test = true
-			_bridge_ghost_materials.append(mat)
+		_refresh_bridge_ghosts_materials()
 	_bridge_ghosts = Node3D.new()
 	add_child(_bridge_ghosts)
 	var from_ok := _bridge_from != null and is_instance_valid(_bridge_from)
@@ -1013,6 +1079,16 @@ func _refresh_bridge_ghosts() -> void:
 		if from_ok and b != _bridge_from and _bridge_problem(_bridge_from, b, false) != "":
 			continue
 		_add_ghost(b, b, _bridge_ghost_materials[1 if from_ok and b == _bridge_from else 0])
+
+
+func _refresh_bridge_ghosts_materials() -> void:
+	for color: Color in [Color(0.3, 1.0, 0.5, 0.38), Color(1.0, 0.9, 0.25, 0.45)]:
+		var mat := StandardMaterial3D.new()
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = color
+		mat.no_depth_test = true
+		_bridge_ghost_materials.append(mat)
 
 
 func _add_ghost(node: Node, top: Node3D, material: Material) -> void:
@@ -1161,7 +1237,7 @@ func _finish_field() -> void:
 		return
 	if not village.spend(CropField.cost_for(_field_size)):
 		return
-	for node in get_tree().get_nodes_in_group("trees"):
+	for node in get_tree().get_nodes_in_group("trees") + get_tree().get_nodes_in_group("saplings"):
 		var t := node as Destructible
 		if CropField.in_rect(t.global_position, _field_center, _field_size, _field_yaw, 1.0):
 			t.fell()
@@ -1249,12 +1325,10 @@ func _update_ui() -> void:
 	hud.set_resources(village, day_cycle.clock_text() if not _choosing else "")
 	var costs: Array[int] = []
 	var extras: Array[float] = []
-	var known: Array[bool] = []
 	for k in SpellBook.SPELLS.size():
 		costs.append(spell_cost(k))
 		extras.append(recent_extra(k))
-		known.append(village.knows_spell(SpellBook.SPELLS[k].id))
-	hud.update_spells(village.amount("magicko"), costs, extras, not _choosing, known)
+	hud.update_spells(village.amount("magicko"), costs, extras, not _choosing)
 	hud.update_creature(creature)
 	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():

@@ -97,7 +97,10 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    shows a picture of each building.
    **Treehouses and rope bridges.** There are four treehouses (Treehouse,
    Lookout treehouse, Twin treehouse, Great treehouse): houses on a deck
-   up a bright-leaved tree, with a ladder. Pick **Rope bridge** in the
+   up a tree, with a ladder; their leaves take the colours of the nature
+   palette, like the trees around them. While you place a treehouse,
+   see-through bridges show which treehouses it could be joined to from
+   there. Pick **Rope bridge** in the
    build menu and every treehouse a bridge can join lights up green;
    click one, then another up to 35 m away (the ones in reach stay lit),
    and the villagers hang a bridge between the two decks. It costs 1
@@ -185,8 +188,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **giant bat** with each raid, which snatches one of
    your villagers at random and carries it back to a cave for good. Knock
    the building down and no more come. A
-   fireball or chain lightning brings it down, and a villager it was
-   carrying drops and lives.
+   fireball or chain lightning brings it down, and so does a single arrow
+   or wizard's firebolt: archers and wizards always go for a bat they can
+   see first. A villager it was carrying drops and lives.
    The goblins have a giant of their own, the **balrog**: a horned demon
    that hatches at one of their caves and grows just as your creature
    does. Until it is full grown it only guards its cave, attacking whoever
@@ -241,7 +245,24 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    gives 10% more of it, refilling 20% faster.
    **What it does by itself.** It wanders a little way from where you last
    sent it and comes back. Now and then it goes **exploring**: a long trip,
-   up to half the map away, and back. When goblins raid, or hang about within 50 m of
+   up to half the map away, and back. The squirrel alone sometimes goes
+   **forest seeding**: it tosses a magic acorn the size of a villager,
+   sparkling with magic, somewhere within half the village's influence of
+   its centre, and a **giant magic tree** grows there, as big as the
+   Storehouse's tree in 2 days. It gives the village magicko: 5 a second
+   when tiny, rising to 50 a second full grown. Now and then it drops a
+   seed that becomes a sapling, and pixies (half a gnome's size, in a
+   glowing green ball, trailing green dust) flit about its crown. Nobody
+   can chop it down. After the first acorn the squirrel must wait 15
+   minutes, after the second 30, and after that 60. It is a rare thing,
+   so Bless and Condemn count 30 for it, not 10. In a fight the creatures
+   and the balrog punch with one fist and then the other, and a goblin or
+   villager is thrown with one hand.
+   **Saplings.** Now and then an unassigned worker or a lumberjack kneels
+   for 20 seconds and plants a sapling near where they work, so the
+   forest grows back; it grows into a tree in 2 days and is not chopped
+   until then. How often is `saplings_per_minute` in `balancing.txt` (2)
+   and the dev menu's Saplings planted slider. When goblins raid, or hang about within 50 m of
    the village, it chases them, turning 30% faster in a fight. A line of
    text floats up from its head when it does something ("The creature ate
    2 goblins"). In a fight it may **run from battle**: how hurt it is
@@ -324,13 +345,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    squirrel runs on all fours (running and flying themselves are not
    judged). Only a long trip away from where you sent it counts as
    exploring: the higher its affinity for that, the more often it goes.
-9. **Cast spells** with keys 1 to 8 or the squares on the spell bar (each
-   shows its spell's sign, the one the pointer turns into). Fireball,
-   Bless and Condemn are ready from the start; the others must first be
-   **researched at a Shrine** (the Singing rocks): click the Shrine to
-   open its menu. Each costs animus and takes a minute or two
-   (`spell_research_...` in `balancing.txt`), one at a time; until then
-   its square is greyed out and says "Research". The spell goes into your
+9. **Cast spells** with the number keys or the squares on the spell bar
+   (each shows its spell's sign, the one the pointer turns into). Every
+   spell must first be **researched at a Shrine** (the Singing rocks):
+   click the Shrine to open its menu. Each costs 50 magicko and takes 30
+   seconds (`spell_research_magicko` and `spell_research_seconds` in
+   `balancing.txt`), one at a time. The spell bar shows only the spells
+   you know, in the order you learned them, key 1 first; **drag a spell
+   onto another** to move it there, and its key goes with it. The spell goes into your
    hand and the pointer changes: a flame for Fireball, sparks for Chain
    Lightning, a cloud dripping water for Rain, roots for Roots, a skull
    dripping blood for Blood Sacrifice. Click to cast it (Shift+click casts
@@ -360,6 +382,12 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    to it very fast, bouncing as they go, and build it like five more
    villagers, moving round it every 1 to 3 seconds. They vanish when it
    is finished.
+   **Charm Offensive** (25 magicko; a pink heart): pink hearts float up
+   all over the spot, and about half the goblins caught in it (8 m
+   across from the middle) are charmed for 60 seconds: their eyes turn
+   pink and they fight their own kind, who fight back. Your people and
+   your creature leave them alone while it lasts (`charm_...` in
+   `balancing.txt`).
 
 Days turn from dawn to daytime, evening and night.
 
@@ -375,7 +403,7 @@ In the game, press **Esc** and **Show controls** for this list.
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
-| 1–8 (or a spell's square) | Take a spell in hand (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Condemn, Gnomish Subcontractors); the same key again puts it away |
+| 1–9 (or a spell's square) | Take the spell in that place on the spell bar in hand (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Condemn, Gnomish Subcontractors, Charm Offensive, once researched); the same key again puts it away |
 | Click with a spell in hand | Cast it (Bless and Condemn: click anywhere); Shift+click keeps it in hand |
 | B / Backspace | Open or close the build menu (1–9 pick the field, the bridge or a building) |
 | U | Open or close the research menu (needs a Blacksmith) |
@@ -408,6 +436,7 @@ The version number is shown at the top of the dev menu.
 | Villager detail within | Villagers nearer the camera than this are drawn in full detail. At the top of the slider (the default) they always are; lower it on a slow machine |
 | Give 100 of everything | For testing |
 | Learn all spells | Researches every spell at once, for testing |
+| Saplings planted | How many saplings the village plants a minute (starts at `saplings_per_minute` in `balancing.txt`) |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; Ctrl + mouse wheel (or `[` and `]`) changes the brush size |
 | New random world (N) | Generate a brand-new island of the same size |
 | Weather (L) | Meadow day, golden hour, dawn, night (until the next part of the day) |

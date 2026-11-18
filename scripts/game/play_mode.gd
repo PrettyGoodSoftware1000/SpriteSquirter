@@ -632,6 +632,9 @@ func _spell_key(index: int) -> void:
 		_disarm()
 		hud.set_hint("")
 		_set_mode(mode)
+		# Bless and Condemn: the key twice in a row casts it, no click needed.
+		if _is_judgement(index):
+			_judge(index)
 		return
 	var spell: Dictionary = SpellBook.SPELLS[index]
 	if not village.knows_spell(spell.id):

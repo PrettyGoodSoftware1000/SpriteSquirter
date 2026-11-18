@@ -165,6 +165,11 @@ func start_building(kind := "") -> ConstructionSite:
 		var p := cave.global_position + Vector3(sin(a), 0.0, cos(a)) * randf_range(17.0, 26.0 + attempt)
 		if not _site_ok(p, footprint):
 			continue
+		# The goblins must be able to walk to it from their cave (round the
+		# grey rock slopes).
+		var way := Game.path_grid().find(cave.global_position, p, true)
+		if way.is_empty() or Vector2(way[way.size() - 1].x - p.x, way[way.size() - 1].z - p.z).length() > 4.0:
+			continue
 		var h := terrain.average_height(p, footprint)
 		terrain.apply_brush(Vector3(p.x, h, p.z), footprint + 3.0, Terrain.Brush.FLATTEN, 1.0, h, footprint / (footprint + 3.0))
 		for node in tree.get_nodes_in_group("trees"):

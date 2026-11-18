@@ -199,6 +199,10 @@ var _hit_flash := 0.0
 ## A goblin charmed by Charm Offensive fights its own kind until then
 ## (Game.now), with pink eyes.
 var charmed_until := 0.0
+## A shove that slides it along the ground (see knock_back()), dying away,
+## and staggered by it (it cannot walk) until then (Game.now).
+var _shove := Vector3.ZERO
+var _stagger_until := 0.0
 var _pink_eyes: Array[MeshInstance3D] = []
 var _raid_goal := Vector3.ZERO
 ## Which way a raider turns to get round water or the island's edge.
@@ -1295,6 +1299,11 @@ func _process(delta: float) -> void:
 		if _hit_flash <= 0.0:
 			_set_tint(Color.WHITE)
 	hp = minf(max_hp, hp + delta * 0.5)
+	if _shove.length_squared() > 0.01:
+		var next := global_position + _shove * delta
+		if _open(next):
+			global_position = Vector3(next.x, Game.terrain.get_height(next.x, next.z), next.z)
+		_shove = _shove.move_toward(Vector3.ZERO, 16.0 * delta)
 	_think_timer -= delta
 	if _think_timer <= 0.0:
 		_think_timer = 0.4
@@ -2156,8 +2165,8 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	var dist := to.length()
 	if dist < 0.3:
 		return true
-	if Game.now < snared_until:
-		# Held fast by roots.
+	if Game.now < snared_until or Game.now < _stagger_until:
+		# Held fast by roots, or staggered by a shove.
 		return false
 	if Game.now < slowed_until:
 		# Wading through roots.
@@ -2221,8 +2230,17 @@ func _grade(dir: Vector3) -> float:
 	return ahead - here
 
 
+## True if the step ahead is onto a grey rock slope, too steep to walk
+## over (Terrain.is_steep()). Someone already on one may walk off it, but
+## not straight up or down it; a goblin swims over whatever is under water.
 func _is_cliff(dir: Vector3) -> bool:
-	return _grade(dir) > Balance.num("cliff_grade")
+	var terrain := Game.terrain
+	var p := global_position + dir
+	if goblin and terrain.water_depth(p.x, p.z) > 0.3:
+		return false
+	if not terrain.is_steep(p.x, p.z):
+		return false
+	return not terrain.is_steep(global_position.x, global_position.z) or absf(_grade(dir)) > Balance.num("cliff_grade")
 
 
 ## 1 on the flat and downhill, falling to Balance "slope_slowest" as the
@@ -2480,6 +2498,18 @@ func fling(from: Vector3, force: float, charred := true) -> void:
 	_die(charred)
 	_velocity = (away + Vector3.UP * 1.2).normalized() * force * randf_range(0.7, 1.2)
 	_airborne = true
+
+
+## Knocked away from `from` without being hurt: it slides back along the
+## ground, starting at `force` metres a second.
+func knock_back(from: Vector3, force: float) -> void:
+	if state == State.DEAD or state == State.HELD:
+		return
+	var away := global_position - from
+	away.y = 0.0
+	away = away.normalized() if away.length_squared() > 0.001 else Vector3.FORWARD
+	_shove = away * force
+	_stagger_until = Game.now + 1.0
 
 
 ## Flattened like a pancake under a giant foot.

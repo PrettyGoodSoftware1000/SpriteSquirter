@@ -565,6 +565,14 @@ func get_normal(x: float, z: float) -> Vector3:
 	return Vector3(hl - hr, 2.0, hd - hu).normalized()
 
 
+## True where the ground is a grey rock slope: steeper (rise for every
+## metre across) than Balance "cliff_grade". Nobody walks over these but the
+## squirrel (see Villager._is_cliff(), Creature._steep_towards(), PathGrid).
+func is_steep(x: float, z: float) -> bool:
+	var n := get_normal(x, z)
+	return n.y < 1.0 / sqrt(1.0 + pow(Balance.num("cliff_grade"), 2.0))
+
+
 ## True if the point is on the island, at least 2 m from the edge.
 func is_inside(x: float, z: float) -> bool:
 	return _land(x, z) and _land(x + 2.0, z) and _land(x - 2.0, z) and _land(x, z + 2.0) and _land(x, z - 2.0)

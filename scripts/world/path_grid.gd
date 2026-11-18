@@ -77,7 +77,9 @@ func _refresh(r: Rect2i) -> void:
 			var h := heights[k]
 			var grade := maxf(maxf(absf(heights[k - 1] - h), absf(heights[k + 1] - h)), maxf(absf(heights[k - n] - h), absf(heights[k + n] - h)))
 			var weight := 1.0 + clampf((grade - slow_from) * 8.0, 0.0, 9.0)
-			var steep := grade > cliff
+			# A grey rock slope (as Terrain.is_steep() sees it) is not walked.
+			var across := Vector2(heights[k - 1] - heights[k + 1], heights[k - n] - heights[k + n]).length() * 0.5
+			var steep := across > cliff
 			var wet := water[k] != Terrain.NO_WATER and water[k] - h > 0.15
 			_land.set_point_solid(id, steep or wet)
 			# Swimmers float over whatever the bottom is like.

@@ -22,6 +22,7 @@ balrog_died = The balrog is dead!
 research_done = The Blacksmith has finished: {research}.
 spell_researched = The Shrine has taught you a new spell: {spell}.
 creature_died = The {creature} has died! Bring it back to life at a Shrine for {animus} animus.
+growth_needs_animus = The {creature} needs {animus} animus to keep growing.
 creature_resurrected = The {creature} lives again!
 resurrect_no_shrine = The {creature} can only be brought back to life at a Shrine. Build one first.
 resurrect_no_animus = Bringing the {creature} back to life takes {animus} animus. You have {have}.

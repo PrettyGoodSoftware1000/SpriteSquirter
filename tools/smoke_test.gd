@@ -58,6 +58,7 @@ func _run() -> void:
 	_check(get_tree().get_nodes_in_group("people").is_empty(), "no people before choosing a start")
 	var start: Vector3 = Vector3(starts[0].x, game.terrain.get_height(starts[0].x, starts[0].y), starts[0].y)
 	play._found(start, 0)
+	play.village.give("animus", 100.0, false)  # (growing takes animus)
 	var village := play.village
 	var first_people := village.population()
 	_check(first_people == roundi(Balance.num("start_villagers")), "the village starts with 20 villagers (%d)" % first_people)
@@ -319,9 +320,14 @@ func _run() -> void:
 		if (g as Villager).job == "build":
 			builders += 1
 	_check(get_tree().get_nodes_in_group("raiders").size() == get_tree().get_nodes_in_group("goblins").size() - builders, "every goblin joins the raid (%d builders stay)" % builders)
-	await _wait(20.0)
-	_check(not is_instance_valid(first) or not first.is_alive() or first.global_position.distance_to(village.center) < gap_before - 10.0,
-		"raiders close in on the village")
+	# (Round the grey rock slopes, which can be a long way.)
+	var closed_in := false
+	for k in 12:
+		await _wait(5.0)
+		closed_in = not is_instance_valid(first) or not first.is_alive() or first.global_position.distance_to(village.center) < gap_before - 10.0
+		if closed_in:
+			break
+	_check(closed_in, "raiders close in on the village")
 	# The tortoise deals with goblins that come within reach.
 	var bait: Array = []
 	for g in get_tree().get_nodes_in_group("raiders"):
@@ -907,26 +913,78 @@ func _run() -> void:
 	beast._action = Creature.Action.NONE
 	beast._arm_one = [null, null]
 
-	# Bless and Curse: the key takes the spell in hand and says what the
-	# creature last did; a click casts it; the key again puts it away. Each
-	# thing it does is judged once.
+	# Growing takes animus: 1 for the first tenth, 2 for the second...
+	var age_kept := beast.age
+	var animus_kept := village.amount("animus")
+	beast.growth_paid = 0
+	beast.age = 0.0
+	village.resources.animus = 0.0
+	await _wait(1.0)
+	_check(beast.age == 0.0 and beast.growth_paid == 0, "with no animus, the creature does not grow")
+	village.give("animus", 1.0)
+	await _wait(2.0)
+	_check(beast.growth_paid == 1 and village.amount("animus") == 0 and beast.age > 0.0
+		and beast.age <= 0.1 * game.settings.creature_grow_minutes * 60.0 + 0.01, "1 animus pays for the first tenth of its growth, and no further")
+	village.give("animus", 2.0)
+	await _wait(0.5)
+	_check(beast.growth_paid == 2 and village.amount("animus") == 0, "the second tenth costs 2")
+	beast.growth_paid = 10
+	beast.age = age_kept
+	village.resources.animus = float(animus_kept)
+	await _wait(0.3)
+
+	# Out of its shell, a harmless blast knocks the goblins near it away,
+	# and it has a burst of speed.
+	var shoved := WorldPopulator.spawn_villager(game.world_root, game.terrain, beast.global_position, 1.0, true)
+	await _wait(0.1)
+	shoved.global_position = beast.global_position + Vector3(3, 0, 0)
+	var shoved_hp := shoved.hp
+	beast._action_cooldown = 10.0  # (so it does not stamp on it as well)
+	beast.hiding = true
+	beast._hid_at = game.now - 100.0
+	beast._last_hit_at = game.now - 100.0
+	await _wait(0.6)
+	_check(not beast.hiding and shoved.is_alive() and shoved.hp >= shoved_hp - 0.01
+		and beast._flat(shoved.global_position, beast.global_position) > 4.5, "coming out of its shell knocks nearby goblins away, unhurt (%.1f m)" % beast._flat(shoved.global_position, beast.global_position))
+	_check(beast._burst_until > game.now, "and it has a burst of speed")
+	shoved.queue_free()
+
+	# Lumberjacks go as far as it takes for wood.
+	var far_tree := WorldPopulator.spawn_tree(game.world_root, game.terrain, village.center.x + PlayerVillage.WORK_REACH + 30.0, village.center.z, 0.0, 7)
+	await _wait(0.1)
+	_check(village._nearest_free(far_tree.global_position, "trees", {}) == far_tree, "there is no limit to how far lumberjacks go for wood")
+	far_tree.queue_free()
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 2.0), "the goblins build twice as fast")
+	_check(Hud.SPELL_SIZE == 36, "the spell bar is half the size")
+
+	# Bless and Condemn: the key takes the spell in hand and says what the
+	# creature last did; the key again (or a click) casts it. Each thing it
+	# does is judged once.
 	var bless := SpellBook.index_of("bless")
 	village.learn_all_spells()
 	beast.mind.did("explore")
 	play._spell_key(bless)
 	_check(play._armed == bless and play._judge_prompt and play.hud._prompt.text.contains("exploring"), "pressing Bless shows the creature's last action")
-	play._spell_key(bless)
-	_check(play._armed == -1 and not play._judge_prompt, "pressing it again puts it away")
 	var keen: float = beast.mind.behavior.explore
 	village.give("magicko", 50.0)
 	play._spell_key(bless)
-	play._click_spell()
-	_check(beast.mind.behavior.explore > keen and play._armed == -1, "a click casts it")
-	_check(not play._judge_prompt, "and the text goes")
-	keen = beast.mind.behavior.explore
+	_check(beast.mind.behavior.explore > keen and play._armed == -1 and not play._judge_prompt, "pressing it again casts it, without a click")
+	beast.mind._judged_at.clear()
+	await _wait(0.5)  # (past the short pause after a spell is cast)
+	beast.mind.did("eat", {"enemy": "goblin", "battle": true})
+	var eat_action := beast.mind.judge_target()
+	var keen_eat: float = beast.mind.behavior.get(eat_action, 0.0)
 	play._spell_key(bless)
 	play._click_spell()
-	_check(is_equal_approx(beast.mind.behavior.explore, keen), "the same action cannot be blessed twice")
+	_check(beast.mind.behavior[eat_action] > keen_eat and play._armed == -1, "a click casts it too")
+	_check(not play._judge_prompt, "and the text goes")
+	keen_eat = beast.mind.behavior[eat_action]
+	play._spell_key(bless)
+	play._click_spell()
+	_check(is_equal_approx(beast.mind.behavior[eat_action], keen_eat), "the same action cannot be blessed twice")
+	# What floats up is the owner's sentence from Actions.csv.
+	_check(beast.mind.action_sentence("eat", {"enemy": "goblin", "battle": true}).begins_with("The creature ate a goblin"),
+		"the creature's action is told in the sentence from Actions.csv (%s)" % beast.mind.action_sentence("eat", {"enemy": "goblin", "battle": true}))
 	_check(not CreatureMind.all_actions().has("run") and not CreatureMind.all_actions().has("fly"), "running and flying are not blessed or cursed")
 	# Other spells: in hand, then cast with a click inside the influence.
 	var fireball := SpellBook.index_of("fireball")
@@ -1108,7 +1166,12 @@ func _run() -> void:
 	for k in 24:
 		var a := TAU * k / 24.0
 		var p := beast.global_position + Vector3(cos(a), 0, sin(a)) * 25.0
-		if game.terrain.is_inside(p.x, p.z) and game.terrain.is_dry(p.x, p.z):
+		# (Not over a grey rock slope, where it would have to stop.)
+		var clear := true
+		for s in 13:
+			var q := beast.global_position.lerp(p, s / 12.0)
+			clear = clear and not game.terrain.is_steep(q.x, q.z)
+		if clear and game.terrain.is_inside(p.x, p.z) and game.terrain.is_dry(p.x, p.z):
 			walk_to = p
 			break
 	beast.move_to(walk_to)
@@ -1212,7 +1275,8 @@ func _run() -> void:
 	# The cut brush leaves a sheer cliff, which nobody climbs and routes go round.
 	var et: Terrain = game.terrain
 	var hill := Vector3(-25, 0, -45)
-	et.apply_brush(hill, 10.0, Terrain.Brush.RAISE, 8.0)
+	# (A hill short of the grey rock slopes, so its top can be walked to.)
+	et.apply_brush(hill, 12.0, Terrain.Brush.RAISE, 4.0)
 	var floor_h := et.get_height(hill.x + 13.0, hill.z)
 	var climber := WorldPopulator.spawn_villager(game.world_root, et, Vector3(hill.x - 7.0, 0, hill.z), 0.01)
 	climber.global_position = Vector3(hill.x - 7.0, et.get_height(hill.x - 7.0, hill.z), hill.z)
@@ -1222,6 +1286,8 @@ func _run() -> void:
 	_check(et.get_height(hill.x, hill.z) - et.get_height(hill.x + 2.0, hill.z) > 3.0, "the cut brush slices a hill into a sheer cliff")
 	climber.global_position = Vector3(hill.x + 1.5, floor_h, hill.z)
 	_check(climber._is_cliff(Vector3.LEFT), "a cliff cannot be climbed")
+	climber.global_position = Vector3(hill.x + 0.5, et.get_height(hill.x + 0.5, hill.z), hill.z)
+	_check(climber._is_cliff(Vector3.RIGHT), "nor walked down")
 	var grid := game.path_grid()
 	var below := Vector3(hill.x + 4.0, 0, hill.z)
 	var above := Vector3(hill.x - 4.0, 0, hill.z)
@@ -1297,6 +1363,7 @@ func _run() -> void:
 	_check(get_tree().get_nodes_in_group("goblins").size() > 0 == (data.caves.size() > 0), "goblins live in the caves")
 	var s0: Vector2 = play._info.starts[0]
 	play._found(Vector3(s0.x, game.terrain.get_height(s0.x, s0.y), s0.y), 0)
+	play.village.give("animus", 100.0, false)  # (growing takes animus)
 	_check(play.village.population() == roundi(Balance.num("start_villagers")), "starting villagers spawned (%d)" % play.village.population())
 	var raider := get_tree().get_nodes_in_group("goblins")[0] as Villager
 	var route := play.raids._route_for(raider.home)
@@ -1314,6 +1381,7 @@ func _run() -> void:
 	_check(Art.palette_index == game.palette_index, "a random island goes back to the player's palette")
 	var t0: Vector2 = play._info.starts[0]
 	play._found(Vector3(t0.x, game.terrain.get_height(t0.x, t0.y), t0.y), 0)
+	play.village.give("animus", 100.0, false)  # (growing takes animus)
 	var squirrel := play.creature
 	_check(squirrel.kind == "squirrel" and squirrel.size < 0.16 and is_equal_approx(squirrel.scale.x, squirrel.size), "the squirrel starts at 15%% of its size (%.2f)" % squirrel.size)
 	squirrel.move_to(squirrel.global_position + Vector3(6, 0, 6))
@@ -1358,6 +1426,7 @@ func _run() -> void:
 			grew = grew or (node as Node3D).global_position.distance_to(seed_at) < 1.0
 		_check(grew, "the squirrel tosses a magic acorn, and a magic tree grows where it lands")
 	var waits: Array[int] = []
+	smind.seeds_thrown = 0  # (it may have seeded on its own already)
 	for k in 3:
 		smind.seeded()
 		waits.append(roundi((smind.seed_ready_at - Game.now) / 60.0))
@@ -1376,10 +1445,12 @@ func _run() -> void:
 	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
 	var r0: Vector2 = play._info.starts[0]
 	play._found(Vector3(r0.x, game.terrain.get_height(r0.x, r0.y), r0.y), 0)
+	play.village.give("animus", 100.0, false)  # (growing takes animus)
 	await _wait(3.0)
 	var raven := play.creature
 	raven.mind.process_mode = Node.PROCESS_MODE_DISABLED
-	_check(raven.kind == "raven" and raven.size > 0.99 and is_equal_approx(raven.max_hp, Balance.num("raven_health")), "the raven is the player's creature")
+	_check(raven.kind == "raven" and raven.size > 0.99 and is_equal_approx(raven.max_hp, Balance.num("raven_health")), "the raven is the player's creature (size %.2f, %d paid, %.0f hp)" % [
+		raven.size, raven.growth_paid, raven.max_hp])
 	# A short walk on the flat is walked.
 	var hop_to := raven.global_position
 	for k in 24:

@@ -24,10 +24,13 @@
 ## Announcements
 
 - Every line of text the game announces (the messages in the middle of
-  the screen, the creature's floating lines, the Bless / Curse text and
-  the sentence for each creature action) is in `Announcements.txt`. The
-  owner writes it. New announcement text gets a line there (and a default
-  in `scripts/core/texts.gd`), never a string in the code.
+  the screen, the creature's other floating lines and the Bless / Condemn
+  text) is in `Announcements.txt`. The owner writes it. New announcement
+  text gets a line there (and a default in `scripts/core/texts.gd`), never
+  a string in the code.
+- What floats up when the creature does an action is its sentence from
+  `Actions.csv` (the most specific that fits; `CreatureMind.did()`); the
+  line in `Announcements.txt` is only used when the table has none.
 
 ## Creature actions
 

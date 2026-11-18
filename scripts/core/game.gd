@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS := {
 	"goblin_rate_growth": 0.5, # added to goblin_rate every night
 	"creature_food": 20.0, # food a full-grown creature eats per minute
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size
-	"goblin_build_speed": 1.0, # how many times as fast the goblins start and finish buildings
+	"goblin_build_speed": 2.0, # how many times as fast the goblins start and finish buildings
 	"sapling_rate": 2.0, # saplings the village plants a minute (balancing.txt saplings_per_minute)
 	"villager_detail": 300.0, # metres from the camera within which villagers are drawn in full detail (300: always)
 	"construction_rate": 1.0, # how many times as fast the village's buildings go up

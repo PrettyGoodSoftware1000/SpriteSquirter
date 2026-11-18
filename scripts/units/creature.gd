@@ -79,7 +79,7 @@ const SPECIES := {
 	},
 	"squirrel": {
 		"name": "Squirrel", "model": "res://assets/creature/squirrel.glb", "speed": 3.6 * 1.3,
-		"nervous": 1.0, "runs": true,
+		"nervous": 1.0, "runs": true, "climbs": true,
 		"eye": Vector3(0.66, 0.85, 1.27), "eye_size": 0.42, "eye_color": Color(1.0, 0.98, 0.8),
 		"lid_color": Color(0.8, 0.36, 0.13), "lid_y": [0.5, 0.62], "lid_tilt": [-0.3, -0.5], "pupil": [0.62, 0.42],
 		"mouth": [0.55, -0.02, 1.8, 0.2], "frown": [0.1, 0.18],
@@ -145,6 +145,14 @@ var kind := "tortoise"
 var size := START_SIZE
 ## Seconds of growing so far.
 var age := 0.0
+## Growing takes animus (the player's creature only): each tenth of the way
+## from START_SIZE to full size is paid for as it starts, the first 1
+## (Balance "growth_animus_step"), the second 2, and so on. How many tenths
+## have been paid for.
+var growth_paid := 0
+var _growth_asked_at := -INF
+## Out of its shell: a burst of speed until then (Game.now).
+var _burst_until := 0.0
 var max_hp := 0.0
 var hp := 0.0
 var knocked_out := false
@@ -309,7 +317,20 @@ func _hungry() -> bool:
 func _top_speed() -> float:
 	# (The tortoise drags its feet when it has no stamina left.)
 	var weary := 0.5 if _tired and _spec.get("shell", false) else 1.0
-	return max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0) * weary
+	var burst := 1.0 + Balance.num("shell_burst_speed") if Game.now < _burst_until else 1.0
+	return max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0) * weary * burst
+
+
+## Out of its shell with a whoosh: an unseen blast that hurts nobody but
+## knocks the enemies close by away (Balance "shell_burst_radius"), and a
+## burst of speed for a while ("shell_burst_speed", "shell_burst_seconds").
+func _burst_out() -> void:
+	_burst_until = Game.now + Balance.num("shell_burst_seconds")
+	var reach := Balance.num("shell_burst_radius") * maxf(size, 0.3)
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g.is_alive() and not g.charmed() and _flat(g.global_position, global_position) < reach:
+			g.knock_back(global_position, Balance.num("shell_burst_force"))
 
 
 ## The other giant: the Balrog for the player's creature, and the other
@@ -430,9 +451,16 @@ func grown() -> float:
 ## with no food to eat does neither, and a dead one does not either.
 func _grow(delta: float) -> void:
 	var hungry := _hungry() or knocked_out
-	if not hungry:
-		age += delta
 	var minutes: float = maxf(Game.settings.creature_grow_minutes, 0.05)
+	if not hungry:
+		if hostile:
+			age += delta
+		else:
+			# As far as the animus paid for so far allows.
+			var allowed := float(growth_paid) * 0.1 * minutes * 60.0
+			while age + delta > allowed and growth_paid < 10 and _pay_for_growth():
+				allowed = float(growth_paid) * 0.1 * minutes * 60.0
+			age = maxf(age, minf(age + delta, allowed))
 	var t := clampf(age / (minutes * 60.0), 0.0, 1.0)
 	size = lerpf(START_SIZE, 1.0, t)
 	scale = Vector3.ONE * size
@@ -444,6 +472,23 @@ func _grow(delta: float) -> void:
 		hp = 0.0
 	elif _hurt_timer <= 0.0 and not hungry:
 		hp = minf(max_hp, hp + max_hp * 0.01 * regen_boost("health") * delta)
+
+
+## Pays the village's animus for the next tenth of its growth, if there is
+## enough (true); if not, says now and then what it needs.
+func _pay_for_growth() -> bool:
+	var village := Game.village
+	if not is_instance_valid(village) or not village.founded:
+		return false
+	var cost := roundi(float(growth_paid + 1) * Balance.num("growth_animus_step"))
+	if village.amount("animus") >= cost:
+		village.give("animus", -cost)
+		growth_paid += 1
+		return true
+	if Game.now - _growth_asked_at > 90.0:
+		_growth_asked_at = Game.now
+		say(Texts.line("growth_needs_animus", {"creature": species_name().to_lower(), "animus": cost}), Color(1.0, 0.88, 0.35))
+	return false
 
 
 ## Hurt by a goblin or an ogre.
@@ -768,7 +813,7 @@ func say(text: String, color := Color.WHITE) -> void:
 	label.no_depth_test = true
 	label.fixed_size = true
 	label.pixel_size = 0.0011
-	label.font_size = 34
+	label.font_size = 26
 	label.outline_size = 10
 	label.modulate = color
 	label.visible = false
@@ -804,6 +849,7 @@ func _process(delta: float) -> void:
 		# Nothing has hit it for a while (or it cannot stay in for ever).
 		hiding = false
 		_shell_think_at = Game.now + Balance.num("shell_think_seconds")
+		_burst_out()
 	if running and (not has_target or knocked_out or Game.now < snared_until):
 		running = false
 	if not knocked_out and not flying and not running and not hiding:
@@ -855,6 +901,15 @@ func _update_locomotion(delta: float) -> void:
 		var rise := (Game.terrain.get_height(global_position.x + ahead.x, global_position.z + ahead.z)
 			- Game.terrain.get_height(global_position.x, global_position.z)) / ahead.length()
 		desired_speed *= lerpf(1.0, Balance.num("slope_slowest"), clampf((rise - Balance.num("slope_slow_from")) / 0.6, 0.0, 1.0))
+	# Grey rock slopes are too steep to walk (Balance "cliff_grade"): it
+	# feels its way round one, or stops. Only the squirrel climbs them.
+	if desired_speed > 0.0 and not _spec.get("climbs", false):
+		var turned := _round_steep(heading)
+		if turned == INF:
+			desired_speed = 0.0
+			speed = 0.0
+		else:
+			heading = turned
 	speed = move_toward(speed, desired_speed, (6.0 if running else 3.0) * delta)
 	rotation.y = heading
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
@@ -869,6 +924,28 @@ func _update_locomotion(delta: float) -> void:
 	_ground_y = lerpf(_ground_y, feet_y * 0.6 + under * 0.4, 1.0 - exp(-5.0 * delta))
 	p.y = _ground_y
 	global_position = p
+
+
+## True if the ground in direction `angle` is a grey rock slope it would
+## be stepping onto (Terrain.is_steep()). (Already on one, it may walk off
+## it, but not straight up or down it.)
+func _steep_towards(angle: float) -> bool:
+	var reach := 1.0 + size
+	var p := global_position + Vector3(sin(angle), 0.0, cos(angle)) * reach
+	var t := Game.terrain
+	if not t.is_steep(p.x, p.z):
+		return false
+	var rise := absf(t.get_height(p.x, p.z) - t.get_height(global_position.x, global_position.z)) / reach
+	return not t.is_steep(global_position.x, global_position.z) or rise > Balance.num("cliff_grade")
+
+
+## `angle` if the way is clear, else the nearest heading either side of it
+## that is, or INF if none is.
+func _round_steep(angle: float) -> float:
+	for turn: float in [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5]:
+		if not _steep_towards(angle + turn):
+			return angle + turn
+	return INF
 
 
 func _update_feet(delta: float) -> void:

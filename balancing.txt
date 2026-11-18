@@ -40,6 +40,8 @@ creature_shrink_on_knockout = 0.25  # share of its size the creature loses when 
 creature_getup_health = 1       # share of its health it has when it is brought back to life
 resurrect_animus = 5            # animus it costs to bring the creature back to life, at the Shrine
 creature_young_appetite = 0.5   # under half grown it eats this share of what it otherwise would
+growth_animus_step = 1          # growing takes animus: each tenth of its growth costs this many times
+                                # which tenth it is (1, then 2, then 3...: 55 in all), paid as it starts
 
 # --- The raven ---------------------------------------------------------------
 raven_fly_distance = 30         # metres: it flies any journey longer than this, and walks shorter ones (unless the way climbs steeply or it is getting out of a fight)
@@ -183,7 +185,8 @@ bat_speed = 11                      # metres a second
 # A slope's steepness is its rise over its run: 0.3 is gentle, 1 is 45 degrees.
 slope_slow_from = 0.3               # walking uphill starts to slow at this steepness
 slope_slowest = 0.3                 # the slowest anyone climbs, as a share of normal speed
-cliff_grade = 1.6                   # steeper than this cannot be climbed at all
+cliff_grade = 0.9                   # steeper than this (the grey rock slopes) cannot be walked up or down,
+                                    # except by the squirrel; the raven and bats fly over
 
 # --- What the creature learns ------------------------------------------------
 knowledge_per_watch = 25        # gained each time it watches you cast a spell
@@ -238,6 +241,10 @@ shell_damage_share = 0.2        # share of the damage it takes while hiding (1 =
 shell_think_seconds = 8         # when it is hit, it decides whether to hide at most this often
 shell_calm_seconds = 5          # it comes out when nothing has hit it for this long...
 shell_max_seconds = 15          # ...or after this long whatever happens
+shell_burst_radius = 9          # coming out, an unseen blast (no harm) knocks enemies this close away...
+shell_burst_force = 14          # ...sliding them off at this many metres a second
+shell_burst_speed = 25%         # and it moves this much faster...
+shell_burst_seconds = 6         # ...for this long
 
 # --- Bless and Condemn ---------------------------------------------------------
 # Every action in Actions.csv has an affinity from -100 to 100.

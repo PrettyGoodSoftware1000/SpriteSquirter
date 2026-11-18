@@ -247,8 +247,24 @@ func did(category: String, facts: Dictionary = {}, text := "") -> void:
 	last_action = category
 	last_facts = facts.duplicate()
 	last_action_time = Game.now
-	if text != "":
+	# What floats up is the owner's sentence for it from Actions.csv (the
+	# most specific one that fits); `text` only if there is none.
+	var sentence := action_sentence(category, facts)
+	if sentence != "":
+		creature.say(sentence)
+	elif text != "":
 		creature.say(text)
+
+
+## The sentence from Actions.csv for doing `category` when `facts` held: the
+## first (most specific) action of its column that applies and has one,
+## with the enemy's name filled in. "" if there is none.
+func action_sentence(category: String, facts: Dictionary) -> String:
+	for action in applicable(category, facts):
+		var sentence: String = ActionTable.find(action).get("sentence", "")
+		if sentence != "":
+			return ActionTable.fill(sentence, facts.get("enemy", ""))
+	return ""
 
 
 ## The sentence for an action from Actions.csv, as Bless and Condemn show

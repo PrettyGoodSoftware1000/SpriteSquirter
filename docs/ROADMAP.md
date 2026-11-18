@@ -147,6 +147,15 @@ stage.
 - Charm Offensive spell; every spell researched at the Shrine for 50 magicko; spell bar in learned order, drag to reorder
 - Build menu: heading and note removed
 
+## Version 0.23: Sentences, slopes and growth ✅
+- The creature's floating line is its sentence from Actions.csv
+- Pop-up messages 25% smaller; spell bar half size; smaller training rows
+- Grey rock slopes cannot be walked (except by the squirrel; fliers fly over)
+- Goblins build twice as fast; lumberjacks go as far as it takes for wood
+- Bless and Condemn: the key twice casts it
+- Growing costs animus (1, 2, 3... for each tenth)
+- Out of its shell, the tortoise knocks nearby enemies away and has a burst of speed
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

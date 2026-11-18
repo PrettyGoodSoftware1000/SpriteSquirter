@@ -225,7 +225,11 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    it flies. Shorter trips on the flat it walks. Each starts at 15% of its full size and grows for 30 minutes,
    getting faster, stronger and tougher as it does (a small one cannot pick
    goblins up or flatten buildings, and stays out of raids unless you send
-   it). It stops growing while the village has no food. Goblins attack a
+   it). Growing takes **animus**: each tenth of the way is paid for from
+   the village's animus as it starts, 1 for the first tenth, 2 for the
+   second, and so on (55 in all; `growth_animus_step` in
+   `balancing.txt`). Without enough it waits, and says what it needs. It
+   also stops growing while the village has no food. Goblins attack a
    creature that comes close; at no health it **dies**, shrinks by a
    quarter of its size (it grows back) and lies where it fell. A
    **Resurrect** button then appears above its bars: it costs 5 animus and
@@ -264,8 +268,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    until then. How often is `saplings_per_minute` in `balancing.txt` (2)
    and the dev menu's Saplings planted slider. When goblins raid, or hang about within 50 m of
    the village, it chases them, turning 30% faster in a fight. A line of
-   text floats up from its head when it does something ("The creature ate
-   2 goblins"). In a fight it may **run from battle**: how hurt it is
+   text floats up from its head when it does something: the sentence for
+   it from `Actions.csv` (the most specific one that fits, such as "The
+   creature cast fireball at a goblin. They probably deserved it."). In a fight it may **run from battle**: how hurt it is
    only matters as far as you have trained it to care (Bless and Condemn
    on the running-from-battle rows), and the rest is its nature: the
    squirrel, being nervous, runs half as readily again as the others.
@@ -357,7 +362,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    Lightning, a cloud dripping water for Rain, roots for Roots, a skull
    dripping blood for Blood Sacrifice. Click to cast it (Shift+click casts
    and keeps it in hand); press the key again, right-click or Esc to put
-   it away. Spells only work inside your village's influence, and a
+   it away. Bless and Condemn are cast by pressing their key twice in a
+   row, no click needed. Spells only work inside your village's influence, and a
    fireball that flies out of it fizzles out. A spell cast in the last 10
    seconds costs 50% more for each time, added up, and its square on the
    spell bar fills with blue sparkles as it gets dearer (most at 300%
@@ -488,7 +494,9 @@ saved as compressed files in Godot's user folder under `maps/` (on Windows
 the main menu opens it, so maps can be copied and shared.
 
 **Slopes.** Villagers, goblins and the creature slow down a lot walking
-uphill, and nobody can climb a sheer cliff. Villagers and goblins plan
+uphill, and nobody can walk up or down the grey rock slopes
+(`cliff_grade` in `balancing.txt`) except the squirrel; the raven and the
+giant bats fly over them. Villagers and goblins plan
 their way to keep off steep ground and round cliffs and water, unless
 there is no other way.
 
@@ -529,7 +537,8 @@ and start the game again. Words in `{braces}` are filled in by the game.
   crystal tower, the moon tower, the mushroom house, the singing rocks,
   the store-in-a-tree, the winged windmill and the skull-topped
   Necromancer tower. Your villagers build more from the build menu.
-- **Goblin buildings:** every 5 minutes, once the last one is finished,
+- **Goblin buildings:** every 5 minutes (2.5 at the default goblin build
+  speed of 2), once the last one is finished,
   the goblins start a building of their own near a cave: a tent, war
   hut, forge, potion hut or watchtower of planks, rags and bones. A few
   goblins build it, going back to the cave for what they need, and they

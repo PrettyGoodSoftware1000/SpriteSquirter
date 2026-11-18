@@ -1169,7 +1169,8 @@ func _nearest_free(from: Vector3, group: String, per_target: Dictionary) -> Node
 		if per_target.get(n, 0) >= MAX_PER_TARGET:
 			continue
 		var d := Vector2(n.global_position.x - center.x, n.global_position.z - center.z).length()
-		if d > WORK_REACH:
+		# (Lumberjacks go as far as it takes for wood; stone is mined nearer home.)
+		if d > WORK_REACH and group != "trees":
 			continue
 		var tree := n as Destructible
 		if tree and (tree.burning or tree.destroyed):

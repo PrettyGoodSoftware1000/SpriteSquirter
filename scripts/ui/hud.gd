@@ -45,9 +45,9 @@ const RESOURCE_COLORS := {
 	"people": Color(1.0, 0.95, 0.85), "magicko": Color(0.8, 0.6, 1.0), "bones": Color(0.95, 0.92, 0.8),
 	"animus": Color(1.0, 0.88, 0.35),
 }
-## Resource icons in the village panel, and the spell squares (3 times as big).
+## Resource icons in the village panel, and the spell squares (half of 3 times as big).
 const ICON_SIZE := 24
-const SPELL_SIZE := ICON_SIZE * 3
+const SPELL_SIZE := 36  # half of three resource icons
 ## gathering job -> what one worker on it is called
 const JOB_NAMES := {"lumber": "lumberjack", "stone": "miner", "food": "farmer", "build": "builder"}
 ## key, label, min, max, step, unit
@@ -220,11 +220,11 @@ func _build_status_panel(root: Control) -> void:
 			grid.add_child(Control.new())
 	var army := GridContainer.new()
 	army.columns = 2
-	army.add_theme_constant_override("h_separation", 14)
-	army.add_theme_constant_override("v_separation", 3)
+	army.add_theme_constant_override("h_separation", 10)
+	army.add_theme_constant_override("v_separation", 1)
 	box.add_child(army)
 	for role: String in ROLES:
-		var role_label := _text(ROLES[role][0], 16)
+		var role_label := _text(ROLES[role][0], 12)
 		role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		army.add_child(role_label)
 		var row := HBoxContainer.new()
@@ -232,19 +232,21 @@ func _build_status_panel(root: Control) -> void:
 		army.add_child(row)
 		var singular: String = ROLES[role][2]
 		var less := _button("-")
-		less.custom_minimum_size.x = 28
+		less.custom_minimum_size = Vector2(20, 18)
+		less.add_theme_font_size_override("font_size", 11)
 		less.tooltip_text = "Remove %s" % singular
 		less.pressed.connect(func() -> void: jobs_changed.emit(role, -1))
 		row.add_child(less)
-		var count := _text("", 16)
-		count.custom_minimum_size = Vector2(52, 26)
+		var count := _text("", 12)
+		count.custom_minimum_size = Vector2(40, 18)
 		count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		count.mouse_filter = Control.MOUSE_FILTER_STOP
 		var bar := _fill_bar(Color(0.7, 0.7, 0.72, 0.45))
 		count.add_child(bar)
 		row.add_child(count)
 		var more := _button("+")
-		more.custom_minimum_size.x = 28
+		more.custom_minimum_size = Vector2(20, 18)
+		more.add_theme_font_size_override("font_size", 11)
 		more.tooltip_text = "Add %s" % singular
 		more.pressed.connect(func() -> void: jobs_changed.emit(role, 1))
 		row.add_child(more)
@@ -326,7 +328,7 @@ func _build_spell_bar(root: Control) -> void:
 	# Only the spells the village knows are shown, in its order; drag one
 	# onto another to move it there.
 	_spell_row = HBoxContainer.new()
-	_spell_row.add_theme_constant_override("separation", 8)
+	_spell_row.add_theme_constant_override("separation", 4)
 	row.add_child(_spell_row)
 	for k in SpellBook.SPELLS.size():
 		var spell: Dictionary = SpellBook.SPELLS[k]
@@ -345,16 +347,16 @@ func _build_spell_bar(root: Control) -> void:
 		var icon := TextureRect.new()
 		icon.texture = spell_icon(spell.id)
 		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-		icon.offset_left = 8
-		icon.offset_top = 8
-		icon.offset_right = -8
-		icon.offset_bottom = -8
+		icon.offset_left = 4
+		icon.offset_top = 4
+		icon.offset_right = -4
+		icon.offset_bottom = -4
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(icon)
-		var key := _text(str(k + 1), 13)
-		key.position = Vector2(6, 2)
+		var key := _text(str(k + 1), 7)
+		key.position = Vector2(3, 0)
 		key.modulate = Color(1, 1, 1, 0.7)
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(key)
@@ -366,11 +368,11 @@ func _build_spell_bar(root: Control) -> void:
 		slot.add_child(b)
 		var cost_label: Label = null
 		if spell.cost > 0:
-			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 14)
+			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 7)
 			cost_label = cost_row.get_child(0) as Label
 			slot.add_child(cost_row)
 		else:
-			slot.add_child(_text("free", 13))
+			slot.add_child(_text("free", 7))
 		_spell_buttons.append(b)
 		_spell_costs.append(cost_label)
 		_spell_sparkles.append(sparkles)
@@ -653,7 +655,7 @@ func _build_prompt(root: Control) -> void:
 	_prompt_panel.visible = false
 	root.add_child(_prompt_panel)
 	_prompt = Label.new()
-	_prompt.add_theme_font_size_override("font_size", 22)
+	_prompt.add_theme_font_size_override("font_size", 17)
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt_panel.add_child(_prompt)
 

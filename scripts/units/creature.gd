@@ -496,6 +496,7 @@ func pay_for_growth() -> bool:
 		return false
 	Game.village.give("animus", -growth_cost())
 	growth_paid += 1
+	Game.village.unlock_growth_spells(growth_paid)
 	return true
 
 
@@ -1092,7 +1093,9 @@ func _update_attacks(delta: float) -> void:
 	var nearest: Villager = null
 	var nearest_d := INF
 	var hunt: Villager = null
-	var hunt_d := HUNT_RANGE
+	# The player's creature goes after any enemy within its aggressiveness
+	# range (Balance "creature_aggro_range" metres of it).
+	var hunt_d := HUNT_RANGE if hostile else Balance.num("creature_aggro_range")
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
 		# (A charmed goblin is on our side for now.)
@@ -1104,7 +1107,7 @@ func _update_attacks(delta: float) -> void:
 			if d < nearest_d:
 				nearest_d = d
 				nearest = g
-		elif d < hunt_d and (g.raiding or _threatens_village(g)):
+		elif d < hunt_d and (not hostile or g.raiding or _threatens_village(g)):
 			hunt_d = d
 			hunt = g
 	# The other giant counts too: in reach of our fists, or to be hunted

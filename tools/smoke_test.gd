@@ -83,6 +83,9 @@ func _run() -> void:
 		"each Storehouse holds 300 of each (%d lumber, %d Storehouses)" % [village.amount("lumber"), stores])
 	village.resources.lumber = 80.0
 	_check(village.capacity("magicko") == INF and village.capacity("animus") == INF, "magicko and animus have no limit")
+	_check(village.built_shrines() == 0, "the village site's Singing Stones make no animus: 1 a minute to begin with (%d there)" % village.shrines().size())
+	play._set_mode(PlayMode.Mode.COMMAND)
+	_check(play.hud._hint.text == "", "no hint text while nothing is in hand")
 	_check(village.influence() > Game.settings.influence_start and village.in_territory(village.center + Vector3(village.influence() - 1.0, 0, 0))
 		and not village.in_territory(village.center + Vector3(village.influence() + 1.0, 0, 0)), "the village's influence grows with its people (%.0f m)" % village.influence())
 	_check(Balance.values.size() >= Balance.DEFAULTS.size() and FileAccess.file_exists(Balance.PATH), "balancing.txt is read")
@@ -189,12 +192,19 @@ func _run() -> void:
 			"the dev menu can teach every spell (after the ones already known)")
 		# A spell can be dragged to any place on the bar, rows 2 and 3 too.
 		var fire_k := SpellBook.index_of("fireball")
+		SpellLayout.set_rows(2)
+		play.hud._show_spell_rows()
+		var bar_lines := play.hud._spell_lines
+		_check(bar_lines[1].visible and not bar_lines[2].visible and bar_lines[1].get_index() < bar_lines[0].get_index()
+			and play.hud._remove_row_button.visible, "the Ctrl row opens above the first, and a - button closes it")
 		play.hud.spell_moved.emit(fire_k, 12)
 		_check(village.spell_at(12) == "fireball" and play._key_of(fire_k) == "Ctrl+3" and play.hud._spell_slot_of[fire_k] == 12
 			and play.hud._spell_lines[1].visible and play.hud._spell_keys[fire_k].text == "3", "a spell dragged to the second row is cast with Ctrl and its number")
 		play.hud.spell_moved.emit(fire_k, 0)
 		_check(village.spell_at(0) == "fireball" and village.spell_at(12) == "gnomes", "dragging a spell onto another swaps them")
 		_check(SpellLayout.slot_of("fireball") == 0 and SpellLayout.slot_of("gnomes") == 12, "where the spells are is remembered for the next game")
+		play.hud._remove_row_button.pressed.emit()
+		_check(not bar_lines[1].visible and SpellLayout.row_count() == 1 and not play.hud._remove_row_button.visible, "the - button closes the extra rows")
 		_check(PlayMode._bar_column(KEY_0) == 9 and PlayMode._bar_column(KEY_KP_3) == 2 and PlayMode._bar_column(KEY_A) == -1,
 			"the number keys and the numpad pick the spell bar's places")
 		_check(play.hud._spell_buttons[fire_k].tooltip_text == "", "the spell bar has no tooltips")
@@ -240,7 +250,8 @@ func _run() -> void:
 	village.give("stone", 10.0)
 	if guards_before == 0:
 		play.hud.set_resources(village, "")
-		_check((play.hud._jobs.warrior.count as Label).text == "0/0", "Warriors 0/0 without a Town guard (%s)" % (play.hud._jobs.warrior.count as Label).text)
+		_check((play.hud._jobs.warrior.count as Label).text == "0/0" and not (play.hud._jobs.warrior.row as Control).visible,
+			"Warriors are not shown without a Town guard (%s)" % (play.hud._jobs.warrior.count as Label).text)
 	var tower := BuildingFactory.create("tall_house", RandomNumberGenerator.new())
 	game.world_root.add_child(tower)
 	tower.set_meta("kind", "tall_house")
@@ -891,6 +902,20 @@ func _run() -> void:
 	for node in get_tree().get_nodes_in_group("saplings"):
 		node.queue_free()
 
+	# A battle is only enemies inside the village's influence.
+	var marcher := WorldPopulator.spawn_villager(game.world_root, game.terrain, village.center + Vector3(village.influence() + 25.0, 0, 0), 1.0, true)
+	await _wait(0.1)
+	marcher.raiding = true
+	var calm := not beast.mind._battle_raging() or get_tree().get_nodes_in_group("goblins").any(
+		func(g: Node) -> bool: return g != marcher and village.in_territory((g as Node3D).global_position))
+	marcher.global_position = village.center + Vector3(5, 0, 5)
+	_check(calm and beast.mind._battle_raging(), "goblins marching outside the influence are no battle; inside it they are")
+	marcher.queue_free()
+	# Only Builders and unassigned Workers build.
+	village._assign_jobs()
+	_check(village.people().all(func(v: Villager) -> bool: return v.job != "build" or v.pin == "" or v.pin == "build"),
+		"lumberjacks, miners and farmers never build")
+
 	# Charm Offensive: half the goblins caught in it fight their own kind.
 	var charm_at := village.center + Vector3(-40, 0, 30)
 	charm_at.y = game.terrain.get_height(charm_at.x, charm_at.z)
@@ -964,6 +989,13 @@ func _run() -> void:
 	beast.growth_paid = 0
 	beast.age = 0.0
 	village.resources.animus = 0.0
+	# (Bless and Condemn come with growing: take them away to see them come.)
+	for growth_spell: String in ["bless", "condemn"]:
+		village.spells_known.erase(growth_spell)
+		var slot_k := village.spell_slots.find(growth_spell)
+		if slot_k >= 0:
+			village.spell_slots[slot_k] = ""
+	_check(village.start_spell_research("bless") != "", "Bless cannot be researched at the Shrine")
 	await _wait(1.0)
 	_check(beast.age == 0.0 and beast.growth_paid == 0 and not beast.can_grow(), "with no animus, the creature does not grow")
 	village.give("animus", 1.0)
@@ -975,8 +1007,12 @@ func _run() -> void:
 	await _wait(2.0)
 	_check(beast.growth_paid == 1 and village.amount("animus") == 0 and beast.age > 0.0
 		and beast.age <= 0.1 * game.settings.creature_grow_minutes * 60.0 + 0.01, "clicking the portrait pays 1 animus for the first tenth of its growth, and no further")
+	_check(village.knows_spell("bless") and not village.knows_spell("condemn"), "the first growth unlocks Bless")
+	play.hud.update_creature(beast)
+	_check(is_equal_approx(play.hud._growth_bar.paid, 0.1) and play.hud._growth_bar.grown <= 0.11, "the growth bar shows what it has grown and what is paid for")
 	village.give("animus", 2.0)
 	_check(beast.pay_for_growth() and beast.growth_paid == 2 and village.amount("animus") == 0, "the second tenth costs 2")
+	_check(village.knows_spell("condemn"), "the next growth unlocks Condemn")
 	play.hud.update_creature(beast)
 	_check(play.hud._portrait_sparkles.amount == 0.0, "no sparkle when it cannot grow on")
 	beast.growth_paid = 10

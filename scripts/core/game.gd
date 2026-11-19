@@ -8,7 +8,7 @@ extends Node
 
 ## Gameplay numbers the dev menu (~) can change while playing.
 const DEFAULT_SETTINGS := {
-	"day_minutes": 8.0, # length of a full day-night cycle
+	"day_minutes": 10.0, # length of a full day-night cycle
 	"lumber_rate": 6.0, # per worker per minute
 	"stone_rate": 4.0, # per worker per minute
 	"food_rate": 6.0, # per worker per minute

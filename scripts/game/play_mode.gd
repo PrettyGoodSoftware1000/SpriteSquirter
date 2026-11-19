@@ -168,6 +168,9 @@ func _ready() -> void:
 	hud.spell_moved.connect(func(index: int, slot: int) -> void:
 		village.move_spell(SpellBook.SPELLS[index].id, slot)
 		hud.set_spell_slots(village.spell_slots))
+	village.spell_unlocked.connect(func(id: String) -> void:
+		hud.set_spell_slots(village.spell_slots)
+		_announce(Texts.line("spell_unlocked", {"spell": SpellBook.find(id).name, "creature": creature.species_name().to_lower() if creature else "creature"})))
 	village.spell_researched.connect(func(id: String) -> void:
 		hud.set_spell_slots(village.spell_slots)
 		_announce(Texts.line("spell_researched", {"spell": SpellBook.find(id).name})))
@@ -430,10 +433,7 @@ func _set_mode(m: Mode) -> void:
 	hud.set_sculpt(sculpt_brush if m == Mode.SCULPT else -1)
 	match m:
 		Mode.COMMAND:
-			hud.set_hint("Click or right-click the ground to walk the %s there. %s B or Backspace opens the build menu." \
-				% [(Creature.SPECIES[Game.creature_kind].name as String).to_lower(),
-				"The number keys take a spell in hand." if village.spell_slots.any(func(id: String) -> bool: return id != "")
-				else "Click the %s to research spells." % BuildingCatalog.role_name("shrine")])
+			hud.set_hint("")
 		Mode.PLACE:
 			hud.set_hint(_place_hint())
 		Mode.SCULPT:

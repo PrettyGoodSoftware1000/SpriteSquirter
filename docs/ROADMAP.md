@@ -169,6 +169,15 @@ stage.
 - Necromancer stats in balancing.txt; purple firebolt doing half a wizard's harm
 - What each spell costs to cast is in balancing.txt (spell_cost_...)
 
+## Version 0.27: Growth bar, spell rows up, builders ✅
+- Spell rows open upward (Ctrl above, Shift above that), with a - to close them; the creature's bars stay put
+- Growth bar beside the portrait; Bless and Condemn unlock with the creature's first two growths
+- Base animus 1 a minute (village-site Singing Stones make none)
+- Only Builders and Workers build; a new job takes a worker off a building at once
+- Warriors and wizards show only once their building exists
+- Creature aggressiveness range (45 m); battle means enemies inside the influence; gathering only inside it
+- Day length 10 min; night darkness down to -150%; lightning wet bonus 2
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

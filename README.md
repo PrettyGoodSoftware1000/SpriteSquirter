@@ -56,8 +56,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    arrives. Each Storehouse holds 300 each of lumber, stone, food and
    bones, and each Granary 300 more food: anything over that is lost.
    Magicko and **animus** have no limit; the village gets 1 animus a
-   minute to begin with (`animus_per_minute`) and each **Shrine** makes 1
-   more. Boulders come in small boulder
+   minute to begin with (`animus_per_minute`) and each **Shrine** it
+   builds makes 1 more (Singing Stones that come with the village site
+   make none). Boulders come in small boulder
    fields dotted over the island. Trees and boulders run out, so the
    workers move on; a boulder holds a lot of stone and crumbles away
    slowly once it is used up. A worker carries a small load (2 units) home on its
@@ -140,7 +141,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **-** sends one back to the Workers. Hold the mouse over a + or - to see
    what it does.
    Builders only build: they are first onto every building site and wait
-   when there is nothing to build. Farmers (and anyone foraging) gather
+   when there is nothing to build. Only Builders and unassigned Workers
+   build; set one to another job and it drops the building at once. Farmers (and anyone foraging) gather
    food twice as fast as other workers gather, and sow and reap fields
    twice as fast too. No job's **+** works unless there is a free Worker
    for it (one not already promised to a warrior, archer or wizard you
@@ -232,7 +234,11 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    it). Growing takes **animus**: it grows a tenth of the way at a time,
    and each tenth must be paid for first, 1 for the first tenth, 2 for
    the second, and so on (55 in all; `growth_animus_step` in
-   `balancing.txt`). Its **portrait**, left of its bars, sparkles yellow
+   `balancing.txt`). Left of its bars, a thin **growth bar** fills yellow
+   as it grows, grey above what the animus paid so far lets it reach. Its
+   first growth brings the **Bless** spell, and its second **Condemn**
+   (they are not researched). It goes after any enemy within
+   `creature_aggro_range` metres of it (45). Its **portrait** sparkles yellow
    when it has grown as far as it was paid for and the village has the
    animus for the next tenth: click it to pay. Hold the mouse over it to
    see how far it has grown and what the next tenth costs. It also stops
@@ -366,8 +372,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    `spell_research_animus_step` and `spell_research_seconds` in
    `balancing.txt`), one at a time. The spell bar has room for 10 spells
    in a row, cast with 1 to 9 and 0 (or the numpad); the little **+** at
-   its top left adds a second row, cast with **Ctrl** and the number, and
-   a third, with **Shift**. **Drag a spell** onto any place on the bar to
+   its top left adds a second row above it, cast with **Ctrl** and the
+   number, and a third above that, with **Shift**; the **-** beside it
+   takes them away again. **Drag a spell** onto any place on the bar to
    move it there (onto another spell to swap them). Where you put each
    spell is remembered: next game, a spell you research goes back where
    you had it; otherwise it goes in the last spot, after the others. The spell goes into your

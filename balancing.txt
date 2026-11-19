@@ -41,6 +41,7 @@ creature_shrink_on_knockout = 0.25  # share of its size the creature loses when 
 creature_getup_health = 1       # share of its health it has when it is brought back to life
 resurrect_animus = 5            # animus it costs to bring the creature back to life, at the Shrine
 creature_young_appetite = 0.5   # under half grown it eats this share of what it otherwise would
+creature_aggro_range = 45       # metres: it goes after any enemy this close to it
 growth_animus_step = 1          # growing takes animus: each tenth of its growth costs this many times
                                 # which tenth it is (1, then 2, then 3...: 55 in all), paid as it starts
 
@@ -196,7 +197,7 @@ goblin_watchtower_resources = 30
 lightning_damage = 130              # to each thing the bolt jumps through
 lightning_jumps = 18                # how many things one bolt can hit
 lightning_jump_range = 15           # metres between one and the next
-lightning_wet_bonus = 200           # damage is multiplied by this for anything wet
+lightning_wet_bonus = 2             # damage is multiplied by this for anything wet
 wet_seconds = 60                    # how long rain leaves villagers and goblins wet
 
 # --- The giant bat --------------------------------------------------------------

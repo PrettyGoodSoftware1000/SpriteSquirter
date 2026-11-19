@@ -92,6 +92,8 @@ const BLOOD_REACH := 9.0
 signal research_done(id: String)
 ## A spell has been researched at the Shrine (see SpellBook).
 signal spell_researched(id: String)
+## Bless or Condemn has come with the creature's growth.
+signal spell_unlocked(id: String)
 ## Another Balance "stored_per_lesson" of `kind` has been carried in: the
 ## creature learns a little about harvesting it.
 signal lesson(kind: String)
@@ -255,7 +257,9 @@ func change_quota(kind: String, change: int) -> void:
 				break
 	if chosen:
 		chosen.pin = kind if change > 0 else ""
-		if change < 0 and chosen.job != "build":
+		# Given a job, a worker drops whatever it was doing (building too)
+		# at once and goes to it.
+		if (change > 0 and chosen.job != kind and not (kind == "food" and chosen.job == "farm")) or (change < 0 and chosen.job != "build"):
 			chosen.clear_job()
 	_assign_jobs()
 
@@ -450,9 +454,10 @@ func _update_research(delta: float) -> void:
 
 # --- Spells researched at the Shrine (the Singing rocks) ------------------------
 
-## True if spell `id` can be cast: it needs no research, or has had it.
+## True if spell `id` can be cast: it has been researched (or, for Bless
+## and Condemn, has come with the creature's growth).
 func knows_spell(id: String) -> bool:
-	return not SpellBook.needs_research(id) or spells_known.has(id)
+	return spells_known.has(id)
 
 
 ## Starts researching spell `id` at the Shrine. Returns why it can't, or
@@ -460,6 +465,8 @@ func knows_spell(id: String) -> bool:
 func start_spell_research(id: String) -> String:
 	if knows_spell(id):
 		return "You know that spell already."
+	if not SpellBook.needs_research(id):
+		return "That spell comes as your creature grows."
 	if shrines().is_empty():
 		return "Spells are researched at the %s: build one first." % BuildingCatalog.role_name("shrine")
 	if not spell_research.is_empty():
@@ -475,7 +482,11 @@ func start_spell_research(id: String) -> String:
 
 ## What the next spell costs to research (see SpellBook.research_cost()).
 func spell_research_cost() -> Dictionary:
-	return SpellBook.research_cost(spells_known.size())
+	var researched := 0
+	for id: String in spells_known:
+		if SpellBook.needs_research(id):
+			researched += 1
+	return SpellBook.research_cost(researched)
 
 
 ## 0..1 for the spell being researched, 1 for one known, else 0.
@@ -511,6 +522,11 @@ func _learn_spell(id: String) -> void:
 	if want >= 0:
 		spell_slots[want] = id
 		SpellLayout.remember(spell_slots)
+		# A spell put in a row the bar is not showing brings that row out.
+		@warning_ignore("integer_division")
+		var row := want / SpellLayout.PER_ROW
+		if row >= SpellLayout.row_count():
+			SpellLayout.set_rows(row + 1)
 
 
 ## The spell bar, made empty the first time it is asked for.
@@ -549,6 +565,15 @@ func move_spell(id: String, slot: int) -> void:
 func spell_at(slot: int) -> String:
 	_bar()
 	return spell_slots[slot] if slot >= 0 and slot < spell_slots.size() else ""
+
+
+## Bless and Condemn come as the creature grows: each at its level (see
+## SpellBook.GROWTH_SPELLS) of `level` tenths of growth paid for.
+func unlock_growth_spells(level: int) -> void:
+	for id: String in SpellBook.GROWTH_SPELLS:
+		if level >= int(SpellBook.GROWTH_SPELLS[id]) and not spells_known.has(id):
+			_learn_spell(id)
+			spell_unlocked.emit(id)
 
 
 ## Every spell, researched at once (the dev menu).
@@ -804,6 +829,15 @@ func in_territory(p: Vector3) -> bool:
 	return founded and Vector2(p.x - center.x, p.z - center.z).length() < influence()
 
 
+## The Shrines the village has built itself (they make animus).
+func built_shrines() -> int:
+	var n := 0
+	for b in shrines():
+		if int(b.get_meta("site", -1)) < 0:
+			n += 1
+	return n
+
+
 ## The Shrines that stand, for animus and bringing the creature back.
 func shrines() -> Array[Destructible]:
 	var out: Array[Destructible] = []
@@ -834,8 +868,9 @@ func _process(delta: float) -> void:
 	var grown := adults() - wizards()
 	var boost := BLOOD_BOOST if blood_active() else 1.0
 	give("magicko", (grown * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
-	# Animus: Balance "animus_per_minute" to begin with, and more for every Shrine.
-	give("animus", (Balance.num("animus_per_minute") + shrines().size() * Balance.num("animus_per_shrine")) / 60.0 * delta)
+	# Animus: Balance "animus_per_minute" to begin with, and more for every
+	# Shrine the village has built (not the ones its site came with).
+	give("animus", (Balance.num("animus_per_minute") + built_shrines() * Balance.num("animus_per_shrine")) / 60.0 * delta)
 	_sample(delta)
 	_eat(delta)
 	if population() < housing() and amount("food") > 0:
@@ -990,6 +1025,10 @@ func _assign_jobs() -> void:
 	for v in workers:
 		if v.job != "build":
 			continue
+		# Only Builders and unassigned Workers build.
+		if v.pin != "" and v.pin != "build":
+			v.clear_job()
+			continue
 		if is_instance_valid(v.job_target) and sites.has(v.job_target) and crew.get(v.job_target, 0) < most:
 			crew[v.job_target] = crew.get(v.job_target, 0) + 1
 		else:
@@ -1060,12 +1099,10 @@ func _assign_jobs() -> void:
 
 
 ## The next villager to send to a building site at `at`: a builder with
-## nothing to build, else the nearest unassigned worker. A site with nobody
-## on it (`desperate`) will take a lumberjack, miner or farmer.
-func _next_builder(workers: Array[Villager], at: Vector3, desperate: bool) -> Villager:
-	for wanted: String in ["build", "", "any"]:
-		if wanted == "any" and not desperate:
-			break
+## nothing to build, else the nearest unassigned worker. (Lumberjacks,
+## miners and farmers never build.) `_desperate` is no longer used.
+func _next_builder(workers: Array[Villager], at: Vector3, _desperate: bool) -> Villager:
+	for wanted: String in ["build", ""]:
 		var best: Villager = null
 		var best_d := INF
 		for v in workers:

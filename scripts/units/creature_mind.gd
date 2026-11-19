@@ -376,16 +376,20 @@ func gather_facts(kind: String) -> Dictionary:
 	return facts
 
 
-## True while the creature fights, goblins raid, or goblins prowl the village.
+## True while enemies are inside the village's influence (a battle).
 func _battle_raging() -> bool:
-	if creature.is_fighting() and not creature.is_fleeing():
-		return true
+	# Only enemies inside the village's influence make a battle: goblins
+	# marching on it from outside do not.
+	var village := Game.village
+	if not is_instance_valid(village) or not village.founded:
+		return false
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
-		if g.is_alive() and (g.raiding or g.threatens_village()):
+		if g.is_alive() and not g.charmed() and village.in_territory(g.global_position):
 			return true
 	for node in get_tree().get_nodes_in_group("balrogs"):
-		if (node as Creature).is_threat():
+		var b := node as Creature
+		if not b.knocked_out and village.in_territory(b.global_position):
 			return true
 	return false
 
@@ -874,7 +878,8 @@ func _harvest_target(kind: String) -> Node:
 		var tree := n as Destructible
 		if tree and (tree.burning or tree.destroyed or tree.footprint < 1.2):
 			continue
-		if n.global_position.distance_to(village.center) > PlayerVillage.WORK_REACH:
+		# (Only inside the village's influence.)
+		if not village.in_territory(n.global_position):
 			continue
 		var d := n.global_position.distance_to(creature.global_position)
 		if d < best_d:

@@ -75,7 +75,7 @@ const SETTING_SLIDERS := [
 	["training_time", "Training time", 0.1, 3.0, 0.1, "x"],
 	["influence_start", "Starting influence", 10.0, 150.0, 5.0, "m"],
 	["influence_per_person", "Influence per person", 0.0, 5.0, 0.25, "m"],
-	["night_darkness", "Night darkness", -50.0, 90.0, 5.0, "%"],
+	["night_darkness", "Night darkness", -150.0, 90.0, 5.0, "%"],
 ]
 const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.66, 0.26), "magicko": Color(0.5, 0.34, 0.86)}
 ## role -> [name in the jobs row, the building that trains it]
@@ -111,6 +111,7 @@ var _spell_slot_of: Array[int] = []
 var _slot_holders: Array[SlotHolder] = []
 var _spell_lines: Array[HBoxContainer] = []
 var _add_row_button: Button
+var _remove_row_button: Button
 ## The highest slot with a spell in it (so its row is shown).
 var _last_used_slot := -1
 var _spell_research_panel: PanelContainer
@@ -125,6 +126,9 @@ var _portrait: SubViewportContainer
 var _portrait_view: SubViewport
 var _portrait_kind := ""
 var _portrait_sparkles: SpellSparkles
+## Beside the portrait: how far the creature has grown (yellow, rising),
+## with what it cannot grow into without more animus in grey.
+var _growth_bar: GrowthBar
 var _build_panel: PanelContainer
 var _build_buttons := {}
 var _build_previews: Array[BuildingPreview] = []
@@ -346,6 +350,7 @@ func _build_spell_bar(root: Control) -> void:
 	box.add_child(row)
 	var menus := VBoxContainer.new()
 	menus.add_theme_constant_override("separation", 2)
+	menus.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_child(menus)
 	# The build menu: a hammer. (Research: click a Blacksmith, or U.)
 	var build := _button("")
@@ -357,25 +362,38 @@ func _build_spell_bar(root: Control) -> void:
 	menus.add_child(build)
 	# The spell bar: rows of SpellLayout.PER_ROW slots (room for 10 spells
 	# whatever is known), one row to begin with; the + in its corner adds a
-	# second (Ctrl + number) and a third (Shift + number). Each spell is a
+	# second (Ctrl + number) above it and a third (Shift + number) above
+	# that, and the - takes them away again. Each spell is a
 	# square with its sign (the one the mouse pointer turns into when it is
 	# in hand), its key in the corner and its cost underneath; drag it onto
 	# another slot to move it there.
 	var spell_area := VBoxContainer.new()
 	spell_area.add_theme_constant_override("separation", 2)
+	spell_area.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_child(spell_area)
+	var row_buttons := HBoxContainer.new()
+	row_buttons.add_theme_constant_override("separation", 2)
+	spell_area.add_child(row_buttons)
 	_add_row_button = _button("+")
 	_add_row_button.custom_minimum_size = Vector2(16, 16)
 	_add_row_button.add_theme_font_size_override("font_size", 12)
-	_add_row_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_add_row_button.pressed.connect(func() -> void:
 		SpellLayout.set_rows(_spell_row_count() + 1)
 		_show_spell_rows())
-	spell_area.add_child(_add_row_button)
+	row_buttons.add_child(_add_row_button)
+	_remove_row_button = _button("-")
+	_remove_row_button.custom_minimum_size = Vector2(16, 16)
+	_remove_row_button.add_theme_font_size_override("font_size", 12)
+	_remove_row_button.pressed.connect(func() -> void:
+		SpellLayout.set_rows(_spell_row_count() - 1)
+		_show_spell_rows())
+	row_buttons.add_child(_remove_row_button)
 	for r in SpellLayout.ROWS_MOST:
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override("separation", 4)
+		# (Each row goes above the one before: the first stays at the bottom.)
 		spell_area.add_child(line)
+		spell_area.move_child(line, 1)
 		var prefix := _text(["", "Ctrl", "Shift"][r], 12)
 		prefix.custom_minimum_size.x = 30
 		prefix.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -438,12 +456,17 @@ func _build_spell_bar(root: Control) -> void:
 		_spell_keys.append(key)
 		_spell_slot_of.append(-1)
 	_show_spell_rows()
-	# The creature's portrait, then its health, stamina and magicko.
+	# The creature's growth bar, its portrait, then its health, stamina and
+	# magicko.
+	_growth_bar = GrowthBar.new()
+	_growth_bar.custom_minimum_size = Vector2(7, 64)
+	_growth_bar.size_flags_vertical = Control.SIZE_SHRINK_END
+	row.add_child(_growth_bar)
 	_portrait = SubViewportContainer.new()
 	_portrait.custom_minimum_size = Vector2(64, 64)
 	_portrait.stretch = true
 	_portrait.mouse_filter = Control.MOUSE_FILTER_STOP
-	_portrait.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_portrait.size_flags_vertical = Control.SIZE_SHRINK_END
 	_portrait.gui_input.connect(func(event: InputEvent) -> void:
 		var click := event as InputEventMouseButton
 		if click and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
@@ -461,7 +484,9 @@ func _build_spell_bar(root: Control) -> void:
 	_portrait.add_child(_portrait_sparkles)
 	var stats := VBoxContainer.new()
 	stats.add_theme_constant_override("separation", 3)
-	stats.alignment = BoxContainer.ALIGNMENT_CENTER
+	stats.alignment = BoxContainer.ALIGNMENT_END
+	# (At the bottom, where it stays however tall the spell bar grows.)
+	stats.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_child(stats)
 	_resurrect = _button("Resurrect at the %s (%d animus)" % [BuildingCatalog.role_name("shrine"), roundi(Balance.num("resurrect_animus"))])
 	_resurrect.tooltip_text = "Your creature is dead. Bring it back to life beside the %s." % BuildingCatalog.role_name("shrine")
@@ -523,6 +548,7 @@ func update_creature(beast: Creature) -> void:
 ## and then; sparkles when it can grow on; says how it is growing.
 func _update_portrait(beast: Creature) -> void:
 	_portrait_sparkles.set_extra(SpellSparkles.FULL * 0.6 if beast.can_grow() else 0.0)
+	_growth_bar.set_values(beast.grown(), float(beast.growth_paid) / 10.0)
 	var village := Game.village
 	var have: int = village.amount("animus") if is_instance_valid(village) else 0
 	if beast.growth_paid >= 10:
@@ -1029,11 +1055,9 @@ func _update_jobs(village: PlayerVillage) -> void:
 		(w.count as Label).tooltip_text = "%d trained, %d in training, of the %d your %s buildings allow. + trains one more, while %s free to train." % [
 			village.count(role), maxi(0, asked - village.count(role)), top, BuildingCatalog.role_name(ROLES[role][1]),
 			"a wizard is" if role == "necromancer" else "an unassigned worker is"]
-		# Archers appear once bows have been researched, and necromancers
-		# once there is a tower for them.
-		var known := role != "archer" or village.has_research("bows")
-		if role == "necromancer":
-			known = top > 0 or village.count(role) > 0
+		# Each shows once there is a building to train it (archers: once
+		# bows are researched too).
+		var known := top > 0 or village.count(role) > 0
 		for part: String in ["label", "row"]:
 			(w[part] as Control).visible = known
 		var free_now := village.free_wizards() if role == "necromancer" else village.free_workers()
@@ -1119,9 +1143,10 @@ func set_spell_slots(bar: Array[String]) -> void:
 	_show_spell_rows()
 
 
+## How many rows the bar shows (spells in a hidden row can still be cast
+## with Ctrl or Shift and the number).
 func _spell_row_count() -> int:
-	@warning_ignore("integer_division")
-	return clampi(maxi(SpellLayout.row_count(), _last_used_slot / SpellLayout.PER_ROW + 1), 1, SpellLayout.ROWS_MOST)
+	return clampi(SpellLayout.row_count(), 1, SpellLayout.ROWS_MOST)
 
 
 func _show_spell_rows() -> void:
@@ -1129,6 +1154,26 @@ func _show_spell_rows() -> void:
 	for r in _spell_lines.size():
 		_spell_lines[r].visible = r < rows
 	_add_row_button.visible = rows < SpellLayout.ROWS_MOST
+	_remove_row_button.visible = rows > 1
+
+
+## The creature's growth: yellow up to how far it has grown, dark up to how
+## far the animus paid for lets it grow, grey above that.
+class GrowthBar extends Control:
+	var grown := 0.0
+	var paid := 0.0
+
+	func set_values(now: float, allowed: float) -> void:
+		if not is_equal_approx(now, grown) or not is_equal_approx(allowed, paid):
+			grown = clampf(now, 0.0, 1.0)
+			paid = clampf(allowed, 0.0, 1.0)
+			queue_redraw()
+
+	func _draw() -> void:
+		var h := size.y
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.45, 0.45, 0.48, 0.9))
+		draw_rect(Rect2(0.0, h * (1.0 - paid), size.x, h * paid), Color(0.1, 0.09, 0.05, 0.9))
+		draw_rect(Rect2(0.0, h * (1.0 - grown), size.x, h * grown), Color(1.0, 0.82, 0.2))
 
 
 ## A place on the spell bar: a faint square when empty, and somewhere to

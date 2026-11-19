@@ -37,10 +37,15 @@ const SPELLS := [
 ]
 
 
+## Spells that come with the creature's growth instead of research: id ->
+## the growth level (tenths paid for) that unlocks it.
+const GROWTH_SPELLS := {"bless": 1, "condemn": 2}
+
+
 ## True for a spell that must be researched at the Shrine before it is
-## cast: all of them.
+## cast: all but Bless and Condemn, which come as the creature grows.
 static func needs_research(id: String) -> bool:
-	return index_of(id) >= 0
+	return index_of(id) >= 0 and not GROWTH_SPELLS.has(id)
 
 
 ## What researching a spell costs (in animus), when the village already

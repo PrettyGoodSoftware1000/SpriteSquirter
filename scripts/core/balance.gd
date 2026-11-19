@@ -42,7 +42,7 @@ const DEFAULTS := {
 	"charm_radius": 8.0, "charm_seconds": 60.0, "charm_share": 0.5,
 	"forest_seed_weight": 0.1, "forest_seed_cooldown_1": 15.0, "forest_seed_cooldown_2": 30.0, "forest_seed_cooldown_3": 60.0,
 	"seed_judge_points": 30.0, "squirrel_forestSeeder_personality": 1.0,
-	"growth_animus_step": 1.0,
+	"growth_animus_step": 1.0, "creature_aggro_range": 45.0,
 	"shell_burst_speed": 0.25, "shell_burst_seconds": 6.0, "shell_burst_radius": 9.0, "shell_burst_force": 14.0,
 	"magic_tree_magicko_small": 10.0, "magic_tree_magicko_full": 100.0, "magic_tree_grow_days": 2.0, "magic_tree_seed_minutes": 2.0,
 	"explore_least": 40.0,

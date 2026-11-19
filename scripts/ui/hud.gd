@@ -64,7 +64,7 @@ const SETTING_SLIDERS := [
 	["food_rate", "Food rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["birth_seconds", "Birth timer", 5.0, 300.0, 5.0, "s"],
 	["magicko_rate", "Magicko rate", 0.0, 30.0, 0.5, "/villager/min"],
-	["goblin_rate", "Goblin spawn", 0.0, 20.0, 0.5, "/cave/min"],
+	["goblin_rate", "Goblin Spawn Rate", 0.0, 20.0, 0.5, "/cave/min"],
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 	["goblin_build_speed", "Goblin build speed", 0.25, 10.0, 0.25, "x"],
@@ -708,23 +708,27 @@ func show_research_menu(shown: bool, place := "") -> void:
 	if place != "":
 		_research_place = place
 	_research_heading.text = "%s: research, one thing at a time  (Esc to close)" % BuildingCatalog.role_name(_research_place)
-	for item in Research.ITEMS:
-		(_research_rows[item.id].row as Control).visible = item.place == _research_place
+	if is_instance_valid(Game.village):
+		update_research(Game.village)
 
 
 func is_research_menu_open() -> bool:
 	return _research_panel.visible
 
 
+## Shows the research of the open menu's building, all but what is still
+## locked: an item with `needs` (a higher tier) stays out of sight until
+## the one it needs has been researched.
 func update_research(village: PlayerVillage) -> void:
 	for item in Research.ITEMS:
-		if item.place != _research_place:
-			continue
 		var row: Dictionary = _research_rows[item.id]
+		var waiting: bool = item.has("needs") and not village.has_research(item.needs)
+		(row.row as Control).visible = item.place == _research_place and not waiting
+		if not (row.row as Control).visible:
+			continue
 		var b := row.button as Button
 		var done := village.has_research(item.id)
 		var running: bool = village.research_at(item.place).get("id", "") == item.id
-		var waiting: bool = item.has("needs") and not village.has_research(item.needs)
 		var progress := village.research_progress(item.id)
 		(row.bar as ProgressBar).value = progress
 		(row.bar as ProgressBar).visible = running
@@ -735,11 +739,9 @@ func update_research(village: PlayerVillage) -> void:
 			status.text = "%d%%" % floori(progress * 100.0)
 		elif not village.has_role(item.place):
 			status.text = "No %s" % BuildingCatalog.role_name(item.place)
-		elif waiting:
-			status.text = "Needs %s" % Research.find(item.needs).name
 		else:
 			status.text = ""
-		b.disabled = done or running or waiting
+		b.disabled = done or running
 		b.modulate = Color.WHITE if done or running or village.can_afford(item.cost) else Color(1.0, 0.6, 0.6, 0.8)
 
 

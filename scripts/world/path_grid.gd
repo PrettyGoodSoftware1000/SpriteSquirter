@@ -6,10 +6,18 @@ extends RefCounted
 ## than Balance "cliff_grade" (a sheer cliff), off the island, or (for
 ## those who cannot swim) under water are not walked at all.
 ##
+## Buildings stand in the way too: each one blocks the squares under it
+## (add_building(), which every building does for itself), so routes go
+## round them, and building_in_way() lets a walker step round one it is
+## about to bump into.
+##
 ## It keeps itself up to date as the terrain is reshaped. Get it from
 ## Game.path_grid().
 
 const CELL := 2.0
+## How much of a building's footprint (Destructible.footprint, a rough
+## radius drawn generously) is solid wall that nobody walks through.
+const WALL_SHARE := 0.62
 
 var terrain: Terrain
 
@@ -19,6 +27,12 @@ var _swim := AStarGrid2D.new()
 var _w := 0
 var _dirty := Rect2i()
 var _has_dirty := false
+## Square -> how many buildings' walls stand on it (it is not walked);
+## square -> the buildings whose walls come near it (for building_at());
+## building -> {"solid": its walled squares, "near": the squares near it}.
+var _walled := {}
+var _walls := {}
+var _blocks := {}
 
 
 func setup(t: Terrain) -> void:
@@ -33,6 +47,11 @@ func setup(t: Terrain) -> void:
 		grid.update()
 	_refresh(Rect2i(0, 0, _w, _w))
 	t.changed.connect(_on_changed)
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree != null:
+		for node in tree.get_nodes_in_group("buildings"):
+			if node is Destructible and node.is_inside_tree():
+				add_building(node)
 
 
 func _on_changed(center: Vector3, radius: float) -> void:
@@ -81,11 +100,84 @@ func _refresh(r: Rect2i) -> void:
 			var across := Vector2(heights[k - 1] - heights[k + 1], heights[k - n] - heights[k + n]).length() * 0.5
 			var steep := across > cliff
 			var wet := water[k] != Terrain.NO_WATER and water[k] - h > 0.15
-			_land.set_point_solid(id, steep or wet)
+			var walled := _walled.has(id)
+			_land.set_point_solid(id, steep or wet or walled)
 			# Swimmers float over whatever the bottom is like.
-			_swim.set_point_solid(id, steep and not wet)
+			_swim.set_point_solid(id, (steep and not wet) or walled)
 			_land.set_point_weight_scale(id, weight)
 			_swim.set_point_weight_scale(id, 3.0 if wet else weight)
+
+
+## How far from its middle `building`'s walls reach.
+static func wall_radius(building: Destructible) -> float:
+	return building.footprint * WALL_SHARE
+
+
+## `building` now stands where it is: its squares are not walked.
+func add_building(building: Destructible) -> void:
+	if _blocks.has(building):
+		remove_building(building)
+	var c := building.global_position
+	var r := wall_radius(building)
+	var solid: Array[Vector2i] = []
+	var near: Array[Vector2i] = []
+	var lo := _cell(c - Vector3(r + CELL, 0, r + CELL))
+	var hi := _cell(c + Vector3(r + CELL, 0, r + CELL))
+	for cj in range(lo.y, hi.y + 1):
+		for ci in range(lo.x, hi.x + 1):
+			var id := Vector2i(ci, cj)
+			var mid := _centre(id)
+			var d := Vector2(mid.x - c.x, mid.z - c.z).length()
+			if d < r:
+				solid.append(id)
+				_walled[id] = _walled.get(id, 0) + 1
+				_land.set_point_solid(id, true)
+				_swim.set_point_solid(id, true)
+			if d < r + CELL:
+				near.append(id)
+				if not _walls.has(id):
+					_walls[id] = []
+				(_walls[id] as Array).append(building)
+	_blocks[building] = {"solid": solid, "near": near}
+	if not building.has_meta("path_walls"):
+		building.set_meta("path_walls", true)
+		building.tree_exiting.connect(func() -> void:
+			building.remove_meta("path_walls")
+			remove_building(building), CONNECT_ONE_SHOT)
+
+
+## `building` is gone (burnt down, blown apart, taken away).
+func remove_building(building: Destructible) -> void:
+	if not _blocks.has(building):
+		return
+	var cells: Dictionary = _blocks[building]
+	_blocks.erase(building)
+	for id: Vector2i in cells.near:
+		var list: Array = _walls.get(id, [])
+		list.erase(building)
+		if list.is_empty():
+			_walls.erase(id)
+	var first := true
+	var touched := Rect2i()
+	for id: Vector2i in cells.solid:
+		_walled[id] = _walled.get(id, 1) - 1
+		if _walled[id] <= 0:
+			_walled.erase(id)
+		touched = Rect2i(id, Vector2i.ONE) if first else touched.merge(Rect2i(id, Vector2i.ONE))
+		first = false
+	if not first:
+		# Work the freed squares out again from the ground.
+		_dirty = _dirty.merge(touched) if _has_dirty else touched
+		_has_dirty = true
+
+
+## The building whose walls `p` is inside, or null.
+func building_at(p: Vector3) -> Destructible:
+	for node: Variant in _walls.get(_cell(p), []):
+		var b := node as Destructible
+		if is_instance_valid(b) and Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < wall_radius(b):
+			return b
+	return null
 
 
 func _flush() -> void:

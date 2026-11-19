@@ -127,7 +127,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    more damage), **Bows** (3 minutes; unlocks archers), **Wheelbarrows**,
    and **Pitchforks**, **Mining picks** and **Axes** in three tiers each
    (food, stone or lumber gathered 50% faster after the third;
-   `tool_tier_bonus` a tier). Click a **Wizardry tower** for **Overcast**
+   `tool_tier_bonus` a tier; a tier shows in the menu once the one
+   before it is researched). Click a **Wizardry tower** for **Overcast**
    (10 animus): any spell can be cast once while it cools down, for twice
    the magicko.
    Your first **Storehouse** is free: it appears on the start location
@@ -472,11 +473,11 @@ The version number is shown at the top of the dev menu.
 
 | Control | Action |
 |---|---|
-| Day length | Minutes for a whole day and night (24 by default: 16 of day and 8 of night; a minute is an hour on the clock) |
+| Day length | Minutes for a whole day and night (24 by default: 16 of day and 8 of night; a minute is an hour on the 12-hour clock: dawn at 6:00 am, nightfall at 10:00 pm) |
 | Lumber / Stone / Food rate | Units each worker gathers per minute |
 | Birth timer | Seconds between new villagers |
 | Magicko rate | Magicko each grown-up worker adds per minute (wizards make 5) |
-| Goblin spawn | Goblins each starting cave spawns per minute on the first day |
+| Goblin Spawn Rate | Goblins each starting cave spawns per minute before its buildings add more (each finished goblin building adds `goblin_rate_per_building`) |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
 | Goblin build speed | How many times as fast the goblins start and finish buildings |
@@ -634,7 +635,7 @@ scripts/
                            training warriors and wizards
   game/construction_site.gd  A building going up (the villagers', or the goblins')
   world/rope_bridge.gd       A rope bridge between two treehouses, and the way over it
-  world/path_grid.gd         Routes over the island that keep off slopes, cliffs and water
+  world/path_grid.gd         Routes over the island that keep off slopes, cliffs, water and buildings
   units/bat.gd               The giant bat that carries villagers off during raids
   units/balrog.gd            The goblins' giant: guards its cave, grows, raids and casts fireball
   spells/chain_lightning.gd  The chain lightning spell

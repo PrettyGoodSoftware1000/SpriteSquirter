@@ -36,6 +36,20 @@ func _ready() -> void:
 	add_to_group("destructibles")
 	add_to_group("grounded")
 	add_to_group("buildings" if is_building else "trees")
+	if is_building:
+		# Walls nobody walks through (once it has been put in its place).
+		_block_paths.call_deferred()
+
+
+func _block_paths() -> void:
+	if is_building and not destroyed and is_inside_tree() and Game.terrain != null and is_instance_valid(Game.terrain):
+		Game.path_grid().add_building(self)
+
+
+## Lets walkers through where it stood.
+func _unblock_paths() -> void:
+	if Game.terrain != null and is_instance_valid(Game.terrain):
+		Game.path_grid().remove_building(self)
 
 
 func damage(amount: float, from: Vector3, force: float) -> void:
@@ -109,6 +123,7 @@ func uproot() -> void:
 	extinguish()
 	destroyed = true
 	set_process(false)
+	_unblock_paths()
 	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings"]:
 		remove_from_group(group)
 	for child in get_children():
@@ -132,6 +147,7 @@ func shatter(from: Vector3, force: float, quiet := false) -> void:
 	if destroyed:
 		return
 	destroyed = true
+	_unblock_paths()
 	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings"]:
 		remove_from_group(group)
 	for f in _fires:

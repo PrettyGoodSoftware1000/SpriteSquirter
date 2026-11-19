@@ -1327,7 +1327,8 @@ func _process(delta: float) -> void:
 	hp = minf(max_hp, hp + delta * 0.5)
 	if _shove.length_squared() > 0.01:
 		var next := global_position + _shove * delta
-		if _open(next):
+		# Shoved against a wall, not through it.
+		if _open(next) and (fey or Game.path_grid().building_at(next) == null or Game.path_grid().building_at(global_position) != null):
 			global_position = Vector3(next.x, Game.terrain.get_height(next.x, next.z), next.z)
 		_shove = _shove.move_toward(Vector3.ZERO, 16.0 * delta)
 	_think_timer -= delta
@@ -2388,6 +2389,8 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	else:
 		speed *= _slope_speed(dir)
 	var step := dir * minf(speed * delta, dist)
+	if not fey:
+		step = _round_walls(step, goal)
 	if not _open(global_position + step) or (not fey and _is_cliff(dir)):
 		_path_until = 0.0
 		if not raiding:
@@ -2407,6 +2410,31 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	rotation.y = lerp_angle(rotation.y, atan2(step.x, step.z), minf(1.0, delta * 10.0))
 	_moving = true
 	return false
+
+
+## `step`, unless it would take this one into a building's walls: then
+## a step along the wall instead, round the side it was heading for. Only
+## a walker going into that very building (its `goal` is inside it) walks
+## in; one already inside (it was put up round them) may walk out.
+func _round_walls(step: Vector3, goal: Vector3) -> Vector3:
+	var grid := Game.path_grid()
+	var next := global_position + step
+	var wall := grid.building_at(next)
+	if wall == null or grid.building_at(goal) == wall:
+		return step
+	var c := wall.global_position
+	var out := Vector3(global_position.x - c.x, 0.0, global_position.z - c.z)
+	var length := step.length()
+	if out.length() < 0.05:
+		return step
+	if out.length() < PathGrid.wall_radius(wall):
+		# Inside already: out it is.
+		return step if Vector2(next.x - c.x, next.z - c.z).length() >= out.length() else out.normalized() * length
+	var along := Vector3(-out.z, 0.0, out.x).normalized()
+	if along.dot(step) < 0.0:
+		along = -along
+	# A little outwards too, so as not to scrape along the wall.
+	return (along + out.normalized() * 0.15).normalized() * length
 
 
 ## The next point to make for on the way to `goal`. The route is worked out

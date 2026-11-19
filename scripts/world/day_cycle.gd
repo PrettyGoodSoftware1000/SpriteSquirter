@@ -69,7 +69,7 @@ static func phase_at(t: float) -> int:
 
 ## The hour of the game's day: a real minute is a game hour, whatever the
 ## day length, and the day begins at DAWN_HOUR (so with the night a third
-## of it, a 24-minute day has 16 hours of light, and night from 22:00).
+## of it, a 24-minute day has 16 hours of light, and night from 10:00 pm).
 func hour() -> float:
 	return fposmod(DAWN_HOUR + time * 24.0, 24.0)
 
@@ -79,4 +79,14 @@ func clock_text() -> String:
 	var h := hour()
 	if is_night() and h < DAWN_HOUR:
 		part = "after midnight"
-	return "Day %d, %d:%02d (%s)" % [day, floori(h), floori(fmod(h, 1.0) * 60.0), part]
+	return "Day %d, %s (%s)" % [day, twelve_hour(h), part]
+
+
+## An hour of the day (0..24) on a 12-hour clock: 16.5 is "4:30 pm".
+static func twelve_hour(h: float) -> String:
+	var whole := floori(fposmod(h, 24.0))
+	var minutes := floori(fmod(fposmod(h, 24.0), 1.0) * 60.0)
+	var shown := whole % 12
+	if shown == 0:
+		shown = 12
+	return "%d:%02d %s" % [shown, minutes, "am" if whole < 12 else "pm"]

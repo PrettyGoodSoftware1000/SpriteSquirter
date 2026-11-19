@@ -599,12 +599,19 @@ func _run() -> void:
 		"bows allow 2 archers per Town guard (%d allowed)" % village.max_count("archer"))
 	_check(is_equal_approx(Research.find("swords").seconds, 300.0), "sharper swords take 5 minutes")
 	_check(village.start_research("picks_2") != "" or village.research.get("id", "") != "", "a tool's second tier waits for its first")
+	play.hud.show_research_menu(true, "smith")
+	var tier_rows: Dictionary = play.hud._research_rows
+	_check(tier_rows.pitchforks_1.row.visible and not tier_rows.pitchforks_2.row.visible and not tier_rows.pitchforks_3.row.visible,
+		"the Blacksmith's menu hides a tool's next tier until the one before is researched")
 	for id: String in ["swords", "wheelbarrows", "pitchforks_1", "picks_1", "axes_1"]:
 		for res in ["lumber", "stone", "food"]:
 			village.give(res, 300.0)
 		village.start_research(id)
 		village.research.t = Research.find(id).seconds - 0.5
 		await _wait(1.5)
+	play.hud.update_research(village)
+	_check(tier_rows.pitchforks_2.row.visible and not tier_rows.pitchforks_3.row.visible, "and shows it once that one is done")
+	play.hud.show_research_menu(false)
 	_check(village.barrows and is_equal_approx(village.tool_bonus("stone"), 1.0 + Balance.num("tool_tier_bonus")), "wheelbarrows, and a tool's first tier")
 	for id: String in ["pitchforks_2", "pitchforks_3", "picks_2", "picks_3", "axes_2", "axes_3"]:
 		for res in ["lumber", "stone", "food"]:
@@ -1107,6 +1114,52 @@ func _run() -> void:
 	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 4.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 2.0)
 		and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "goblins build 4 times as fast; their spawning grows only with their buildings")
 	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 24.0) and play.day_cycle.clock_text().contains(":"), "a day is 24 minutes, a minute an hour (%s)" % play.day_cycle.clock_text())
+	_check(DayCycle.twelve_hour(16.0) == "4:00 pm" and DayCycle.twelve_hour(0.5) == "12:30 am" and DayCycle.twelve_hour(12.25) == "12:15 pm"
+		and DayCycle.twelve_hour(9.0) == "9:00 am" and (play.day_cycle.clock_text().contains(" am (") or play.day_cycle.clock_text().contains(" pm (")),
+		"the clock is a 12-hour one (%s)" % play.day_cycle.clock_text())
+	# Nobody walks through a building unless they are going into it.
+	var walled: Destructible = null
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if b != null and not b.destroyed and PathGrid.wall_radius(b) > 1.5:
+			walled = b
+			break
+	if walled == null:
+		_check(false, "a building to walk round")
+	else:
+		var wall_mid := walled.global_position
+		var wall_r := PathGrid.wall_radius(walled)
+		var wall_grid := game.path_grid()
+		var walk_from := Vector3.ZERO
+		var walk_to := Vector3.ZERO
+		for k in 16:
+			var a := TAU * k / 16.0
+			var side := Vector3(cos(a), 0.0, sin(a)) * (wall_r + 3.0)
+			var side_a := wall_mid + side
+			var side_b := wall_mid - side
+			if wall_grid.building_at(side_a) == null and wall_grid.building_at(side_b) == null and game.terrain.water_depth(side_a.x, side_a.z) < 0.1 and game.terrain.water_depth(side_b.x, side_b.z) < 0.1 \
+					and not game.terrain.is_steep(side_a.x, side_a.z) and not game.terrain.is_steep(side_b.x, side_b.z):
+				walk_from = side_a
+				walk_to = side_b
+				break
+		var walker := WorldPopulator.spawn_villager(game.world_root, game.terrain, walk_from, 1.0)
+		walker.global_position = Vector3(walk_from.x, game.terrain.get_height(walk_from.x, walk_from.z), walk_from.z)
+		var closest := INF
+		var arrived := false
+		for k in 3000:
+			arrived = walker._move_towards(walk_to, 3.0, 1.0 / 30.0)
+			closest = minf(closest, Vector2(walker.global_position.x - wall_mid.x, walker.global_position.z - wall_mid.z).length())
+			if arrived:
+				break
+		_check(arrived and walker._flat_to(walk_to) < 1.0 and closest > wall_r * 0.9,
+			"a villager walks round a building, not through it (%.1f m from its middle at closest, its walls %.1f m)" % [closest, wall_r])
+		var went_in := false
+		for k in 600:
+			if walker._move_towards(wall_mid, 3.0, 1.0 / 30.0):
+				went_in = true
+				break
+		_check(went_in and walker._flat_to(wall_mid) < 1.0, "but walks in when the building is where it is going")
+		walker.queue_free()
 	play.raids.end_raid()
 	play.day_cycle.nightfall.emit()
 	_check(play.raids.raiding, "the goblins raid at nightfall")

@@ -185,6 +185,12 @@ stage.
 - Nights lighter by default; goblins spawn faster only with their buildings (growth chart)
 - Kinky Fey Stuff: pixie tryst, fey births, winged fey villagers, Fey Archers
 
+## Version 0.29: Walls, tiers and the clock ✅
+- Villagers, warriors and goblins walk round buildings (only those going into one walk in)
+- Research menus show a higher tier only once the one before it is researched
+- 12-hour clock (4:00 pm, not 16:00)
+- "Goblin Spawn Rate" in the dev menu; goblin spawn rate charts
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

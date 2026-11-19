@@ -10,31 +10,32 @@ villager_health = 30
 villager_damage = 6             # per blow
 villager_attack_seconds = 1.0   # time between blows
 
-warrior_health = 120
-warrior_damage = 12
+warrior_health = 300
+warrior_damage = 24
 sharper_swords_bonus = 1.5      # warrior damage is multiplied by this once researched
 
-archer_health = 45
-archer_arrow_damage = 12
-archer_arrow_seconds = 1.5      # time between arrows
+archer_health = 150
+archer_arrow_damage = 20
+archer_arrow_seconds = 0.5      # time between arrows
 
-wizard_firebolt_damage = 11
-wizard_firebolt_seconds = 0.7   # time between firebolts
+wizard_health = 45
+wizard_firebolt_damage = 50
+wizard_firebolt_seconds = 1   # time between firebolts
 
 # --- Goblins ----------------------------------------------------------------
-goblin_health = 30
+goblin_health = 40
 goblin_damage = 6
 goblin_attack_seconds = 1.0
 
-ogre_health = 300
-ogre_damage = 18
+ogre_health = 800
+ogre_damage = 40
 
 # --- Creatures (full grown; a newborn has 30% of the health) -----------------
-tortoise_health = 1200
-squirrel_health = 600
-raven_health = 800
-creature_stomp_damage = 60      # in the middle of the stomp, half that at its edge
-creature_strike_damage = 70     # a blow with the fists at the other giant (your creature against the balrog, and back)
+tortoise_health = 2000
+squirrel_health = 900
+raven_health = 1000
+creature_stomp_damage = 200      # in the middle of the stomp, half that at its edge
+creature_strike_damage = 200     # a blow with the fists at the other giant (your creature against the balrog, and back)
 creature_gather_amount = 25     # lumber, stone or food a full-grown creature brings in one trip
 creature_shrink_on_knockout = 0.25  # share of its size the creature loses when it dies (it grows back)
 creature_getup_health = 1       # share of its health it has when it is brought back to life
@@ -50,7 +51,7 @@ raven_fly_speed = 2.5           # flying is this many times as fast as walking
 
 # --- The balrog (the goblins' giant; it grows as your creature does) ----------
 balrogs = 1                     # how many the goblins keep (0 = none)
-balrog_health = 2000            # full grown; a newborn has 30% of it
+balrog_health = 3000            # full grown; a newborn has 30% of it
 balrog_speed = 2.3              # metres a second, at any size (goblins march at 2.6)
 balrog_guard_radius = 40        # until it is full grown it attacks only what comes this close to its cave
 balrog_fireball_size = 0.5      # it can cast fireball from this share of its full size
@@ -58,7 +59,7 @@ balrog_fireball_seconds = 20    # time between its fireballs
 balrog_fireball_power = 0.5     # share of fireball_damage and fireball_building_damage its fireball does
 balrog_building_damage = 40     # what one of its stomps does to a building, full grown
 balrog_respawn_minutes = 10     # after one dies, the next hatches this much later
-balrog_bones = 12               # bones the village gets for killing a full-grown one
+balrog_bones = 200              # bones the village gets for killing a full-grown one
 
 # --- Fireball ---------------------------------------------------------------
 fireball_damage = 150           # to villagers and goblins; anything with less health is killed
@@ -74,17 +75,17 @@ building_health_per_metre = 5   # added for every metre of the building's height
 # that is not listed, write a new line:
 # cost_<gameplay name>_<lumber, stone, food or bones> = number
 cost_home_lumber = 40
-cost_home_stone = 15
-cost_storehouse_lumber = 35
+cost_home_stone = 150
+cost_storehouse_lumber = 350
 cost_storehouse_stone = 10
 cost_town_guard_lumber = 30
-cost_town_guard_stone = 40
-cost_town_guard_food = 20
+cost_town_guard_stone = 10
+cost_town_guard_food = 40
 cost_wizardry_tower_lumber = 20
 cost_wizardry_tower_stone = 50
-cost_shrine_stone = 50
+cost_shrine_stone = 60
 cost_granary_lumber = 40
-cost_granary_stone = 20
+cost_granary_stone = 10
 cost_blacksmith_lumber = 50
 cost_blacksmith_stone = 40
 cost_cottage_lumber = 15
@@ -92,9 +93,10 @@ cost_cottage_stone = 5
 cost_cottage_food = 30
 cost_decoration_lumber = 30
 cost_decoration_stone = 30
-cost_necromancer_tower_lumber = 20
+
+cost_necromancer_tower_lumber = 0
 cost_necromancer_tower_stone = 60
-cost_necromancer_tower_bones = 20
+cost_necromancer_tower_bones = 200
 cost_bridge_lumber_per_metre = 1    # rope bridges between treehouses
 bridge_max_length = 35              # metres: about 20 villagers lying end to end
 home_housing = 6                    # villagers a Home has room for
@@ -139,9 +141,9 @@ builders_per_building = 5           # the most villagers that work on one buildi
 # --- Training -------------------------------------------------------------------
 # Seconds to train one recruit. Each training building trains one at a time.
 # (The dev menu's training time slider multiplies all of them.)
-warrior_training_seconds = 15       # at a Town guard
-archer_training_seconds = 22.5      # at a Town guard, once bows are researched
-wizard_training_seconds = 45        # at a Wizardry tower
+warrior_training_seconds = 25       # at a Town guard
+archer_training_seconds = 25      # at a Town guard, once bows are researched
+wizard_training_seconds = 30        # at a Wizardry tower
 
 # --- Gathering --------------------------------------------------------------------
 farmer_speed = 2                    # foraging, sowing and reaping go this many times faster
@@ -159,28 +161,28 @@ skeleton_share = 0.5                # its health and damage, as a share of who i
 
 # --- Goblin buildings -----------------------------------------------------------
 goblin_build_minutes = 5            # the goblins start a new building this often
-goblin_buildings_max = 20           # and stop when they have this many
-goblin_rate_per_building = 0.5      # every finished goblin building adds this many goblins a minute at its cave
+goblin_buildings_max = 30           # and stop when they have this many
+goblin_rate_per_building = 5      # every finished goblin building adds this many goblins a minute at its cave
 # The goblins do not pay for theirs, but the bigger the number the longer
 # it takes them (build_work_per_resource above applies to them too).
-goblin_tent_resources = 40
-goblin_war_hut_resources = 60
-goblin_forge_resources = 80
-goblin_potion_hut_resources = 60
-goblin_watchtower_resources = 100
+goblin_tent_resources = 20
+goblin_war_hut_resources = 30
+goblin_forge_resources = 40
+goblin_potion_hut_resources = 30
+goblin_watchtower_resources = 20
 
 # --- Chain lightning ----------------------------------------------------------
-lightning_damage = 40               # to each thing the bolt jumps through
-lightning_jumps = 12                # how many things one bolt can hit
-lightning_jump_range = 9            # metres between one and the next
+lightning_damage = 130              # to each thing the bolt jumps through
+lightning_jumps = 18                # how many things one bolt can hit
+lightning_jump_range = 15           # metres between one and the next
 lightning_wet_bonus = 2             # damage is multiplied by this for anything wet
-wet_seconds = 20                    # how long rain leaves villagers and goblins wet
+wet_seconds = 60                    # how long rain leaves villagers and goblins wet
 
 # --- The giant bat --------------------------------------------------------------
 ogres_per_war_hut = 1               # ogres every goblin war hut keeps (dead ones are replaced at nightfall)
 bats_per_watchtower = 1             # giant bats every goblin watchtower sends with a raid; each carries one villager off to a cave
 bats_from_night = 3                 # no bats before this night
-bat_health = 80                     # a fireball or lightning can bring it down
+bat_health = 40                     # a fireball or lightning can bring it down
 bat_speed = 11                      # metres a second
 
 # --- Slopes ---------------------------------------------------------------------
@@ -206,11 +208,11 @@ knowledge_stone = 100
 knowledge_food = 100
 
 # Seconds the creature waits before casting the same spell again
-cooldown_fireball = 30
-cooldown_rain = 30              # (also for rain on the crops)
+cooldown_fireball = 15
+cooldown_rain = 50              # (also for rain on the crops)
 cooldown_roots = 30
 cooldown_blood = 60
-cooldown_lightning = 30
+cooldown_lightning = 10
 
 # What each of the creature's own spells costs it in magicko
 creature_cost_fireball = 25

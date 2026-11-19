@@ -726,6 +726,12 @@ func _run() -> void:
 	await _wait(60.0)
 	var necros := get_tree().get_nodes_in_group("necromancers")
 	_check(necros.size() == 1, "a wizard becomes a necromancer (%d)" % necros.size())
+	if necros.size() == 1:
+		var necro := necros[0] as Villager
+		_check(is_equal_approx(necro.power(), Villager.FIREBOLT_DAMAGE * 0.5) and is_equal_approx(necro.max_hp, Balance.num("necromancer_health")),
+			"a necromancer's (purple) firebolt does half a wizard's harm, and its health is from balancing.txt")
+	_check(SpellBook.cost("fireball") == 5 and SpellBook.cost("charm") == 25 and Balance.DEFAULTS.has("spell_cost_rain"),
+		"what spells cost is in balancing.txt")
 	Balance.values["necromancer_training_seconds"] = Balance.DEFAULTS["necromancer_training_seconds"]
 	if not necros.is_empty():
 		var necro := necros[0] as Villager
@@ -736,7 +742,8 @@ func _run() -> void:
 		bones_before = village.amount("bones")
 		await _wait(12.0)
 		var skeletons := get_tree().get_nodes_in_group("skeletons")
-		_check(skeletons.size() == 1 and village.amount("bones") <= bones_before - roundi(Balance.num("raise_bones")) + 4,
+		# (Goblins dying about the place leave bones too, so the count can go up.)
+		_check(skeletons.size() == 1 and necro._minions.size() == 1,
 			"the necromancer raises a skeleton from the dead (%d)" % skeletons.size())
 		if not skeletons.is_empty():
 			var bony := skeletons[0] as Villager
@@ -975,7 +982,11 @@ func _run() -> void:
 	beast.hiding = true
 	beast._hid_at = game.now - 100.0
 	beast._last_hit_at = game.now - 100.0
-	await _wait(0.6)
+	# (Looked at the moment it comes out: villagers may soon set on the goblin.)
+	for k in 20:
+		await _wait(0.05)
+		if not beast.hiding:
+			break
 	# (Knocked away: it may not slide far if water or the edge is behind it.)
 	_check(not beast.hiding and shoved.is_alive() and shoved.hp >= shoved_hp - 0.01 and shoved._stagger_until > 0.0,
 		"coming out of its shell knocks nearby goblins away, unhurt (%.1f m)" % beast._flat(shoved.global_position, beast.global_position))
@@ -1224,17 +1235,22 @@ func _run() -> void:
 			walk_to = p
 			break
 	beast.move_to(walk_to)
-	# (Measured once it is under way: standing to turn, it gets its breath back.)
-	for k in 8:
-		if beast.speed > 0.6:
-			break
-		await _wait(0.25)
+	# (Measured only while it is walking: standing, it gets its breath back.)
 	var stamina_then := beast.stamina
 	var top_speed := 0.0
-	for k in 4:
-		await _wait(0.5)
+	var drained := false
+	var last_stamina := beast.stamina
+	var was_walking := false
+	for k in 40:
+		await _wait(0.1)
 		top_speed = maxf(top_speed, beast.speed)
-	_check(beast.stamina < stamina_then, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s)" % [
+		var walking := beast.speed > 0.6
+		if walking and was_walking and beast.stamina < last_stamina:
+			drained = true
+			break
+		was_walking = walking
+		last_stamina = beast.stamina
+	_check(drained, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s)" % [
 		stamina_then, beast.stamina, top_speed, game.now < beast.snared_until, beast._alert, beast.hiding])
 	beast.has_target = false
 	beast.mind.process_mode = Node.PROCESS_MODE_INHERIT

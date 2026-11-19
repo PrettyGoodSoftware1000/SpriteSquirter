@@ -118,6 +118,19 @@ saplings_per_minute = 2         # saplings the village plants a minute
 plant_seconds = 20              # how long a villager kneels to plant one
 sapling_grow_days = 2           # days (of the day length) for a sapling to grow into a tree
 
+# --- What the player's spells cost to cast ------------------------------------
+# In magicko. A spell cast in the last few seconds costs more on top (see
+# spell_recent_seconds and spell_recent_extra).
+spell_cost_fireball    = 5    # magicko
+spell_cost_rain        = 15   # magicko
+spell_cost_roots       = 20   # magicko
+spell_cost_lightning   = 20   # magicko
+spell_cost_blood       = 0    # magicko
+spell_cost_bless       = 10   # magicko
+spell_cost_condemn     = 10   # magicko
+spell_cost_gnomes      = 20   # magicko
+spell_cost_charm       = 25   # magicko
+
 # --- Spells researched at the Shrine ----------------------------------------
 # Click a Shrine (the Singing rocks) to research spells, one at a time.
 # Every spell must be researched before it appears on the spell bar.
@@ -153,6 +166,13 @@ bones_min = 2                       # bones the village gets when a villager, go
 bones_max = 4                       # ...somewhere between these two
 necromancer_training_seconds = 75   # a wizard at a Necromancer tower
 necromancers_per_tower = 2
+necromancer_health = 30             # a necromancer's health
+necromancer_firebolt_damage = 5.5   # its purple firebolt: half a wizard's
+necromancer_firebolt_seconds = 0.7  # time between its firebolts
+necromancer_skeletons = 1           # skeletons one necromancer keeps up at a time
+necromancer_raise_seconds = 2       # how long it takes to raise one, standing by the body
+necromancer_raise_rest = 3          # seconds it rests after raising one before it looks for the next body
+necromancer_raise_sight = 32        # metres it looks for a body to raise
 raise_bones = 2                     # bones a necromancer spends to raise a skeleton
 skeleton_seconds = 180              # how long a skeleton lasts
 skeleton_share = 0.5                # its health and damage, as a share of who it was raised from

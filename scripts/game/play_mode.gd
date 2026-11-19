@@ -635,7 +635,7 @@ func recent_extra(index: int) -> float:
 
 ## What a spell costs in magicko right now.
 func spell_cost(index: int) -> int:
-	var base: int = SpellBook.SPELLS[index].cost
+	var base := SpellBook.cost(SpellBook.SPELLS[index].id)
 	return ceili(base * (1.0 + recent_extra(index)) - 0.001)
 
 

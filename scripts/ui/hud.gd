@@ -425,8 +425,8 @@ func _build_spell_bar(root: Control) -> void:
 		b.mouse_exited.connect(func() -> void: spell_hovered.emit(-1))
 		slot.add_child(b)
 		var cost_label: Label = null
-		if spell.cost > 0:
-			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 12)
+		if SpellBook.cost(spell.id) > 0:
+			var cost_row := ResourceIcon.cost_row({"magicko": SpellBook.cost(spell.id)}, 12)
 			cost_label = cost_row.get_child(0) as Label
 			slot.add_child(cost_row)
 		else:

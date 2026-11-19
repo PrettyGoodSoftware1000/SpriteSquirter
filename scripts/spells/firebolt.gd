@@ -1,7 +1,8 @@
 class_name Firebolt
 extends Node3D
 ## A wizard's tiny firebolt. It homes in on a goblin, hurts it and may set
-## it alight. Call launch() right after adding it to the tree.
+## it alight. A necromancer's is purple (set `purple` before adding it).
+## Call launch() right after adding it to the tree.
 
 const SPEED := 28.0
 const IGNITE_CHANCE := 0.3
@@ -11,12 +12,16 @@ var _target: Node3D
 var _caster: Node3D
 var _trail: CPUParticles3D
 var _life := 2.5
+var _damage := 0.0
+var purple := false
 
 
-func launch(from: Vector3, target: Node3D, caster: Node3D) -> void:
+## `damage`: what it does when it hits (a wizard's by default).
+func launch(from: Vector3, target: Node3D, caster: Node3D, damage := -1.0) -> void:
 	global_position = from
 	_target = target
 	_caster = caster
+	_damage = damage if damage >= 0.0 else Villager.FIREBOLT_DAMAGE
 
 
 func _ready() -> void:
@@ -25,7 +30,7 @@ func _ready() -> void:
 	core.height = 0.32
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(4.0, 2.2, 0.6)
+	mat.albedo_color = Color(2.6, 0.9, 4.0) if purple else Color(4.0, 2.2, 0.6)
 	core.material = mat
 	var mi := MeshInstance3D.new()
 	mi.mesh = core
@@ -34,6 +39,11 @@ func _ready() -> void:
 	_trail = Game.effects.make_flames(0.35)
 	_trail.amount = 16
 	_trail.lifetime = 0.35
+	if purple:
+		var tint := Gradient.new()
+		tint.set_color(0, Color(1.6, 0.7, 2.4, 1.0))
+		tint.set_color(1, Color(0.4, 0.1, 0.7, 0.0))
+		_trail.color_ramp = tint
 	add_child(_trail)
 
 
@@ -47,7 +57,7 @@ func _process(delta: float) -> void:
 	var to := aim - global_position
 	var step := SPEED * delta
 	if to.length() <= step + 0.3 + (1.5 * giant.size if giant else 0.0):
-		_target.call("take_hit", Villager.FIREBOLT_DAMAGE, _caster if is_instance_valid(_caster) else null)
+		_target.call("take_hit", _damage, _caster if is_instance_valid(_caster) else null)
 		var v := _target as Villager
 		if v and v.is_alive() and randf() < IGNITE_CHANCE:
 			v.catch_fire()

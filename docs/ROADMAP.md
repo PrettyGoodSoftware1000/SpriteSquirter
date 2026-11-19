@@ -165,6 +165,10 @@ stage.
 - Goblins raid at nightfall, spawn and rise twice as fast, build twice as fast again
 - Magic tree: 10 to 100 magicko a minute; dev menu night darkness slider
 
+## Version 0.25: Necromancer stats ✅
+- Necromancer stats in balancing.txt; purple firebolt doing half a wizard's harm
+- What each spell costs to cast is in balancing.txt (spell_cost_...)
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

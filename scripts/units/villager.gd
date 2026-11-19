@@ -66,15 +66,19 @@ const SLOWED_SPEED := 0.25
 const WIZARD_RANGE := 16.0
 static var FIREBOLT_SECONDS := 0.7
 static var FIREBOLT_DAMAGE := 11.0
+## A necromancer's purple firebolt (Balance "necromancer_firebolt_...").
+static var NECRO_FIREBOLT_DAMAGE := 5.5
+static var NECRO_FIREBOLT_SECONDS := 0.7
 ## An ogre against a goblin.
 static var OGRE_HEALTH := 10.0
 static var OGRE_DAMAGE := 3.0
 ## Camera distances at which the detailed meshes switch on and off.
 ## Necromancers: how far they look for a body, how near they stand to
 ## raise it and how long the raising takes.
-const RAISE_SIGHT := 32.0
+## (How far a necromancer looks for a body, how long raising takes and how
+## many skeletons it keeps are Balance "necromancer_raise_sight",
+## "necromancer_raise_seconds" and "necromancer_skeletons".)
 const RAISE_REACH := 7.0
-const RAISE_SECONDS := 2.0
 ## How long the dead lie where they fell before they sink away.
 const CORPSE_SECONDS := 40.0
 
@@ -221,7 +225,8 @@ var _near := false
 var _fixed_scale := 0.0
 var _expires := 0.0
 ## Necromancers: the skeleton they have up, and the body they are raising.
-var _minion: Villager
+## A necromancer's skeletons that are still up.
+var _minions: Array[Villager] = []
 var _raise_target: Villager
 var _raise_timer := 0.0
 var _raise_walk := 0.0
@@ -257,6 +262,8 @@ static func apply_balance() -> void:
 	ARROW_SECONDS = Balance.num("archer_arrow_seconds")
 	FIREBOLT_DAMAGE = Balance.num("wizard_firebolt_damage")
 	FIREBOLT_SECONDS = Balance.num("wizard_firebolt_seconds")
+	NECRO_FIREBOLT_DAMAGE = Balance.num("necromancer_firebolt_damage")
+	NECRO_FIREBOLT_SECONDS = Balance.num("necromancer_firebolt_seconds")
 	GOBLIN_HEALTH = Balance.num("goblin_health")
 	GOBLIN_DAMAGE = Balance.num("goblin_damage")
 	GOBLIN_ATTACK_SECONDS = Balance.num("goblin_attack_seconds")
@@ -1614,6 +1621,8 @@ func become_necromancer(post: Vector3) -> void:
 	necromancer = true
 	remove_from_group("wizards")
 	add_to_group("necromancers")
+	max_hp = Balance.num("necromancer_health")
+	hp = max_hp
 	home = post
 	home_radius = 10.0
 	for g in _gear_nodes:
@@ -1629,6 +1638,8 @@ func become_necromancer(post: Vector3) -> void:
 func power() -> float:
 	if archer and not skeleton:
 		return ARROW_DAMAGE
+	if necromancer:
+		return NECRO_FIREBOLT_DAMAGE
 	return FIREBOLT_DAMAGE if wizard else damage
 
 
@@ -1654,14 +1665,16 @@ static func raise_skeleton(body: Villager, master: Villager) -> Villager:
 	return s
 
 
-## A necromancer looks for a body to raise when it has no skeleton up.
+## A necromancer looks for a body to raise when it has fewer skeletons up
+## than Balance "necromancer_skeletons".
 func _look_for_body() -> bool:
-	if Game.now < _raise_ready or (is_instance_valid(_minion) and _minion.is_alive()):
+	_minions = _minions.filter(func(s: Villager) -> bool: return is_instance_valid(s) and s.is_alive())
+	if Game.now < _raise_ready or _minions.size() >= roundi(Balance.num("necromancer_skeletons")):
 		return false
 	if not is_instance_valid(Game.village) or Game.village.amount("bones") < roundi(Balance.num("raise_bones")):
 		return false
 	var best: Villager = null
-	var best_d := RAISE_SIGHT
+	var best_d := Balance.num("necromancer_raise_sight")
 	for node in get_tree().get_nodes_in_group("corpses"):
 		var body := node as Villager
 		if body._airborne or body._timer > CORPSE_SECONDS - 10.0 or body.get_meta("claimed", 0.0) > Game.now:
@@ -1701,12 +1714,12 @@ func _update_raise(delta: float) -> void:
 	if _raise_timer == 0.0:
 		Game.effects.spawn_raise(body.global_position)
 	_raise_timer += delta
-	if _raise_timer < RAISE_SECONDS:
+	if _raise_timer < Balance.num("necromancer_raise_seconds"):
 		return
 	if Game.village.spend({"bones": roundi(Balance.num("raise_bones"))}):
-		_minion = Villager.raise_skeleton(body, self)
+		_minions.append(Villager.raise_skeleton(body, self))
 		body.queue_free()
-	_raise_ready = Game.now + 3.0
+	_raise_ready = Game.now + Balance.num("necromancer_raise_rest")
 	state = State.IDLE
 	_timer = 0.3
 
@@ -2116,10 +2129,12 @@ func _cast_at(foe: Node3D, to: Vector3, delta: float) -> void:
 		return
 	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
 	if _attack_timer <= 0.0:
-		_attack_timer = FIREBOLT_SECONDS
+		# (A necromancer's is purple, and does half the harm.)
+		_attack_timer = NECRO_FIREBOLT_SECONDS if necromancer else FIREBOLT_SECONDS
 		var bolt := Firebolt.new()
+		bolt.purple = necromancer
 		Game.world_root.add_child(bolt)
-		bolt.launch(global_position + Vector3.UP * 1.9 * scale.y + to.normalized() * 0.4, foe, self)
+		bolt.launch(global_position + Vector3.UP * 1.9 * scale.y + to.normalized() * 0.4, foe, self, power())
 
 
 ## Loses health to a blow. Fighters hit back.

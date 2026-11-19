@@ -111,11 +111,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    the village gets 2 to 4 **bones** (the bone counter in the top bar).
    Build a Necromancer tower (it costs bones too) and ask for
    necromancers in the village panel: a wizard trains at the tower for 75
-   seconds and comes out in black robes. A necromancer still throws
-   firebolts, and raises one dead villager or enemy lying nearby as a
-   **skeleton** warrior or archer, for 2 bones. A skeleton fights for you
-   with half the health and damage of whoever it was, and crumbles after
-   3 minutes; then the necromancer can raise another.
+   seconds and comes out in black robes. A necromancer throws purple
+   firebolts (half a wizard's harm), and raises one dead villager or
+   enemy lying within 32 m as a **skeleton** warrior or archer, for 2
+   bones: 2 seconds beside the body, then 3 seconds' rest. It keeps one
+   skeleton up at a time; a skeleton fights for you with half the health
+   and damage of whoever it was, and crumbles after 3 minutes (or dies),
+   and then the necromancer can raise another. All of this is in
+   `balancing.txt` (`necromancer_...`, `skeleton_...`, `raise_bones`).
    **Research.** Click a Blacksmith (or press **U**) and pick something
    to research. It is paid for up front and one thing
    is researched at a time: **Sharper swords** (5 minutes; warriors do 50%

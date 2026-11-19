@@ -62,8 +62,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    fields dotted over the island. Trees and boulders run out, so the
    workers move on; a boulder holds a lot of stone and crumbles away
    slowly once it is used up. A worker carries a small load (2 units) home on its
-   back. Once you have a **Blacksmith**, workers use wheelbarrows, which
-   take three times as much.
+   back. Once **Wheelbarrows** are researched at a Blacksmith, workers
+   carry three times as much (fey villagers carry theirs by magic: no
+   wheelbarrow to see).
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
    building, and place its outline (**R** rotates it) anywhere inside your
    village's **influence**: a wall of light shows its edge while you place
@@ -123,9 +124,12 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **Research.** Click a Blacksmith (or press **U**) and pick something
    to research. It is paid for up front and one thing
    is researched at a time: **Sharper swords** (5 minutes; warriors do 50%
-   more damage), **Bows** (3 minutes; unlocks archers), and **Pitchforks**,
-   **Mining picks** and **Axes** (2 minutes each; food, stone or lumber is
-   gathered twice as fast).
+   more damage), **Bows** (3 minutes; unlocks archers), **Wheelbarrows**,
+   and **Pitchforks**, **Mining picks** and **Axes** in three tiers each
+   (food, stone or lumber gathered 50% faster after the third;
+   `tool_tier_bonus` a tier). Click a **Wizardry tower** for **Overcast**
+   (10 animus): any spell can be cast once while it cools down, for twice
+   the magicko.
    Your first **Storehouse** is free: it appears on the start location
    when you found the village.
    **The village panel** (top left). At the top, your people and the room
@@ -183,9 +187,10 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    through it every goblin leaves its cave and marches on your village,
    swimming rivers on the way. They attack villagers first, then buildings,
    and go home in the morning. Every cave that was there when the game
-   began keeps spawning goblins (1 a minute at first, half a goblin more
-   per minute every night; both in the dev menu), and every goblin
-   building finished near a cave adds half a goblin a minute more there.
+   began keeps spawning goblins (2 a minute; the dev menu's goblin
+   spawn), and every goblin building finished near a cave adds
+   `goblin_rate_per_building` a minute more there. Only their buildings
+   make them spawn faster; the nights alone do not.
    **Ogres and giant bats come from goblin buildings.** Every **war hut**
    the goblins finish adds an **ogre** with a spiked club (ten times a
    goblin's health, three times its damage, too big to pick up or throw,
@@ -323,7 +328,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    with what had to be true in square brackets at the end, for example
    `The creature gathered some wood. That was the lowest resource in
    stock. [Gathered wood when it was the lowest stocked resource]`. A cell
-   with no brackets is the general action. In a sentence, `[enemy name]`
+   with no brackets is the general action. A line break in a cell (a new
+   line in the Google Sheet, Alt+Enter, or `\n` typed out) is a line
+   break in what the game shows; in `Announcements.txt` write `\n`. In a sentence, `[enemy name]`
    becomes the enemy (goblin, ogre, giant bat, balrog) and `[a or an]` the
    right word before it. The game reads each bracket by its key words and
    takes any numbers in it as written: highest, lowest, zero or at 0, over
@@ -384,10 +391,11 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    and keeps it in hand); press the key again, right-click or Esc to put
    it away. Bless and Condemn are cast by pressing their key twice in a
    row, no click needed. Spells only work inside your village's influence, and a
-   fireball that flies out of it fizzles out. A spell cast in the last 10
-   seconds costs 50% more for each time, added up, and its square on the
-   spell bar fills with blue sparkles as it gets dearer (most at 300%
-   more). **Fireball** blows
+   fireball that flies out of it fizzles out. After it is cast a spell
+   **cools down** (`spell_cooldown_...` in `balancing.txt`) and cannot be
+   cast again until it has; its square sparkles blue meanwhile. With
+   Overcast it can be cast once during the cooldown, for twice the
+   magicko. **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while (and makes wheat under the cloud grow three
    times as fast while it is wet), and **Roots** grows a glowing green patch
@@ -408,6 +416,17 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    to it very fast, bouncing as they go, and build it like five more
    villagers, moving round it every 1 to 3 seconds. They vanish when it
    is finished.
+   **Kinky Fey Stuff** (100 magicko; four wings): click near a villager
+   at work, and a pixie flies from the nearest tree to them; their eyes
+   glow green and the two go off into the nearest building for 2 minutes.
+   Then births come twice as fast for 2 minutes, and every child born then
+   is a **fey** girl with four dragonfly wings, front and back pairs
+   beating in turn. The fey fly (over water and cliffs too), 50% faster,
+   and make twice the magicko. Once archers can be trained, **Fey
+   Archers** can be too (up to the number of winged villagers, taking
+   twice as long): they fly about, landing now and then but never with
+   enemies inside the influence, shoot twice as fast, and drop green
+   pixie dust (`fey_...` in `balancing.txt`).
    **Charm Offensive** (25 magicko; a pink heart): pink hearts float up
    all over the spot, and about half the goblins caught in it (8 m
    across from the middle) are charmed for 60 seconds: their eyes turn
@@ -453,12 +472,11 @@ The version number is shown at the top of the dev menu.
 
 | Control | Action |
 |---|---|
-| Day length | Minutes for a whole day and night |
+| Day length | Minutes for a whole day and night (24 by default: 16 of day and 8 of night; a minute is an hour on the clock) |
 | Lumber / Stone / Food rate | Units each worker gathers per minute |
 | Birth timer | Seconds between new villagers |
 | Magicko rate | Magicko each grown-up worker adds per minute (wizards make 5) |
 | Goblin spawn | Goblins each starting cave spawns per minute on the first day |
-| Goblin spawn rise | How much faster the caves spawn after every night |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
 | Goblin build speed | How many times as fast the goblins start and finish buildings |

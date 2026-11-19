@@ -8,14 +8,13 @@ extends Node
 
 ## Gameplay numbers the dev menu (~) can change while playing.
 const DEFAULT_SETTINGS := {
-	"day_minutes": 10.0, # length of a full day-night cycle
+	"day_minutes": 24.0, # length of a full day-night cycle
 	"lumber_rate": 6.0, # per worker per minute
 	"stone_rate": 4.0, # per worker per minute
 	"food_rate": 6.0, # per worker per minute
 	"birth_seconds": 30.0, # time between new villagers
 	"magicko_rate": 1.0, # per grown-up villager per minute
 	"goblin_rate": 2.0, # goblins per starting cave per minute, on day 1
-	"goblin_rate_growth": 1.0, # added to goblin_rate every night
 	"creature_food": 20.0, # food a full-grown creature eats per minute
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size
 	"goblin_build_speed": 4.0, # how many times as fast the goblins start and finish buildings
@@ -25,7 +24,7 @@ const DEFAULT_SETTINGS := {
 	"training_time": 1.0, # training times are multiplied by this
 	"influence_start": 45.0, # radius in metres of a new village's influence
 	"influence_per_person": 1.0, # metres the influence grows for every villager
-	"night_darkness": 0.0, # percent darker the night is than it was made (negative: lighter)
+	"night_darkness": -100.0, # percent darker the night is than it was made (negative: lighter)
 }
 
 ## The creature the player chose in the main menu: a key of Creature.SPECIES.

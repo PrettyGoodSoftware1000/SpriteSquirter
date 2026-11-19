@@ -26,7 +26,7 @@ static func cost_row(cost: Dictionary, font_size := 14) -> HBoxContainer:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 3)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for res in ["lumber", "stone", "food", "bones", "magicko"]:
+	for res in ["lumber", "stone", "food", "bones", "animus", "magicko"]:
 		if not cost.has(res):
 			continue
 		if row.get_child_count() > 0:

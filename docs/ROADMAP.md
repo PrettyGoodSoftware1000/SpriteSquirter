@@ -178,6 +178,13 @@ stage.
 - Creature aggressiveness range (45 m); battle means enemies inside the influence; gathering only inside it
 - Day length 10 min; night darkness down to -150%; lightning wet bonus 2
 
+## Version 0.28: Cooldowns, tool tiers and the fey ✅
+- Spells cool down and cannot be cast meanwhile; Overcast (Wizardry tower, 10 animus) casts once during it for double
+- Blacksmith: Wheelbarrows research; Pitchforks, Mining picks and Axes in three tiers (+50%)
+- Line breaks in Actions.csv cells (and \n in Announcements.txt); a day is 16 hours of day and 8 of night (a minute an hour)
+- Nights lighter by default; goblins spawn faster only with their buildings (growth chart)
+- Kinky Fey Stuff: pixie tryst, fey births, winged fey villagers, Fey Archers
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

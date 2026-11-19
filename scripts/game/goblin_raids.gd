@@ -3,8 +3,8 @@ extends Node
 ## Grows the goblin camps and sends the goblins against the player's village.
 ##
 ## Every cave that was there when the game began spawns goblins all the
-## time, at Game.settings.goblin_rate per minute, and the rate goes up by
-## goblin_rate_growth every night. Every finished goblin building adds
+## time, at Game.settings.goblin_rate per minute (it does not rise by the
+## night). Every finished goblin building adds
 ## Balance "goblin_rate_per_building" more at its cave. At nightfall every
 ## goblin leaves its cave and marches on the village; in the morning the
 ## survivors go home. Call setup() with the DayCycle.
@@ -74,9 +74,10 @@ func setup(day_cycle: DayCycle) -> void:
 		_caves.append(node as Node3D)
 
 
-## Goblins each starting cave spawns per minute tonight.
+## Goblins each starting cave spawns per minute before its buildings add
+## more (there is no growth by the night: only the buildings add).
 func spawn_rate() -> float:
-	return maxf(0.0, Game.settings.goblin_rate + nights * Game.settings.goblin_rate_growth)
+	return maxf(0.0, Game.settings.goblin_rate)
 
 
 ## Goblins `cave` spawns per minute: spawn_rate(), and more for each

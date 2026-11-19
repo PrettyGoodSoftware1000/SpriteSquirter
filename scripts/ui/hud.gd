@@ -65,7 +65,6 @@ const SETTING_SLIDERS := [
 	["birth_seconds", "Birth timer", 5.0, 300.0, 5.0, "s"],
 	["magicko_rate", "Magicko rate", 0.0, 30.0, 0.5, "/villager/min"],
 	["goblin_rate", "Goblin spawn", 0.0, 20.0, 0.5, "/cave/min"],
-	["goblin_rate_growth", "Goblin spawn rise", 0.0, 10.0, 0.5, "/night"],
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 	["goblin_build_speed", "Goblin build speed", 0.25, 10.0, 0.25, "x"],
@@ -85,6 +84,7 @@ const ROLES := {
 	"archer": ["Archers", "guard", "archer"],
 	"wizard": ["Wizards", "wizard", "wizard"],
 	"necromancer": ["Necromancers", "necro", "necromancer"],
+	"fey_archer": ["Fey Archers", "guard", "fey archer"],
 }
 
 var _hint: Label
@@ -649,8 +649,13 @@ func _build_build_menu(root: Control) -> void:
 		_build_buttons[kind] = b
 
 
-## The Blacksmith's research: one button for each thing to learn, with what
-## it costs, how long it takes and how far along it is.
+## Research at the Blacksmith or the Wizardry tower: one button for each
+## thing to learn there, with what it costs, how long it takes and how far
+## along it is.
+var _research_place := "smith"
+var _research_heading: Label
+
+
 func _build_research_menu(root: Control) -> void:
 	_research_panel = PanelContainer.new()
 	_research_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -661,13 +666,19 @@ func _build_research_menu(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	_research_panel.add_child(box)
-	box.add_child(_heading("Research  (needs a %s; one thing at a time;  U / Esc to close)" % BuildingCatalog.role_name("smith")))
+	_research_heading = _heading("")
+	box.add_child(_research_heading)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 20)
+	grid.add_theme_constant_override("v_separation", 6)
+	box.add_child(grid)
 	for item in Research.ITEMS:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		box.add_child(row)
+		grid.add_child(row)
 		var b := _button("")
-		b.custom_minimum_size = Vector2(430, 78)
+		b.custom_minimum_size = Vector2(330, 62)
 		var minutes: float = item.seconds / 60.0
 		var lines: Array[Control] = [_text(item.name, 12), _text("%s.  Takes %s min" % [item.desc, _number(minutes)], 12),
 			ResourceIcon.cost_row(item.cost, 12)]
@@ -687,16 +698,18 @@ func _build_research_menu(root: Control) -> void:
 		bar.max_value = 1.0
 		bar.custom_minimum_size = Vector2(130, 8)
 		state.add_child(bar)
-		_research_rows[id] = {"button": b, "status": status, "bar": bar}
-	var note := Label.new()
-	note.text = "The %s also gives your workers wheelbarrows, which carry three times as much." % BuildingCatalog.role_name("smith")
-	note.add_theme_font_size_override("font_size", 12)
-	note.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(note)
+		_research_rows[id] = {"button": b, "status": status, "bar": bar, "row": row}
 
 
-func show_research_menu(shown: bool) -> void:
+## Opens (or closes) the research of `place`: "smith" (the Blacksmith) or
+## "wizard" (the Wizardry tower).
+func show_research_menu(shown: bool, place := "") -> void:
 	_research_panel.visible = shown
+	if place != "":
+		_research_place = place
+	_research_heading.text = "%s: research, one thing at a time  (Esc to close)" % BuildingCatalog.role_name(_research_place)
+	for item in Research.ITEMS:
+		(_research_rows[item.id].row as Control).visible = item.place == _research_place
 
 
 func is_research_menu_open() -> bool:
@@ -704,12 +717,14 @@ func is_research_menu_open() -> bool:
 
 
 func update_research(village: PlayerVillage) -> void:
-	var smith := village.has_blacksmith()
 	for item in Research.ITEMS:
+		if item.place != _research_place:
+			continue
 		var row: Dictionary = _research_rows[item.id]
 		var b := row.button as Button
 		var done := village.has_research(item.id)
-		var running: bool = village.research.get("id", "") == item.id
+		var running: bool = village.research_at(item.place).get("id", "") == item.id
+		var waiting: bool = item.has("needs") and not village.has_research(item.needs)
 		var progress := village.research_progress(item.id)
 		(row.bar as ProgressBar).value = progress
 		(row.bar as ProgressBar).visible = running
@@ -718,11 +733,13 @@ func update_research(village: PlayerVillage) -> void:
 			status.text = "Done"
 		elif running:
 			status.text = "%d%%" % floori(progress * 100.0)
-		elif not smith:
-			status.text = "No %s" % BuildingCatalog.role_name("smith")
+		elif not village.has_role(item.place):
+			status.text = "No %s" % BuildingCatalog.role_name(item.place)
+		elif waiting:
+			status.text = "Needs %s" % Research.find(item.needs).name
 		else:
 			status.text = ""
-		b.disabled = done or running
+		b.disabled = done or running or waiting
 		b.modulate = Color.WHITE if done or running or village.can_afford(item.cost) else Color(1.0, 0.6, 0.6, 0.8)
 
 

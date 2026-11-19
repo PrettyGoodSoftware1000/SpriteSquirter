@@ -393,7 +393,7 @@ func _run() -> void:
 	_check(get_tree().get_nodes_in_group("raiders").is_empty(), "the raid ends in the morning")
 	var rate := play.raids.spawn_rate()
 	play.raids.nights += 1
-	_check(play.raids.spawn_rate() > rate, "goblins spawn faster every night")
+	_check(is_equal_approx(play.raids.spawn_rate(), rate), "the nights alone do not make the goblins spawn faster (only their buildings do)")
 	var before_goblins := get_tree().get_nodes_in_group("goblins").size()
 	game.settings.goblin_rate = 12.0
 	# (The creature holds still, so it eats none of them meanwhile.)
@@ -587,23 +587,36 @@ func _run() -> void:
 	smithy.global_position = village.center + Vector3(-12, 0, -8)
 	smithy.add_to_group("player_buildings")
 	await _wait(1.5)
-	_check(village.barrows, "a Blacksmith brings wheelbarrows")
+	_check(not village.barrows, "a Blacksmith alone brings no wheelbarrows: they are researched")
 	for res in ["lumber", "stone", "food"]:
 		village.give(res, 600.0)
 	_check(village.max_count("archer") == 0, "no archers before bows")
 	_check(village.start_research("bows") == "", "bows can be researched")
-	_check(village.start_research("axes") != "", "one research at a time")
+	_check(village.start_research("axes_1") != "", "one research at a time")
 	village.research.t = Research.find("bows").seconds - 2.0
 	await _wait(4.0)
 	_check(village.has_research("bows") and village.max_count("archer") >= PlayerVillage.ARCHERS_PER_GUARD,
 		"bows allow 2 archers per Town guard (%d allowed)" % village.max_count("archer"))
 	_check(is_equal_approx(Research.find("swords").seconds, 300.0), "sharper swords take 5 minutes")
-	for id: String in ["swords", "pitchforks", "picks", "axes"]:
+	_check(village.start_research("picks_2") != "" or village.research.get("id", "") != "", "a tool's second tier waits for its first")
+	for id: String in ["swords", "wheelbarrows", "pitchforks_1", "picks_1", "axes_1"]:
+		for res in ["lumber", "stone", "food"]:
+			village.give(res, 300.0)
 		village.start_research(id)
 		village.research.t = Research.find(id).seconds - 0.5
 		await _wait(1.5)
-	_check(village.has_research("swords") and is_equal_approx(village.tool_bonus("food"), 2.0)
-		and is_equal_approx(village.tool_bonus("stone"), 2.0) and is_equal_approx(village.tool_bonus("lumber"), 2.0), "swords and tools researched")
+	_check(village.barrows and is_equal_approx(village.tool_bonus("stone"), 1.0 + Balance.num("tool_tier_bonus")), "wheelbarrows, and a tool's first tier")
+	for id: String in ["pitchforks_2", "pitchforks_3", "picks_2", "picks_3", "axes_2", "axes_3"]:
+		for res in ["lumber", "stone", "food"]:
+			village.give(res, 300.0)
+		village.start_research(id)
+		village.research.t = Research.find(id).seconds - 0.5
+		await _wait(1.5)
+	_check(village.has_research("swords") and absf(village.tool_bonus("food") - 1.5) < 0.01
+		and absf(village.tool_bonus("stone") - 1.5) < 0.01 and absf(village.tool_bonus("lumber") - 1.5) < 0.01,
+		"swords researched, and all three tool tiers: 50%% faster (%.3f)" % village.tool_bonus("food"))
+	# Overcast is researched at a Wizardry tower (see the spells' checks).
+	_check(Research.find("overcast").place == "wizard" and Research.find("overcast").cost.get("animus", 0) == 10, "Overcast is researched at the Wizardry tower for 10 animus")
 	village.set_wanted("archer", 1)
 	await _wait(village.train_seconds("archer") + 45.0)
 	_check(village.archers() == 1, "an archer is trained (%d; wanted %s, allowed %d, training %s, raiders %d, workers %d)" % [village.archers(),
@@ -1039,7 +1052,52 @@ func _run() -> void:
 		if not beast.hiding:
 			break
 	_check(beast._burst_until > game.now, "and it has a burst of speed")
-	shoved.queue_free()
+
+	# Kinky Fey Stuff: a pixie comes for a villager at work, off they go into
+	# a building, and then the fey are about.
+	var lover := village.fey_target(village.center)
+	if lover == null:
+		lover = village.fey_target(village.people()[0].global_position)
+	_check(lover != null, "Kinky Fey Stuff finds a villager at work")
+	if lover != null:
+		Balance.values["fey_tryst_seconds"] = 3.0
+		var tryst := FeyTryst.new()
+		game.world_root.add_child(tryst)
+		tryst.begin(lover)
+		for k in 30:
+			await _wait(0.5)
+			if lover.job == "tryst":
+				break
+		_check(lover.job == "tryst" and lover._pink_eyes.size() == 2, "a pixie flies to the villager, whose eyes glow green, and they go off together")
+		for k in 40:
+			await _wait(0.5)
+			if village.fey_until > game.now:
+				break
+		_check(village.fey_until > game.now and lover.visible and lover._pink_eyes.is_empty(), "the villager comes back out, eyes no longer glowing, and the fey are about")
+		Balance.values["fey_tryst_seconds"] = Balance.DEFAULTS["fey_tryst_seconds"]
+	# Children born meanwhile are winged girls, who grow up flying.
+	village.fey_until = game.now + 60.0
+	var kid := village._spawn_child()
+	_check(kid.fey and kid._wings.size() == 4 and kid._look.get("female", false), "a child born while the fey are about is a girl with four wings")
+	kid._age = 1.0e9
+	await _wait(2.0)
+	_check(kid.is_adult() and kid._hover > 0.3 and village.fey_adults() >= 1, "and grows up flying (%.1f m up)" % kid._hover)
+	village.fey_until = 0.0
+	# Fey Archers: as many as there are winged villagers, once archers can be trained.
+	_check(village.max_count("fey_archer") == village.fey_adults(), "Fey Archers: as many as there are winged villagers (%d)" % village.max_count("fey_archer"))
+	Balance.values["fey_archer_training_seconds"] = 2.0
+	village.set_wanted("fey_archer", 1)
+	for k in 30:
+		await _wait(1.0)
+		if village.count("fey_archer") >= 1:
+			break
+	var fey_archers := get_tree().get_nodes_in_group("fey_archers")
+	_check(fey_archers.size() == 1 and (fey_archers[0] as Villager).fey_archer and not (fey_archers[0] as Node).is_in_group("archers"),
+		"a winged villager trains as a Fey Archer (%d)" % fey_archers.size())
+	Balance.values["fey_archer_training_seconds"] = Balance.DEFAULTS["fey_archer_training_seconds"]
+	village.set_wanted("fey_archer", 0)
+	if is_instance_valid(shoved):
+		shoved.queue_free()
 
 	# Lumberjacks go as far as it takes for wood.
 	var far_tree := WorldPopulator.spawn_tree(game.world_root, game.terrain, village.center.x + PlayerVillage.WORK_REACH + 30.0, village.center.z, 0.0, 7)
@@ -1047,7 +1105,8 @@ func _run() -> void:
 	_check(village._nearest_free(far_tree.global_position, "trees", {}) == far_tree, "there is no limit to how far lumberjacks go for wood")
 	far_tree.queue_free()
 	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 4.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 2.0)
-		and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate_growth, 1.0), "goblins build 4 times as fast, and spawn (and rise each night) twice as fast")
+		and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "goblins build 4 times as fast; their spawning grows only with their buildings")
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 24.0) and play.day_cycle.clock_text().contains(":"), "a day is 24 minutes, a minute an hour (%s)" % play.day_cycle.clock_text())
 	play.raids.end_raid()
 	play.day_cycle.nightfall.emit()
 	_check(play.raids.raiding, "the goblins raid at nightfall")
@@ -1078,7 +1137,7 @@ func _run() -> void:
 	play._spell_key(bless)
 	_check(beast.mind.behavior.explore > keen and play._armed == -1 and not play._judge_prompt, "pressing it again casts it, without a click")
 	beast.mind._judged_at.clear()
-	await _wait(0.5)  # (past the short pause after a spell is cast)
+	play._cooldowns[bless] = 0.0  # (past Bless's cooldown)
 	beast.mind.did("eat", {"enemy": "goblin", "battle": true})
 	var eat_action := beast.mind.judge_target()
 	var keen_eat: float = beast.mind.behavior.get(eat_action, 0.0)
@@ -1105,13 +1164,21 @@ func _run() -> void:
 	play._disarm()
 	_check(Balance.num("lightning_jumps") >= 1.0, "chain lightning jumps lightning_jumps times (%d)" % roundi(Balance.num("lightning_jumps")))
 	_check(SpellBook.SPELLS[SpellBook.index_of("condemn")].name == "Condemn" and SpellBook.index_of("curse") == -1, "Curse is now called Condemn")
-	# The soft cooldown: a spell cast recently costs more.
+	# Cooldowns: no casting again until it has cooled down, unless with
+	# Overcast, once, for twice the magicko.
 	var fire_k := SpellBook.index_of("fireball")
 	var fire_cost := play.spell_cost(fire_k)
-	(play._recent[fire_k] as Array).append(game.now)
-	(play._recent[fire_k] as Array).append(game.now)
-	_check(play.spell_cost(fire_k) == fire_cost * 2, "a spell cast twice in the last 10 seconds costs twice as much (%d)" % play.spell_cost(fire_k))
-	(play._recent[fire_k] as Array).clear()
+	play._cooldowns[fire_k] = SpellBook.cooldown("fireball")
+	village.researched.erase("overcast")
+	_check(not play.spell_ready(fire_k), "a spell cannot be cast while it cools down")
+	village.researched["overcast"] = true
+	play._cooldowns[fire_k] = SpellBook.cooldown("fireball") - 1.0
+	_check(play.spell_ready(fire_k) and play.spell_cost(fire_k) == fire_cost * 2, "with Overcast it can, for twice the magicko (%d)" % play.spell_cost(fire_k))
+	village.give("magicko", 1000.0, false)
+	play._pay_for(fire_k)
+	_check(not play.spell_ready(fire_k), "but only once in each cooldown")
+	play._cooldowns[fire_k] = 0.0
+	play._overcast_used[fire_k] = false
 
 	# The creature learns by watching, and is blessed and cursed.
 	var mind := beast.mind

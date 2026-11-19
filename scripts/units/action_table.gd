@@ -109,7 +109,10 @@ static func category_of(title: String) -> String:
 
 
 ## A cell: the sentence, and the condition in the brackets at its end.
-static func _parse_cell(category: String, text: String) -> Dictionary:
+## Line breaks in the cell (a new line in the Google Sheet, or \n written
+## out) are line breaks in what the game shows.
+static func _parse_cell(category: String, raw: String) -> Dictionary:
+	var text := raw.replace("\r\n", "\n").replace("\r", "\n").replace("\\n", "\n")
 	var sentence := text
 	var condition := ""
 	var re := RegEx.create_from_string("\\[([^\\]]*)\\]\\s*$")

@@ -6,6 +6,8 @@ extends Node3D
 const GREEN := Color(0.45, 1.0, 0.45)
 
 var tree: MagicTree
+## Steered by someone else (see FeyTryst) instead of flitting round a tree.
+var free_flying := false
 var _life := 0.0
 var _angle := randf() * TAU
 var _speed := randf_range(0.6, 1.1) * (1.0 if randf() < 0.5 else -1.0)
@@ -23,6 +25,11 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_life -= delta
 	_time += delta
+	if free_flying:
+		scale = Vector3.ONE * clampf(_time * 2.0, 0.0, 1.0)
+		for k in _wings.size():
+			_wings[k].rotation.y = (1.0 if k == 0 else -1.0) * (0.5 + 0.6 * sin(_time * 40.0))
+		return
 	if not is_instance_valid(tree) or _life <= -1.0:
 		queue_free()
 		return

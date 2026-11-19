@@ -88,6 +88,7 @@ cost_wizardry_tower_stone = 50
 cost_shrine_stone = 60
 cost_granary_lumber = 40
 cost_granary_stone = 10
+tool_tier_bonus = 16.67%            # each tier of pitchforks, picks or axes gathers this much faster (50% after all three)
 cost_blacksmith_lumber = 50
 cost_blacksmith_stone = 40
 cost_cottage_lumber = 15
@@ -123,8 +124,8 @@ plant_seconds = 20              # how long a villager kneels to plant one
 sapling_grow_days = 2           # days (of the day length) for a sapling to grow into a tree
 
 # --- What the player's spells cost to cast ------------------------------------
-# In magicko. A spell cast in the last few seconds costs more on top (see
-# spell_recent_seconds and spell_recent_extra).
+# In magicko. Overcast (researched at the Wizardry tower) casts a spell
+# once while it cools down, for twice this.
 spell_cost_fireball    = 50    # magicko
 spell_cost_rain        = 25   # magicko
 spell_cost_roots       = 35   # magicko
@@ -133,7 +134,21 @@ spell_cost_blood       = 0    # magicko
 spell_cost_bless       = 10   # magicko
 spell_cost_condemn     = 10   # magicko
 spell_cost_gnomes      = 75   # magicko
+spell_cost_fey         = 100   # magicko (Kinky Fey Stuff)
 spell_cost_charm       = 40   # magicko
+
+# --- How long each spell cools down after it is cast, in seconds ----------
+# It cannot be cast again until then (but see Overcast).
+spell_cooldown_fireball  = 8
+spell_cooldown_rain      = 20
+spell_cooldown_roots     = 20
+spell_cooldown_lightning = 12
+spell_cooldown_blood     = 30
+spell_cooldown_bless     = 2
+spell_cooldown_condemn   = 2
+spell_cooldown_gnomes    = 30
+spell_cooldown_charm     = 30
+spell_cooldown_fey       = 300
 
 # --- Spells researched at the Shrine ----------------------------------------
 # Click a Shrine (the Singing rocks) to research spells, one at a time.
@@ -141,6 +156,14 @@ spell_cost_charm       = 40   # magicko
 spell_research_animus = 1       # animus the first spell costs to research, paid when it starts...
 spell_research_animus_step = 1  # ...and each one after costs this much more than the last
 spell_research_seconds = 90     # how long each takes, while a Shrine stands
+
+# --- Kinky Fey Stuff and the fey -----------------------------------------------
+fey_tryst_seconds = 120         # how long the villager is away with the pixie
+fey_birth_seconds = 120         # then births come faster, and every child is fey, for this long
+fey_birth_boost = 200%          # how much faster births come meanwhile
+fey_speed = 150%                # how fast the fey fly, as a share of walking
+fey_magicko = 200%              # magicko a fey villager makes, as a share of an ordinary one's
+fey_archer_shot_speed = 200%    # how much faster a Fey Archer shoots than an archer
 
 # --- Charm Offensive ----------------------------------------------------------
 charm_radius = 8                # metres across the spot, from its middle
@@ -157,6 +180,7 @@ builders_per_building = 5           # the most villagers that work on one buildi
 # Seconds to train one recruit. Each training building trains one at a time.
 # (The dev menu's training time slider multiplies all of them.)
 warrior_training_seconds = 20       # at a Town guard
+fey_archer_training_seconds = 50    # a Fey Archer, at a Town guard: twice an archer's
 archer_training_seconds = 20      # at a Town guard, once bows are researched
 wizard_training_seconds = 30        # at a Wizardry tower
 
@@ -395,6 +419,3 @@ raven_observant_personality = 110%
 raven_knowledgeSeeker_personality = 150%     # curious
 
 
-# Spells
-spell_recent_seconds = 10       # a spell costs more for this long after it is cast...
-spell_recent_extra = 50%        # ...this much more for each cast, added up

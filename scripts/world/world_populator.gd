@@ -159,8 +159,9 @@ static func place_cave(parent: Node3D, terrain: Terrain, spot: Vector2, facing: 
 
 ## Set `owned` for the player's villagers and `child` for a newborn.
 static func spawn_villager(parent: Node3D, terrain: Terrain, home: Vector3, radius: float, goblin := false,
-		owned := false, child := false) -> Villager:
+		owned := false, child := false, fey := false) -> Villager:
 	var v := Villager.new()
+	v.fey = fey
 	v.goblin = goblin
 	v.owned = owned
 	v.child = child

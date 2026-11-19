@@ -7,9 +7,11 @@ extends Node3D
 ##
 ## A spell's number key (or its square on the spell bar) takes it in hand
 ## and the pointer changes; a click casts it. Bless and Condemn show what
-## the creature last did and are cast with a click anywhere. A spell cast in the last Balance
-## "spell_recent_seconds" costs "spell_recent_extra" more for each time
-## (the soft cooldown); the spell bar sparkles blue as it gets dearer.
+## the creature last did and are cast with a click anywhere. After it is
+## cast a spell cools down (Balance "spell_cooldown_<id>") and cannot be
+## cast again until it has; its square sparkles blue meanwhile. With
+## Overcast (researched at the Wizardry tower) it can be cast once while
+## cooling down, for twice the magicko.
 
 enum Mode { COMMAND, PLACE, SCULPT, FIELD, BRIDGE, RULER }
 
@@ -22,6 +24,7 @@ const BRIDGE_HINT := "The treehouses a rope bridge can join are lit up. Click on
 const FIELD_HINT := "Hold the left mouse button and drag to draw the field, then let go. Villagers sow and reap it.  Shift keeps drawing,  right-click or Esc to stop."
 
 ## The shortest time between two casts of the same spell.
+## The shortest time between two casts of a spell, whatever its cooldown.
 const SPELL_DEBOUNCE := 0.25
 
 var mode: Mode = Mode.COMMAND
@@ -41,8 +44,8 @@ var _choosing := true
 var _markers: Array[StartMarker] = []
 var _hover: StartMarker
 var _cooldowns: Array = []
-## For each spell, when it was cast in the last Balance "spell_recent_seconds".
-var _recent: Array = []
+## For each spell: whether it has been overcast during this cooldown.
+var _overcast_used: Array = []
 ## The spell in hand (see _spell_key), or -1.
 var _armed := -1
 ## The spell button under the mouse, or -1.
@@ -104,7 +107,7 @@ func _ready() -> void:
 	_rng.seed = Game.world_seed + 99
 	for s in SpellBook.SPELLS:
 		_cooldowns.append(0.0)
-		_recent.append([])
+		_overcast_used.append(false)
 	village = PlayerVillage.new()
 	village.name = "Village"
 	add_child(village)
@@ -168,6 +171,7 @@ func _ready() -> void:
 	hud.spell_moved.connect(func(index: int, slot: int) -> void:
 		village.move_spell(SpellBook.SPELLS[index].id, slot)
 		hud.set_spell_slots(village.spell_slots))
+	village.fey_birthing.connect(func() -> void: _announce(Texts.line("fey_birthing")))
 	village.spell_unlocked.connect(func(id: String) -> void:
 		hud.set_spell_slots(village.spell_slots)
 		_announce(Texts.line("spell_unlocked", {"spell": SpellBook.find(id).name, "creature": creature.species_name().to_lower() if creature else "creature"})))
@@ -221,6 +225,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	for k in _cooldowns.size():
 		_cooldowns[k] = maxf(0.0, _cooldowns[k] - delta)
+		if _cooldowns[k] <= 0.0:
+			_overcast_used[k] = false
 	_cursor_hit = Game.pick_ground(get_viewport().get_mouse_position())
 	if _choosing:
 		_update_hover()
@@ -477,13 +483,15 @@ func _toggle_build_menu() -> void:
 		hud.update_build_menu(village)
 
 
-func _toggle_research_menu() -> void:
+## Opens (or closes) the research at `place`: "smith" (the Blacksmith; U)
+## or "wizard" (the Wizardry tower).
+func _toggle_research_menu(place := "smith") -> void:
 	if _choosing:
 		return
-	var open := not hud.is_research_menu_open()
+	var open := not hud.is_research_menu_open() or hud._research_place != place
 	hud.show_build_menu(false)
 	hud.show_spell_research(false)
-	hud.show_research_menu(open)
+	hud.show_research_menu(open, place)
 	if open:
 		hud.update_research(village)
 
@@ -553,7 +561,10 @@ func _on_left_click() -> void:
 				open_spell_research(shrine)
 			elif _building_at_mouse("smith") != null:
 				# A Blacksmith: its research.
-				_toggle_research_menu()
+				_toggle_research_menu("smith")
+			elif _building_at_mouse("wizard") != null:
+				# A Wizardry tower: Overcast.
+				_toggle_research_menu("wizard")
 			else:
 				_command_move(_cursor_hit)
 		Mode.RULER:
@@ -623,20 +634,33 @@ func _is_judgement(index: int) -> bool:
 	return id == "bless" or id == "condemn"
 
 
-## The extra share a spell costs now, for being cast recently: Balance
-## "spell_recent_extra" for each cast in the last "spell_recent_seconds".
-func recent_extra(index: int) -> float:
-	var recent: Array = _recent[index]
-	var since := Game.now - Balance.num("spell_recent_seconds")
-	while not recent.is_empty() and float(recent[0]) < since:
-		recent.pop_front()
-	return recent.size() * Balance.num("spell_recent_extra")
+## How much of its cooldown a spell has left, 0..1.
+func cooling_share(index: int) -> float:
+	var full := SpellBook.cooldown(SpellBook.SPELLS[index].id)
+	return clampf(_cooldowns[index] / full, 0.0, 1.0) if full > 0.0 else 0.0
 
 
-## What a spell costs in magicko right now.
+## True if the spell can be cast now: it has cooled down, or the village
+## has Overcast and has not used it on this cooldown yet.
+func spell_ready(index: int) -> bool:
+	if _cooldowns[index] <= 0.0:
+		return true
+	return village.has_research("overcast") and not _overcast_used[index] and cooling_share(index) > 0.0 \
+		and SpellBook.cooldown(SpellBook.SPELLS[index].id) - _cooldowns[index] >= SPELL_DEBOUNCE
+
+
+## What a spell costs in magicko right now: twice as much to overcast it.
 func spell_cost(index: int) -> int:
 	var base := SpellBook.cost(SpellBook.SPELLS[index].id)
-	return ceili(base * (1.0 + recent_extra(index)) - 0.001)
+	return base * (2 if _cooldowns[index] > 0.0 else 1)
+
+
+## Says why a spell cannot be cast yet. False if it can.
+func _cooling(index: int) -> bool:
+	if spell_ready(index):
+		return false
+	hud.set_hint("%s is cooling down: %d s." % [SpellBook.SPELLS[index].name, ceili(_cooldowns[index])])
+	return true
 
 
 ## Pays for a spell, if there is magicko enough. Returns false if not.
@@ -647,8 +671,11 @@ func _pay_for(index: int) -> bool:
 		hud.set_hint("Not enough magicko for %s: it costs %d now." % [spell.name, cost])
 		return false
 	village.give("magicko", -cost)
-	(_recent[index] as Array).append(Game.now)
-	_cooldowns[index] = SPELL_DEBOUNCE
+	if _cooldowns[index] > 0.0:
+		# Overcast: once in this cooldown.
+		_overcast_used[index] = true
+	else:
+		_cooldowns[index] = maxf(SPELL_DEBOUNCE, SpellBook.cooldown(spell.id))
 	return true
 
 
@@ -777,7 +804,7 @@ func _show_last_action(index: int, armed: bool) -> void:
 ## Casts Bless or Condemn on the creature, for what it last did (or the
 ## next thing down its column, if that is cooling down).
 func _judge(index: int) -> void:
-	if _choosing or creature == null or _cooldowns[index] > 0.0:
+	if _choosing or creature == null or _cooling(index):
 		return
 	if not creature.mind.can_judge():
 		hud.set_hint(creature.mind.judge(1))
@@ -791,7 +818,7 @@ func _judge(index: int) -> void:
 
 ## Casts a spell where the mouse points.
 func _cast(index: int) -> void:
-	if _choosing or index < 0 or _cooldowns[index] > 0.0:
+	if _choosing or index < 0 or _cooling(index):
 		return
 	var spell: Dictionary = SpellBook.SPELLS[index]
 	if _cursor_hit == null:
@@ -807,6 +834,12 @@ func _cast(index: int) -> void:
 		building_site = _site_near(target)
 		if building_site == null:
 			hud.set_hint("Gnomish Subcontractors: click on one of your buildings under construction.")
+			return
+	var fey_villager: Villager = null
+	if spell.id == "fey":
+		fey_villager = village.fey_target(target)
+		if fey_villager == null:
+			hud.set_hint("Kinky Fey Stuff: click near one of your villagers at work.")
 			return
 	if spell.id == "blood" and village.amount("magicko") >= spell_cost(index) and not village.sacrifice(target):
 		hud.set_hint("Blood Sacrifice needs one of your villagers within %d m of the mouse." % int(PlayerVillage.BLOOD_REACH))
@@ -838,6 +871,10 @@ func _cast(index: int) -> void:
 		"gnomes":
 			Gnome.summon(building_site)
 			_announce(Texts.line("gnomes_came"))
+		"fey":
+			var tryst := FeyTryst.new()
+			Game.world_root.add_child(tryst)
+			tryst.begin(fey_villager)
 		"charm":
 			var charm := CharmOffensive.new()
 			Game.world_root.add_child(charm)
@@ -1378,7 +1415,7 @@ func _update_ui() -> void:
 	var extras: Array[float] = []
 	for k in SpellBook.SPELLS.size():
 		costs.append(spell_cost(k))
-		extras.append(recent_extra(k))
+		extras.append(cooling_share(k) * SpellSparkles.FULL)
 	hud.update_spells(village.amount("magicko"), costs, extras, not _choosing)
 	hud.update_creature(creature)
 	hud.set_blood(village.blood_active())

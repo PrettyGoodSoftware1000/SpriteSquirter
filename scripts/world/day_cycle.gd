@@ -21,6 +21,8 @@ const PHASES := [
 	{"start": 0.53, "mood": 1, "name": "evening"},
 	{"start": NIGHT_START, "mood": 3, "name": "night"},
 ]
+## The hour the day begins, at dawn.
+const DAWN_HOUR := 6.0
 ## The game starts in the morning.
 const START_TIME := 0.12
 
@@ -65,8 +67,16 @@ static func phase_at(t: float) -> int:
 	return found
 
 
+## The hour of the game's day: a real minute is a game hour, whatever the
+## day length, and the day begins at DAWN_HOUR (so with the night a third
+## of it, a 24-minute day has 16 hours of light, and night from 22:00).
+func hour() -> float:
+	return fposmod(DAWN_HOUR + time * 24.0, 24.0)
+
+
 func clock_text() -> String:
 	var part: String = PHASES[phase_at(time)].name
-	if time >= MIDNIGHT:
+	var h := hour()
+	if is_night() and h < DAWN_HOUR:
 		part = "after midnight"
-	return "Day %d: %s" % [day, part]
+	return "Day %d, %d:%02d (%s)" % [day, floori(h), floori(fmod(h, 1.0) * 60.0), part]

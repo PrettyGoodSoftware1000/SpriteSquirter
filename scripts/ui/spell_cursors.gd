@@ -89,6 +89,14 @@ static func _draw(id: String) -> Image:
 		"bless":
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 20.0, 5.0), Color(1.0, 0.85, 0.25))
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 9.0, 3.0), Color(1.0, 0.98, 0.8), false)
+		"fey":
+			# Four jewel-coloured dragonfly wings and a slim body.
+			for wing: Array in [[Vector2(22, 22), Vector2(4, 8), Color(0.25, 0.55, 1.0)], [Vector2(26, 22), Vector2(44, 8), Color(0.25, 0.55, 1.0)],
+					[Vector2(22, 26), Vector2(6, 40), Color(0.35, 0.85, 0.75)], [Vector2(26, 26), Vector2(42, 40), Color(0.35, 0.85, 0.75)]]:
+				_shape(img, func(p: Vector2) -> float: return _leaf(p, wing[0], wing[1]), wing[2])
+			for glow: Vector2 in [Vector2(17, 30), Vector2(31, 30)]:
+				_shape(img, func(p: Vector2) -> float: return p.distance_to(glow) - 3.5, Color(1.0, 0.5, 0.7), false)
+			_shape(img, func(p: Vector2) -> float: return _segment(p, Vector2(24, 12), Vector2(24, 44)) - 2.2, Color(0.15, 0.2, 0.45))
 		"hammer":
 			# A builder's hammer: a wooden handle and an iron head.
 			_shape(img, func(p: Vector2) -> float: return _segment(p, Vector2(14, 41), Vector2(30, 17)) - 3.2, Color(0.72, 0.5, 0.28))

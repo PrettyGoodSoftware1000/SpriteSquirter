@@ -26,6 +26,7 @@ const DEFAULTS := {
 	"research_done": "The Blacksmith has finished: {research}.",
 	"spell_researched": "The Shrine has taught you a new spell: {spell}.",
 	"spell_unlocked": "Your {creature} has grown: you can now cast {spell}.",
+	"fey_birthing": "The fey are about: children come twice as fast, and every one is born a girl with wings.",
 	"creature_died": "The {creature} has died! Bring it back to life at a Shrine for {animus} animus.",
 	"creature_resurrected": "The {creature} lives again!",
 	"resurrect_no_shrine": "The {creature} can only be brought back to life at a Shrine. Build one first.",
@@ -100,4 +101,5 @@ static func load_file() -> void:
 		if not DEFAULTS.has(key):
 			push_warning("Announcements.txt: there is no line called '%s'" % key)
 			continue
-		values[key] = raw.substr(at + 1).strip_edges()
+		# (Write \n for a line break.)
+		values[key] = raw.substr(at + 1).strip_edges().replace("\\n", "\n")

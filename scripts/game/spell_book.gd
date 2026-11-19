@@ -32,6 +32,8 @@ const SPELLS := [
 		"hint": "Take it in hand to see what your creature last did; click anywhere to condemn it: its affinity for that goes down 10."},
 	{"id": "gnomes", "name": "Gnomish Subcontractors",
 		"hint": "Click a building under construction: five gnomes come running from 50 m away and help build it."},
+	{"id": "fey", "name": "Kinky Fey Stuff",
+		"hint": "Click near a villager at work: a pixie flies from the nearest tree, and off they go into a building for 2 minutes. Then births come twice as fast for 2 minutes, and every child born is a winged fey girl."},
 	{"id": "charm", "name": "Charm Offensive",
 		"hint": "Pink hearts fill the spot: about half the goblins caught in it are charmed for 60 seconds and fight their own kind."},
 ]
@@ -68,6 +70,12 @@ static func find(id: String) -> Dictionary:
 ## more for a while after it is cast, see PlayMode.spell_cost()).
 static func cost(id: String) -> int:
 	return roundi(Balance.num("spell_cost_" + id))
+
+
+## How long spell `id` cools down after it is cast (Balance
+## "spell_cooldown_<id>"), in seconds.
+static func cooldown(id: String) -> float:
+	return Balance.num("spell_cooldown_" + id)
 
 
 static func index_of(id: String) -> int:

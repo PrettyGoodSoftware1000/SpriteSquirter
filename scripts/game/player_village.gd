@@ -33,10 +33,11 @@ extends Node
 ## dead as skeletons. Everyone who dies, villager or goblin, leaves the
 ## village a few bones (Villager._die).
 ##
-## A Blacksmith gives the workers wheelbarrows (bigger loads) and lets the
-## village research one thing at a time from Research.ITEMS: sharper
-## swords, bows (archers: ARCHERS_PER_GUARD per Town guard), and tools that
-## double the gathering of food, stone or lumber.
+## A Blacksmith lets the village research one thing at a time from
+## Research.ITEMS: sharper swords, bows (archers: ARCHERS_PER_GUARD per Town
+## guard), wheelbarrows (bigger loads), and three tiers of tools for food,
+## stone and lumber (Balance "tool_tier_bonus" faster each). A Wizardry
+## tower researches Overcast.
 ##
 ## Everyone eats: villagers FOOD_PER_VILLAGER a minute, warriors
 ## FOOD_PER_WARRIOR, archers FOOD_PER_ARCHER and wizards FOOD_PER_WIZARD.
@@ -82,6 +83,7 @@ const ARMY := {
 	"archer": ["guard", ARCHERS_PER_GUARD],
 	"wizard": ["wizard", WIZARDS_PER_ROCKS],
 	"necromancer": ["necro", 2],
+	"fey_archer": ["guard", 0],
 }
 ## Blood Sacrifice: how long the magicko boost lasts, how big it is, and
 ## how near the click a villager must be.
@@ -92,6 +94,8 @@ const BLOOD_REACH := 9.0
 signal research_done(id: String)
 ## A spell has been researched at the Shrine (see SpellBook).
 signal spell_researched(id: String)
+## Kinky Fey Stuff is done: the fey are about (births twice as fast).
+signal fey_birthing
 ## Bless or Condemn has come with the creature's growth.
 signal spell_unlocked(id: String)
 ## Another Balance "stored_per_lesson" of `kind` has been carried in: the
@@ -105,11 +109,18 @@ var resources := {}
 var birth_progress := 0.0
 
 ## How many warriors and wizards the player asked for.
-var wanted := {"warrior": 0, "archer": 0, "wizard": 0, "necromancer": 0}
+var wanted := {"warrior": 0, "archer": 0, "wizard": 0, "necromancer": 0, "fey_archer": 0}
+## Kinky Fey Stuff: until then (Game.now) births come twice as fast and
+## every child is fey; and the villagers away with a pixie, each ->
+## {"t": seconds away, "pixie": its pixie}.
+var fey_until := 0.0
+var _trysts := {}
 ## Finished research: id -> true.
 var researched := {}
-## The research under way: {"id": ..., "t": seconds done}, or empty.
+## The research under way at the Blacksmith, and at the Wizardry tower:
+## {"id": ..., "t": seconds done}, or empty.
 var research := {}
+var wizard_research := {}
 ## Spells researched at the Shrine: id -> true.
 var spells_known := {}
 ## The spell bar: each slot's spell id, or "" (0-9 the first row, cast with
@@ -119,7 +130,7 @@ var spells_known := {}
 var spell_slots: Array[String] = []
 ## The spell being researched at the Shrine: {"id": ..., "t": seconds done}, or empty.
 var spell_research := {}
-## True while the village has a Blacksmith: loads go home in wheelbarrows.
+## True once Wheelbarrows are researched: loads three times as big.
 var barrows := false
 ## How many villagers the player has set to each job (Villager.pin): the
 ## lumberjacks, miners, farmers and builders. Everyone else is an
@@ -371,7 +382,18 @@ func count(role: String) -> int:
 			return archers()
 		"necromancer":
 			return get_tree().get_nodes_in_group("necromancers").size()
+		"fey_archer":
+			return get_tree().get_nodes_in_group("fey_archers").size()
 	return wizards()
+
+
+## The village's grown-up fey (workers and Fey Archers alike).
+func fey_adults() -> int:
+	var n := 0
+	for v in people():
+		if v.fey and not v.child:
+			n += 1
+	return n
 
 
 ## How many of `role` one of its buildings can keep, and how long each
@@ -387,8 +409,11 @@ func train_seconds(role: String) -> float:
 ## The most warriors (or archers, or wizards) the village's buildings can
 ## train. Archers need bows first.
 func max_count(role: String) -> int:
-	if role == "archer" and not has_research("bows"):
+	if (role == "archer" or role == "fey_archer") and not has_research("bows"):
 		return 0
+	if role == "fey_archer":
+		# As many as there are winged villagers, once archers can be trained.
+		return fey_adults() if not _training_buildings(role).is_empty() else 0
 	return _training_buildings(role).size() * per_building(role)
 
 
@@ -405,10 +430,34 @@ func has_research(id: String) -> bool:
 	return researched.has(id)
 
 
+## True while one of the village's buildings with `role` stands.
+func has_role(role: String) -> bool:
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		if BuildingCatalog.role(node.get_meta("kind", "")) == role and not (node as Destructible).destroyed:
+			return true
+	return false
+
+
 ## How many times faster `kind` ("food", "stone" or "lumber") is gathered
-## thanks to researched tools.
+## thanks to researched tools: Balance "tool_tier_bonus" more for each tier.
 func tool_bonus(kind: String) -> float:
-	return Research.TOOL_BONUS if has_research(Research.TOOLS[kind]) else 1.0
+	var tiers := 0
+	for n in range(1, Research.TIERS + 1):
+		if has_research("%s_%d" % [Research.TOOLS[kind], n]):
+			tiers += 1
+	return 1.0 + tiers * Balance.num("tool_tier_bonus")
+
+
+## The research under way at `place` ("smith" or "wizard").
+func research_at(place: String) -> Dictionary:
+	return wizard_research if place == "wizard" else research
+
+
+func _set_research(place: String, value: Dictionary) -> void:
+	if place == "wizard":
+		wizard_research = value
+	else:
+		research = value
 
 
 ## Starts researching. Returns why it can't, or "" if it began.
@@ -416,15 +465,19 @@ func start_research(id: String) -> String:
 	var item := Research.find(id)
 	if item.is_empty() or has_research(id):
 		return "That is already researched."
-	if not has_blacksmith():
-		return "Research needs a %s: build one first." % BuildingCatalog.role_name("smith")
-	if not research.is_empty():
-		return "The %s is busy with %s." % [BuildingCatalog.role_name("smith"), (Research.find(research.id).name as String).to_lower()]
+	var place: String = item.place
+	if not has_role(place):
+		return "Research needs a %s: build one first." % BuildingCatalog.role_name(place)
+	if item.has("needs") and not has_research(item.needs):
+		return "Research %s first." % Research.find(item.needs).name
+	var busy := research_at(place)
+	if not busy.is_empty():
+		return "The %s is busy with %s." % [BuildingCatalog.role_name(place), (Research.find(busy.id).name as String).to_lower()]
 	var short := shortfall(item.cost)
 	if short != "":
 		return "Need %s more." % short
 	spend(item.cost)
-	research = {"id": id, "t": 0.0}
+	_set_research(place, {"id": id, "t": 0.0})
 	return ""
 
 
@@ -432,24 +485,31 @@ func start_research(id: String) -> String:
 func research_progress(id: String) -> float:
 	if has_research(id):
 		return 1.0
-	if research.get("id", "") == id:
-		return clampf(research.t / Research.find(id).seconds, 0.0, 1.0)
+	var item := Research.find(id)
+	var busy := research_at(item.get("place", "smith"))
+	if busy.get("id", "") == id:
+		return clampf(busy.t / item.seconds, 0.0, 1.0)
 	return 0.0
 
 
+## Research goes on at each place while a building for it stands.
 func _update_research(delta: float) -> void:
-	if research.is_empty() or not barrows:
-		return
-	research.t += delta
-	var id: String = research.id
-	if research.t < Research.find(id).seconds:
-		return
-	research = {}
-	researched[id] = true
-	if id == "swords":
-		for v in people():
-			v.sharpen()
-	research_done.emit(id)
+	for place: String in ["smith", "wizard"]:
+		var busy := research_at(place)
+		if busy.is_empty() or not has_role(place):
+			continue
+		busy.t += delta
+		var id: String = busy.id
+		if busy.t < Research.find(id).seconds:
+			continue
+		_set_research(place, {})
+		researched[id] = true
+		if id == "swords":
+			for v in people():
+				v.sharpen()
+		if id == "wheelbarrows":
+			barrows = true
+		research_done.emit(id)
 
 
 # --- Spells researched at the Shrine (the Singing rocks) ------------------------
@@ -574,6 +634,70 @@ func unlock_growth_spells(level: int) -> void:
 		if level >= int(SpellBook.GROWTH_SPELLS[id]) and not spells_known.has(id):
 			_learn_spell(id)
 			spell_unlocked.emit(id)
+
+
+# --- Kinky Fey Stuff ----------------------------------------------------------------
+
+## The worker (unassigned, lumberjack, miner, farmer or builder) nearest
+## `p`, within BLOOD_REACH, for Kinky Fey Stuff. Null if there is none.
+func fey_target(p: Vector3) -> Villager:
+	var best: Villager = null
+	var best_d := BLOOD_REACH
+	for v in people():
+		if not v.can_work() or v.job == "tryst" or v.job == "train":
+			continue
+		var d := Vector2(v.global_position.x - p.x, v.global_position.z - p.z).length()
+		if d < best_d:
+			best_d = d
+			best = v
+	return best
+
+
+## The pixie has come: villager `v` goes off with it into the village's
+## nearest building, for Balance "fey_tryst_seconds".
+func start_tryst(v: Villager, pixie: Node3D) -> void:
+	var best: Destructible = null
+	var best_d := INF
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if b.destroyed or b is RopeBridge:
+			continue
+		var d := b.global_position.distance_to(v.global_position)
+		if d < best_d:
+			best_d = d
+			best = b
+	if best == null:
+		return
+	var door := v.global_position - best.global_position
+	door.y = 0.0
+	door = door.normalized() if door.length_squared() > 0.01 else Vector3.RIGHT
+	v.clear_job()
+	v.pin = ""
+	v.assign_job("tryst", best.global_position + door * (best.footprint + 0.6), best)
+	_trysts[v] = {"t": 0.0, "pixie": pixie}
+
+
+## At the building: in they go (out of sight); after the time is up out
+## comes the villager, its eyes no longer glowing, and the fey are about.
+func _tryst(v: Villager, delta: float) -> void:
+	var entry: Dictionary = _trysts.get(v, {})
+	if entry.is_empty():
+		v.clear_job()
+		return
+	if entry.t == 0.0:
+		v.visible = false
+		if is_instance_valid(entry.pixie):
+			(entry.pixie as Node3D).queue_free()
+	entry.t += delta
+	if entry.t < Balance.num("fey_tryst_seconds"):
+		return
+	_trysts.erase(v)
+	v.visible = true
+	v.clear_eye_glow()
+	v.clear_job()
+	fey_until = Game.now + Balance.num("fey_birth_seconds")
+	Game.effects.spawn_dust(v.global_position, 0.6)
+	fey_birthing.emit()
 
 
 ## Every spell, researched at once (the dev menu).
@@ -867,14 +991,16 @@ func _process(delta: float) -> void:
 		return
 	var grown := adults() - wizards()
 	var boost := BLOOD_BOOST if blood_active() else 1.0
-	give("magicko", (grown * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
+	# (The fey make twice as much: Balance "fey_magicko" times as much.)
+	var fey_extra := fey_adults() * (Balance.num("fey_magicko") - 1.0)
+	give("magicko", ((grown + fey_extra) * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
 	# Animus: Balance "animus_per_minute" to begin with, and more for every
 	# Shrine the village has built (not the ones its site came with).
 	give("animus", (Balance.num("animus_per_minute") + built_shrines() * Balance.num("animus_per_shrine")) / 60.0 * delta)
 	_sample(delta)
 	_eat(delta)
 	if population() < housing() and amount("food") > 0:
-		birth_progress += delta
+		birth_progress += delta * (Balance.num("fey_birth_boost") if Game.now < fey_until else 1.0)
 		if birth_progress >= Game.settings.birth_seconds:
 			birth_progress = 0.0
 			_spawn_child()
@@ -885,7 +1011,7 @@ func _process(delta: float) -> void:
 	_army_timer -= delta
 	if _army_timer <= 0.0:
 		_army_timer = 0.5
-		barrows = has_blacksmith()
+		barrows = has_research("wheelbarrows")
 		_manage_army()
 	_update_research(delta)
 	_update_spell_research(delta)
@@ -913,17 +1039,19 @@ func _eat(delta: float) -> void:
 			all[randi() % all.size()].starve()
 
 
-func _spawn_child() -> void:
+func _spawn_child() -> Villager:
 	var spot := center
 	var homes := get_tree().get_nodes_in_group("player_buildings")
 	if not homes.is_empty():
 		var b := homes[randi() % homes.size()] as Destructible
 		var a := randf() * TAU
 		spot = b.global_position + Vector3(cos(a), 0.0, sin(a)) * (b.footprint + 1.0)
-	var v := WorldPopulator.spawn_villager(Game.world_root, Game.terrain, spot, 1.0, false, true, true)
+	# (While the fey are about, every child is fey: a girl with wings.)
+	var v := WorldPopulator.spawn_villager(Game.world_root, Game.terrain, spot, 1.0, false, true, true, Game.now < fey_until)
 	v.home = center
 	v.home_radius = HOME_RADIUS
 	Game.effects.spawn_dust(v.global_position, 0.4)
+	return v
 
 
 # --- Work ---------------------------------------------------------------------
@@ -952,12 +1080,17 @@ func work(v: Villager, delta: float) -> void:
 					"archer":
 						v.guard = post
 						v.become_archer(post.global_position)
+					"fey_archer":
+						v.guard = post
+						v.become_fey_archer(post.global_position)
 					"necromancer":
 						# A wizard upgraded: no longer one of the wizards asked for.
 						v.become_necromancer(post.global_position)
 						wanted.wizard = maxi(0, wanted.wizard - 1)
 					_:
 						v.become_wizard(post.global_position)
+		"tryst":
+			_tryst(v, delta)
 		"plant":
 			_planting[v] = _planting.get(v, 0.0) + delta
 			if _planting[v] >= Balance.num("plant_seconds"):
@@ -1060,7 +1193,7 @@ func _assign_jobs() -> void:
 			farming += 1
 	# The villagers the player set to a job keep to it.
 	for v in workers:
-		if v.job == "build" or v.job == "plant" or not counts.has(v.pin) or v.job == v.pin or (v.pin == "food" and v.job == "farm"):
+		if v.job == "build" or v.job == "plant" or v.job == "tryst" or not counts.has(v.pin) or v.job == v.pin or (v.pin == "food" and v.job == "farm"):
 			continue
 		var was := v.job
 		if _give_job(v, v.pin, per_target):
@@ -1107,7 +1240,7 @@ func _next_builder(workers: Array[Villager], at: Vector3, _desperate: bool) -> V
 		var best_d := INF
 		for v in workers:
 			# (Someone kneeling to plant a sapling finishes it first.)
-			if v.job == "build" or v.job == "plant" or (wanted != "any" and v.pin != wanted):
+			if v.job == "build" or v.job == "plant" or v.job == "tryst" or (wanted != "any" and v.pin != wanted):
 				continue
 			var d := v.global_position.distance_to(at)
 			if d < best_d:
@@ -1168,7 +1301,8 @@ func _manage_army() -> void:
 			else:
 				for v in people():
 					if (v.soldier and role == "warrior") or (v.wizard and not v.necromancer and role == "wizard") \
-							or (v.archer and role == "archer") or (v.necromancer and role == "necromancer"):
+							or (v.fey_archer and role == "fey_archer") \
+							or (v.archer and not v.fey_archer and role == "archer") or (v.necromancer and role == "necromancer"):
 						v.become_worker()
 						break
 				have -= 1
@@ -1180,7 +1314,7 @@ func _manage_army() -> void:
 				break
 			if _training.has(b):
 				continue
-			var recruit := _nearest_wizard(b.global_position) if role == "necromancer" else _nearest_worker(b.global_position)
+			var recruit := _nearest_wizard(b.global_position) if role == "necromancer" else _nearest_worker(b.global_position, role == "fey_archer")
 			if recruit == null:
 				break
 			var out := recruit.global_position - b.global_position
@@ -1193,11 +1327,11 @@ func _manage_army() -> void:
 
 ## The nearest unassigned worker (lumberjacks, miners, farmers and
 ## builders keep to their jobs).
-func _nearest_worker(to: Vector3) -> Villager:
+func _nearest_worker(to: Vector3, fey_only := false) -> Villager:
 	var best: Villager = null
 	var best_d := INF
 	for v in people():
-		if not v.can_work() or v.job == "train" or v.pin != "":
+		if not v.can_work() or v.job == "train" or v.job == "tryst" or v.pin != "" or (fey_only and not v.fey):
 			continue
 		var d := v.global_position.distance_to(to)
 		if d < best_d:

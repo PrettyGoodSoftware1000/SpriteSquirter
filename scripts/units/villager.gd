@@ -203,6 +203,20 @@ var _hit_flash := 0.0
 ## A goblin charmed by Charm Offensive fights its own kind until then
 ## (Game.now), with pink eyes.
 var charmed_until := 0.0
+## A fey villager (born while Kinky Fey Stuff has the village charmed): a
+## woman with four dragonfly wings, who flies (over water and cliffs too)
+## Balance "fey_speed" as fast. A Fey Archer is one trained to shoot,
+## twice as fast as an archer, who flies about and lands now and then.
+var fey := false
+var fey_archer := false
+var _wings: Array[Node3D] = []
+var _wing_phase := randf() * TAU
+var _hover := 0.0
+var _landed := false
+var _land_timer := 0.0
+var _fey_dust: CPUParticles3D
+## The fey wings' meshes (front and back), shared.
+static var _wing_meshes: Array[ArrayMesh] = []
 ## A shove that slides it along the ground (see knock_back()), dying away,
 ## and staggered by it (it cannot walk) until then (Game.now).
 var _shove := Vector3.ZERO
@@ -299,6 +313,8 @@ func _build_body() -> void:
 		_look = _skeleton_looks[1 if archer else 0]
 	else:
 		var library := _goblin_looks if goblin else _looks
+		if fey:
+			library = _looks.filter(func(l: Dictionary) -> bool: return l.get("female", false))
 		_look = library[randi() % library.size()]
 	_base_look = _look
 	_body = Node3D.new()
@@ -322,6 +338,8 @@ func _build_body() -> void:
 		hp = max_hp
 		damage = GOBLIN_DAMAGE * OGRE_DAMAGE
 		_hold("club", 0, Vector3(0.0, -0.85, 0.03))
+	if fey:
+		_add_wings()
 	if skeleton:
 		if _fixed_scale > 0.0:
 			_adult_scale = _fixed_scale
@@ -975,6 +993,7 @@ static func _build_looks() -> void:
 		c.beard = not c.skirt and rng.randf() < 0.45
 		var look := _villager_far(c)
 		look.merge(_villager_near(c))
+		look["female"] = c.skirt
 		_looks.append(look)
 	for k in 6:
 		var skin: Color = Art.GOBLIN_SKIN[k % Art.GOBLIN_SKIN.size()]
@@ -1314,7 +1333,7 @@ func _process(delta: float) -> void:
 	_think_timer -= delta
 	if _think_timer <= 0.0:
 		_think_timer = 0.4
-		if not _pink_eyes.is_empty() and not charmed():
+		if goblin and not _pink_eyes.is_empty() and not charmed():
 			_uncharm()
 		_think()
 		var cam := get_viewport().get_camera_3d()
@@ -1382,9 +1401,139 @@ func _process(delta: float) -> void:
 		_animate(delta)
 		return
 	var ground := Game.terrain.get_height(global_position.x, global_position.z)
+	if fey:
+		_update_fey(delta)
+		ground = maxf(ground, Game.terrain.water_level_at(global_position.x, global_position.z)) + _hover
 	# Goblins swim across rivers and lakes.
 	global_position.y = maxf(ground, Game.terrain.water_level_at(global_position.x, global_position.z) - 0.95 * scale.y) if goblin else ground
 	_animate(delta)
+
+
+# --- The fey ----------------------------------------------------------------------
+
+## A fey villager's wings beat (the front pair and the back pair in turn),
+## and it hovers: low as it works, high as a Fey Archer flies about. A Fey
+## Archer lands now and then, but never with enemies in the village's
+## influence, and trails green pixie dust now and then while it flies.
+func _update_fey(delta: float) -> void:
+	_wing_phase += delta * 26.0
+	for k in _wings.size():
+		var front := k < 2
+		var side := 1.0 if k % 2 == 0 else -1.0
+		var beat := sin(_wing_phase + (0.0 if front else PI))
+		_wings[k].rotation.z = side * (0.35 * beat + (0.15 if front else -0.25))
+	var want := 0.7 + 0.12 * sin(_wing_phase * 0.11)
+	if fey_archer:
+		_land_timer -= delta
+		if _land_timer <= 0.0:
+			_land_timer = randf_range(8.0, 20.0)
+			_landed = randf() < 0.35
+		if _landed and _enemies_near_village():
+			_landed = false
+		want = 0.0 if _landed else 3.5 + 0.5 * sin(_wing_phase * 0.07)
+		if _fey_dust:
+			_fey_dust.emitting = not _landed and fmod(_wing_phase * 0.05, 3.0) < 1.2
+	elif state == State.JOB and _working:
+		want = 0.25
+	_hover = move_toward(_hover, want, delta * 2.0)
+
+
+func _enemies_near_village() -> bool:
+	var village := Game.village
+	if not is_instance_valid(village):
+		return false
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g.is_alive() and not g.charmed() and village.in_territory(g.global_position):
+			return true
+	return false
+
+
+## Four dragonfly wings on its back (see _build_wings()).
+func _add_wings() -> void:
+	if _wing_meshes.is_empty():
+		_build_wings()
+	for k in 4:
+		var front := k < 2
+		var side := 1.0 if k % 2 == 0 else -1.0
+		var hinge := Node3D.new()
+		hinge.position = Vector3(side * 0.06, 1.3 if front else 1.18, -0.16)
+		_torso.add_child(hinge)
+		var wing := MeshInstance3D.new()
+		wing.mesh = _wing_meshes[0 if front else 1]
+		wing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		wing.scale = Vector3(side, 1.0, 1.0)
+		wing.rotation.z = 0.25 if front else -0.3
+		hinge.add_child(wing)
+		_wings.append(hinge)
+
+
+## The wings: long and rounded, deep blue and violet at the tips through
+## teal to gold and rose at the root, after a jewel-winged dragonfly.
+static func _build_wings() -> void:
+	# (Unshaded, so the jewel colours stay bright from every side.)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for spec: Array in [[0.95, 0.24, 0.1], [0.85, 0.3, -0.12]]:
+		var length: float = spec[0]
+		var width: float = spec[1]
+		var droop: float = spec[2]
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var steps := 18
+		var root := Vector3.ZERO
+		var rim: Array[Vector3] = []
+		for s in steps + 1:
+			var a := PI * s / steps
+			# Out along +x, a rounded paddle wider towards the tip.
+			var along := (1.0 - cos(a)) * 0.5 * length
+			var across := sin(a) * width * (0.55 + 0.45 * along / length)
+			rim.append(Vector3(along, droop * along / length + across, -0.02 * along))
+		for s in steps:
+			for p: Vector3 in [root, rim[s], rim[s + 1]]:
+				var t := p.x / length
+				var c := Color(1.0, 0.45, 0.6).lerp(Color(1.0, 0.85, 0.3), smoothstep(0.0, 0.25, t))
+				c = c.lerp(Color(0.25, 0.85, 0.75), smoothstep(0.2, 0.5, t))
+				c = c.lerp(Color(0.18, 0.3, 0.9), smoothstep(0.45, 0.8, t))
+				c = c.lerp(Color(0.45, 0.25, 0.75), smoothstep(0.8, 1.0, t))
+				c.a = 0.9
+				st.set_color(c)
+				st.add_vertex(p)
+		st.generate_normals()
+		var mesh := st.commit()
+		mesh.surface_set_material(0, mat)
+		_wing_meshes.append(mesh)
+
+
+## Glowing eyes: pink for Charm Offensive, green for the fey (or none).
+func set_eye_glow(color: Color) -> void:
+	clear_eye_glow()
+	var eye := SphereMesh.new()
+	eye.radius = 0.055 if goblin else 0.035
+	eye.height = eye.radius * 2.0
+	eye.radial_segments = 8
+	eye.rings = 4
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = color
+	eye.material = mat
+	for sx in [-1.0, 1.0]:
+		var mi := MeshInstance3D.new()
+		mi.mesh = eye
+		mi.position = Vector3(sx * 0.105, 1.62, 0.27) if goblin else Vector3(sx * 0.06, 1.625, 0.16)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_torso.add_child(mi)
+		_pink_eyes.append(mi)
+
+
+func clear_eye_glow() -> void:
+	for mi in _pink_eyes:
+		if is_instance_valid(mi):
+			mi.queue_free()
+	_pink_eyes.clear()
 
 
 func _grow(delta: float) -> void:
@@ -1515,7 +1664,7 @@ func _start_delivery() -> void:
 		_load = MeshInstance3D.new()
 		_load.material_override = Art.cloth()
 		add_child(_load)
-	_pushing = Game.village.barrows
+	_pushing = Game.village.barrows and not fey  # (the fey carry theirs by magic)
 	_load.mesh = _gear[("barrow_" if _pushing else "pack_") + carry_kind]
 	_load.visible = true
 	if state == State.IDLE or state == State.WALK:
@@ -1829,6 +1978,41 @@ func become_archer(post: Vector3) -> void:
 	Game.effects.spawn_dust(global_position, 0.5)
 
 
+## A fey villager trained at a Town guard: an archer who flies, shooting
+## twice as fast (Balance "fey_archer_shot_speed").
+func become_fey_archer(post: Vector3) -> void:
+	if not fey or archer:
+		return
+	become_archer(post)
+	remove_from_group("archers")
+	add_to_group("fey_archers")
+	fey_archer = true
+	if _fey_dust == null:
+		_fey_dust = CPUParticles3D.new()
+		var dot := QuadMesh.new()
+		dot.size = Vector2(0.07, 0.07)
+		var spark := StandardMaterial3D.new()
+		spark.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		spark.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		spark.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		spark.vertex_color_use_as_albedo = true
+		dot.material = spark
+		_fey_dust.mesh = dot
+		_fey_dust.amount = 20
+		_fey_dust.lifetime = 1.8
+		_fey_dust.local_coords = false
+		_fey_dust.gravity = Vector3(0, -1.5, 0)
+		_fey_dust.spread = 180.0
+		_fey_dust.initial_velocity_max = 0.3
+		var fade := Gradient.new()
+		fade.set_color(0, Color(0.45, 1.0, 0.45, 1.0))
+		fade.set_color(1, Color(0.45, 1.0, 0.45, 0.0))
+		_fey_dust.color_ramp = fade
+		_fey_dust.position = Vector3(0, 1.2, -0.1)
+		_fey_dust.emitting = false
+		add_child(_fey_dust)
+
+
 ## A soldier, archer or wizard goes back to ordinary work (and would have
 ## to train again to return).
 func become_worker() -> void:
@@ -1845,7 +2029,10 @@ func become_worker() -> void:
 	remove_from_group("soldiers")
 	remove_from_group("wizards")
 	remove_from_group("archers")
+	remove_from_group("fey_archers")
 	remove_from_group("necromancers")
+	fey_archer = false
+	_landed = false
 	max_hp = HEALTH
 	hp = minf(hp, max_hp)
 	damage = ATTACK_DAMAGE
@@ -2117,7 +2304,7 @@ func _shoot_at(foe: Node3D, to: Vector3, delta: float) -> void:
 		return
 	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
 	if _attack_timer <= 0.0:
-		_attack_timer = ARROW_SECONDS
+		_attack_timer = ARROW_SECONDS / (Balance.num("fey_archer_shot_speed") if fey_archer else 1.0)
 		var arrow := Arrow.new()
 		Game.world_root.add_child(arrow)
 		arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to.normalized() * 0.5, foe, self, damage if skeleton else ARROW_DAMAGE)
@@ -2188,16 +2375,20 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	if Game.now < slowed_until:
 		# Wading through roots.
 		speed *= SLOWED_SPEED
-	if dist > PATH_FROM:
+	if dist > PATH_FROM and not fey:
 		var via := _path_aim(goal) - global_position
 		via.y = 0.0
 		if via.length() > 0.05:
 			to = via
 			dist = via.length()
 	var dir := to / dist
-	speed *= _slope_speed(dir)
+	if fey:
+		# Flying: straight there, over water and cliffs, and faster.
+		speed *= Balance.num("fey_speed")
+	else:
+		speed *= _slope_speed(dir)
 	var step := dir * minf(speed * delta, dist)
-	if not _open(global_position + step) or _is_cliff(dir):
+	if not _open(global_position + step) or (not fey and _is_cliff(dir)):
 		_path_until = 0.0
 		if not raiding:
 			return true
@@ -2272,7 +2463,7 @@ func _open(p: Vector3) -> bool:
 	var terrain := Game.terrain
 	if not terrain.is_inside(p.x, p.z):
 		return false
-	return goblin or terrain.water_depth(p.x, p.z) < 0.15
+	return goblin or fey or terrain.water_depth(p.x, p.z) < 0.15
 
 
 ## Eases the limbs on side `k` towards a pose. `thigh` and `arm` swing the
@@ -2412,30 +2603,12 @@ func charm(seconds: float) -> void:
 	if state == State.FIGHT:
 		state = State.IDLE
 	if _pink_eyes.is_empty():
-		var eye := SphereMesh.new()
-		eye.radius = 0.055
-		eye.height = 0.11
-		eye.radial_segments = 8
-		eye.rings = 4
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = Color(1.0, 0.35, 0.75)
-		eye.material = mat
-		for sx in [-1.0, 1.0]:
-			var mi := MeshInstance3D.new()
-			mi.mesh = eye
-			mi.position = Vector3(sx * 0.105, 1.62, 0.27)
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_torso.add_child(mi)
-			_pink_eyes.append(mi)
+		set_eye_glow(Color(1.0, 0.35, 0.75))
 	Game.effects.spawn_dust(global_position + Vector3.UP * 1.6, 0.3)
 
 
 func _uncharm() -> void:
-	for mi in _pink_eyes:
-		if is_instance_valid(mi):
-			mi.queue_free()
-	_pink_eyes.clear()
+	clear_eye_glow()
 	_foe = null
 	if state == State.FIGHT:
 		state = State.IDLE

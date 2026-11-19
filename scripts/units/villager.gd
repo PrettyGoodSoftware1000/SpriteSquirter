@@ -1911,7 +1911,7 @@ func _think() -> void:
 				_engage(building)
 		return
 	# Anyone who can shoot always goes for a giant bat first.
-	if owned and (archer or wizard) and not (_foe is GiantBat and _foe_ok()):
+	if owned and (archer or wizard) and not (is_instance_valid(_foe) and _foe is GiantBat and _foe_ok()):
 		var bat := _nearest_bat(BAT_SIGHT)
 		if bat != null:
 			_engage(bat)

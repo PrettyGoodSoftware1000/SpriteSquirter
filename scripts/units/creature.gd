@@ -146,11 +146,11 @@ var size := START_SIZE
 ## Seconds of growing so far.
 var age := 0.0
 ## Growing takes animus (the player's creature only): each tenth of the way
-## from START_SIZE to full size is paid for as it starts, the first 1
-## (Balance "growth_animus_step"), the second 2, and so on. How many tenths
-## have been paid for.
+## from START_SIZE to full size must be paid for before it grows on, the
+## first 1 (Balance "growth_animus_step"), the second 2, and so on. The
+## player pays by clicking its portrait (see pay_for_growth()). How many
+## tenths have been paid for.
 var growth_paid := 0
-var _growth_asked_at := -INF
 ## Out of its shell: a burst of speed until then (Game.now).
 var _burst_until := 0.0
 var max_hp := 0.0
@@ -457,10 +457,7 @@ func _grow(delta: float) -> void:
 			age += delta
 		else:
 			# As far as the animus paid for so far allows.
-			var allowed := float(growth_paid) * 0.1 * minutes * 60.0
-			while age + delta > allowed and growth_paid < 10 and _pay_for_growth():
-				allowed = float(growth_paid) * 0.1 * minutes * 60.0
-			age = maxf(age, minf(age + delta, allowed))
+			age = maxf(age, minf(age + delta, _growth_allowed()))
 	var t := clampf(age / (minutes * 60.0), 0.0, 1.0)
 	size = lerpf(START_SIZE, 1.0, t)
 	scale = Vector3.ONE * size
@@ -474,21 +471,32 @@ func _grow(delta: float) -> void:
 		hp = minf(max_hp, hp + max_hp * 0.01 * regen_boost("health") * delta)
 
 
-## Pays the village's animus for the next tenth of its growth, if there is
-## enough (true); if not, says now and then what it needs.
-func _pay_for_growth() -> bool:
+## How old (in seconds of growing) the animus paid for lets it grow.
+func _growth_allowed() -> float:
+	return float(growth_paid) * 0.1 * maxf(Game.settings.creature_grow_minutes, 0.05) * 60.0
+
+
+## The animus the next tenth of its growth costs.
+func growth_cost() -> int:
+	return roundi(float(growth_paid + 1) * Balance.num("growth_animus_step"))
+
+
+## True when it has grown as far as it has been paid for and the village
+## has the animus for the next tenth (its portrait sparkles).
+func can_grow() -> bool:
 	var village := Game.village
-	if not is_instance_valid(village) or not village.founded:
+	return not hostile and growth_paid < 10 and age >= _growth_allowed() - 0.01 and is_instance_valid(village) \
+		and village.founded and village.amount("animus") >= growth_cost()
+
+
+## Pays the village's animus for the next tenth of its growth, if it can
+## grow on now (see can_grow()). True if it did.
+func pay_for_growth() -> bool:
+	if not can_grow():
 		return false
-	var cost := roundi(float(growth_paid + 1) * Balance.num("growth_animus_step"))
-	if village.amount("animus") >= cost:
-		village.give("animus", -cost)
-		growth_paid += 1
-		return true
-	if Game.now - _growth_asked_at > 90.0:
-		_growth_asked_at = Game.now
-		say(Texts.line("growth_needs_animus", {"creature": species_name().to_lower(), "animus": cost}), Color(1.0, 0.88, 0.35))
-	return false
+	Game.village.give("animus", -growth_cost())
+	growth_paid += 1
+	return true
 
 
 ## Hurt by a goblin or an ogre.

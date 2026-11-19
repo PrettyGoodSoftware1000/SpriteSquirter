@@ -151,6 +151,12 @@ func _ready() -> void:
 	hud.spell_selected.connect(_on_spell_button)
 	hud.spell_hovered.connect(_on_spell_hovered)
 	hud.resurrect_requested.connect(resurrect)
+	hud.grow_requested.connect(func() -> void:
+		if creature and creature.pay_for_growth():
+			Game.effects.spawn_dust(creature.global_position, 1.0))
+	hud.creature_focus_requested.connect(func() -> void:
+		if creature:
+			Game.camera_rig.focus_on(creature.global_position))
 	hud.build_selected.connect(_start_placing)
 	hud.build_menu_requested.connect(_toggle_build_menu)
 	hud.research_menu_requested.connect(_toggle_research_menu)
@@ -158,14 +164,15 @@ func _ready() -> void:
 	hud.spell_research_selected.connect(_on_spell_research_selected)
 	hud.spells_requested.connect(func() -> void:
 		village.learn_all_spells()
-		hud.set_spell_order(village.spell_order))
-	hud.spell_moved.connect(func(index: int, onto: int) -> void:
-		village.move_spell(SpellBook.SPELLS[index].id, village.spell_order.find(SpellBook.SPELLS[onto].id))
-		hud.set_spell_order(village.spell_order))
+		hud.set_spell_slots(village.spell_slots))
+	hud.spell_moved.connect(func(index: int, slot: int) -> void:
+		village.move_spell(SpellBook.SPELLS[index].id, slot)
+		hud.set_spell_slots(village.spell_slots))
 	village.spell_researched.connect(func(id: String) -> void:
-		hud.set_spell_order(village.spell_order)
+		hud.set_spell_slots(village.spell_slots)
 		_announce(Texts.line("spell_researched", {"spell": SpellBook.find(id).name})))
-	hud.set_spell_order(village.spell_order)
+	village._bar()
+	hud.set_spell_slots(village.spell_slots)
 	village.research_done.connect(func(id: String) -> void:
 		_announce(Texts.line("research_done", {"research": (Research.find(id).name as String).to_lower()})))
 	hud.regenerate_requested.connect(_regenerate)
@@ -250,6 +257,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.set_brush(brush_radius)
 		get_viewport().set_input_as_handled()
 		return
+	if button and button.pressed and (button.button_index == MOUSE_BUTTON_LEFT or button.button_index == MOUSE_BUTTON_RIGHT) \
+			and (hud.is_build_menu_open() or hud.is_research_menu_open() or hud.is_spell_research_open()):
+		# A click outside an open menu closes it (and does nothing else).
+		hud.show_build_menu(false)
+		hud.show_research_menu(false)
+		hud.show_spell_research(false)
+		get_viewport().set_input_as_handled()
+		return
 	if button and button.pressed:
 		if button.button_index == MOUSE_BUTTON_LEFT:
 			if _armed >= 0 and not _choosing:
@@ -295,9 +310,13 @@ func _on_key(key: InputEventKey) -> void:
 		if number >= 0 and number < mini(9, BuildingCatalog.BUILDINGS.size()):
 			_start_placing(BuildingCatalog.BUILDINGS[number].kind)
 			return
-	elif number >= 0 and number < village.spell_order.size():
-		# The keys go by the spell bar, which shows the spells known.
-		_spell_key(SpellBook.index_of(village.spell_order[number]))
+	elif _bar_column(code) >= 0:
+		# The keys go by the spell bar: the number keys (or the numpad) for
+		# its first row, with Ctrl for the second and Shift for the third.
+		var row := 1 if key.ctrl_pressed else (2 if key.shift_pressed else 0)
+		var id := village.spell_at(row * SpellLayout.PER_ROW + _bar_column(code))
+		if id != "":
+			_spell_key(SpellBook.index_of(id))
 		return
 	match code:
 		KEY_B, KEY_BACKSPACE:
@@ -413,7 +432,7 @@ func _set_mode(m: Mode) -> void:
 		Mode.COMMAND:
 			hud.set_hint("Click or right-click the ground to walk the %s there. %s B or Backspace opens the build menu." \
 				% [(Creature.SPECIES[Game.creature_kind].name as String).to_lower(),
-				"Keys 1-%d take a spell in hand." % village.spell_order.size() if not village.spell_order.is_empty()
+				"The number keys take a spell in hand." if village.spell_slots.any(func(id: String) -> bool: return id != "")
 				else "Click a Shrine to research spells."])
 		Mode.PLACE:
 			hud.set_hint(_place_hint())
@@ -499,11 +518,19 @@ func _on_spell_research_selected(id: String) -> void:
 
 ## The Shrine under the mouse, or null.
 func _shrine_at_mouse() -> Destructible:
+	return _building_at_mouse("shrine")
+
+
+## One of the village's buildings with `role` (see BuildingCatalog) under
+## the mouse, or null.
+func _building_at_mouse(role: String) -> Destructible:
 	if _cursor_hit == null:
 		return null
 	var p: Vector3 = _cursor_hit
-	for b in village.shrines():
-		if Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < b.footprint * 1.2 + 1.0:
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if not b.destroyed and BuildingCatalog.role(b.get_meta("kind", "")) == role \
+				and Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < b.footprint * 1.2 + 1.0:
 			return b
 	return null
 
@@ -524,6 +551,9 @@ func _on_left_click() -> void:
 			var shrine := _shrine_at_mouse()
 			if shrine != null:
 				open_spell_research(shrine)
+			elif _building_at_mouse("smith") != null:
+				# A Blacksmith: its research.
+				_toggle_research_menu()
 			else:
 				_command_move(_cursor_hit)
 		Mode.RULER:
@@ -647,16 +677,34 @@ func _spell_key(index: int) -> void:
 	Input.set_custom_mouse_cursor(SpellCursors.image(spell.id), Input.CURSOR_ARROW, SpellCursors.hotspot())
 	if _is_judgement(index):
 		_show_last_action(index, true)
-		hud.set_hint("Click anywhere to %s the %s for what it last did.  Press %d again to cancel." % [
+		hud.set_hint("Click anywhere to %s the %s for what it last did.  Press %s again to cast it." % [
 			(spell.name as String).to_lower(), creature.species_name().to_lower() if creature else "creature", _key_of(index)])
 	else:
-		hud.set_hint("Click to cast %s inside your village's influence.  Shift+click keeps it in hand.  Press %d again, right-click or Esc to cancel." % [
+		hud.set_hint("Click to cast %s inside your village's influence.  Shift+click keeps it in hand.  Press %s again, right-click or Esc to cancel." % [
 			spell.name, _key_of(index)])
 
 
-## The key that casts spell `index`: its place on the spell bar.
-func _key_of(index: int) -> int:
-	return village.spell_order.find(SpellBook.SPELLS[index].id) + 1
+## The key that casts spell `index`, from its place on the spell bar:
+## "3", "Ctrl+3" or "Shift+3" ("" if it is not on it).
+func _key_of(index: int) -> String:
+	var slot := village.spell_slots.find(SpellBook.SPELLS[index].id)
+	if slot < 0:
+		return ""
+	@warning_ignore("integer_division")
+	var row := slot / SpellLayout.PER_ROW
+	return ["", "Ctrl+", "Shift+"][row] + str((slot % SpellLayout.PER_ROW + 1) % 10)
+
+
+## Which column of the spell bar key `code` is for: 1-9 and 0 (on the top
+## row or the numpad) are 0-9. -1 for any other key.
+static func _bar_column(code: int) -> int:
+	if code >= KEY_1 and code <= KEY_9:
+		return code - KEY_1
+	if code == KEY_0 or code == KEY_KP_0:
+		return 9
+	if code >= KEY_KP_1 and code <= KEY_KP_9:
+		return code - KEY_KP_1
+	return -1
 
 
 func _on_spell_button(index: int) -> void:

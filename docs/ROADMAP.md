@@ -156,6 +156,15 @@ stage.
 - Growing costs animus (1, 2, 3... for each tenth)
 - Out of its shell, the tortoise knocks nearby enemies away and has a burst of speed
 
+## Version 0.24: Portrait, spell rows and nightfall raids ✅
+- Creature portrait: sparkles when it can grow, click to pay the animus; growth stats on mouse-over; double-click the bars to find it
+- 1 animus a minute base income; spells researched for 1, 2, 3... animus
+- Spell bar: 10 slots a row, up to 3 rows (Ctrl, Shift), numpad, drag anywhere, layout remembered between games
+- Hammer build button; click a Blacksmith for research; clicking outside a menu closes it
+- All HUD text the same size; no spell bar tooltips
+- Goblins raid at nightfall, spawn and rise twice as fast, build twice as fast again
+- Magic tree: 10 to 100 magicko a minute; dev menu night darkness slider
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

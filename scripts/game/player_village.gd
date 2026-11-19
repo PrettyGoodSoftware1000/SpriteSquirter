@@ -110,9 +110,11 @@ var researched := {}
 var research := {}
 ## Spells researched at the Shrine: id -> true.
 var spells_known := {}
-## The spells known, in spell-bar order (the order they were learned, until
-## the player drags them about). Key 1 casts the first.
-var spell_order: Array[String] = []
+## The spell bar: each slot's spell id, or "" (0-9 the first row, cast with
+## the number keys; 10-19 the second, with Ctrl; 20-29 the third, with
+## Shift). A spell learned goes where the player had it last game
+## (SpellLayout), or else in the last spot, after the others.
+var spell_slots: Array[String] = []
 ## The spell being researched at the Shrine: {"id": ..., "t": seconds done}, or empty.
 var spell_research := {}
 ## True while the village has a Blacksmith: loads go home in wheelbarrows.
@@ -462,13 +464,18 @@ func start_spell_research(id: String) -> String:
 		return "Spells are researched at a Shrine: build one first."
 	if not spell_research.is_empty():
 		return "The Shrine is busy with %s." % SpellBook.find(spell_research.id).name
-	var cost := SpellBook.research_cost(id)
+	var cost := spell_research_cost()
 	var short := shortfall(cost)
 	if short != "":
 		return "Need %s more." % short
 	spend(cost)
 	spell_research = {"id": id, "t": 0.0}
 	return ""
+
+
+## What the next spell costs to research (see SpellBook.research_cost()).
+func spell_research_cost() -> Dictionary:
+	return SpellBook.research_cost(spells_known.size())
 
 
 ## 0..1 for the spell being researched, 1 for one known, else 0.
@@ -495,16 +502,53 @@ func _update_spell_research(delta: float) -> void:
 
 func _learn_spell(id: String) -> void:
 	spells_known[id] = true
-	if not spell_order.has(id):
-		spell_order.append(id)
-
-
-## Moves spell `id` to place `to` on the spell bar.
-func move_spell(id: String, to: int) -> void:
-	if not spell_order.has(id):
+	_bar()
+	if spell_slots.has(id):
 		return
-	spell_order.erase(id)
-	spell_order.insert(clampi(to, 0, spell_order.size()), id)
+	var want := SpellLayout.slot_of(id)
+	if want < 0 or want >= spell_slots.size() or spell_slots[want] != "":
+		want = _last_spot()
+	if want >= 0:
+		spell_slots[want] = id
+		SpellLayout.remember(spell_slots)
+
+
+## The spell bar, made empty the first time it is asked for.
+func _bar() -> Array[String]:
+	if spell_slots.is_empty():
+		spell_slots.resize(SpellLayout.ROWS_MOST * SpellLayout.PER_ROW)
+		spell_slots.fill("")
+	return spell_slots
+
+
+## The last spot on the bar: the slot after the last spell on it (or the
+## first empty one, if that is past the end). -1 if the bar is full.
+func _last_spot() -> int:
+	var last := -1
+	for k in spell_slots.size():
+		if spell_slots[k] != "":
+			last = k
+	if last + 1 < spell_slots.size():
+		return last + 1
+	return spell_slots.find("")
+
+
+## Moves spell `id` to `slot` on the spell bar, swapping with whatever was
+## there.
+func move_spell(id: String, slot: int) -> void:
+	_bar()
+	var from := spell_slots.find(id)
+	if from < 0 or slot < 0 or slot >= spell_slots.size() or slot == from:
+		return
+	spell_slots[from] = spell_slots[slot]
+	spell_slots[slot] = id
+	SpellLayout.remember(spell_slots)
+
+
+## The spell in `slot` on the bar, or "".
+func spell_at(slot: int) -> String:
+	_bar()
+	return spell_slots[slot] if slot >= 0 and slot < spell_slots.size() else ""
 
 
 ## Every spell, researched at once (the dev menu).
@@ -790,7 +834,8 @@ func _process(delta: float) -> void:
 	var grown := adults() - wizards()
 	var boost := BLOOD_BOOST if blood_active() else 1.0
 	give("magicko", (grown * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
-	give("animus", shrines().size() * Balance.num("animus_per_shrine") / 60.0 * delta)
+	# Animus: Balance "animus_per_minute" to begin with, and more for every Shrine.
+	give("animus", (Balance.num("animus_per_minute") + shrines().size() * Balance.num("animus_per_shrine")) / 60.0 * delta)
 	_sample(delta)
 	_eat(delta)
 	if population() < housing() and amount("food") > 0:

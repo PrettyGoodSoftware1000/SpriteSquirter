@@ -89,6 +89,13 @@ static func _draw(id: String) -> Image:
 		"bless":
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 20.0, 5.0), Color(1.0, 0.85, 0.25))
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 9.0, 3.0), Color(1.0, 0.98, 0.8), false)
+		"hammer":
+			# A builder's hammer: a wooden handle and an iron head.
+			_shape(img, func(p: Vector2) -> float: return _segment(p, Vector2(14, 41), Vector2(30, 17)) - 3.2, Color(0.72, 0.5, 0.28))
+			var head := func(p: Vector2) -> float:
+				var q := (p - Vector2(30, 15)).rotated(-0.98)
+				return _box(q, Vector2.ZERO, Vector2(12.0, 5.0)) - 1.0
+			_shape(img, head, Color(0.62, 0.64, 0.7))
 		"charm":
 			# A pink heart with a shine on it.
 			_shape(img, func(p: Vector2) -> float: return _heart(p, Vector2(24, 25), 1.0), Color(1.0, 0.42, 0.7))

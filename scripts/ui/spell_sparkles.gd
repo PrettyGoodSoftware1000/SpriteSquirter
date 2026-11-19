@@ -9,6 +9,10 @@ const MOST := 30
 
 ## 0 (no extra cost) to 1 (FULL or more).
 var amount := 0.0
+## The wash behind the sparkles, and the sparkles' colour (blue for a
+## dearer spell; the creature's portrait sparkles yellow).
+var wash := Color(0.15, 0.4, 1.0)
+var glint := Color(0.5, 0.78, 1.0)
 
 var _stars: Array[Dictionary] = []
 var _time := 0.0
@@ -41,14 +45,14 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if amount <= 0.0:
 		return
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.15, 0.4, 1.0, 0.1 + 0.32 * amount))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(wash, 0.1 + 0.32 * amount))
 	for k in ceili(MOST * amount):
 		var star: Dictionary = _stars[k]
 		var twinkle := 0.5 + 0.5 * sin(_time * float(star.speed) + float(star.phase))
 		# Each sparkle drifts slowly up the button and comes round again.
 		var at := Vector2(float(star.x), fposmod(float(star.y) - _time * float(star.drift), 1.0)) * size
 		var r := float(star.size) * (0.5 + 0.7 * twinkle) * (1.0 + amount)
-		var glow := Color(0.5, 0.78, 1.0, twinkle * (0.55 + 0.45 * amount))
+		var glow := Color(glint, twinkle * (0.55 + 0.45 * amount))
 		draw_line(at - Vector2(r, 0.0), at + Vector2(r, 0.0), glow, 1.5)
 		draw_line(at - Vector2(0.0, r), at + Vector2(0.0, r), glow, 1.5)
 		draw_circle(at, r * 0.3, Color(0.92, 0.97, 1.0, glow.a))

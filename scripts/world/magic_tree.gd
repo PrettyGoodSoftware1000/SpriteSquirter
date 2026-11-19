@@ -4,7 +4,7 @@ extends Node3D
 ## MagicAcorn, CreatureMind's forest seeding). It grows from a sprig to a
 ## tree as big as the Storehouse's over Balance "magic_tree_grow_days"
 ## days, and gives the village magicko all the while: Balance
-## "magic_tree_magicko_small" a second when tiny, rising to
+## "magic_tree_magicko_small" a minute when tiny, rising to
 ## "magic_tree_magicko_full" when full grown. Now and then it drops a seed
 ## that becomes a sapling of an ordinary tree (Balance
 ## "magic_tree_seed_minutes"), and pixies flit about its crown. It is not a
@@ -44,7 +44,7 @@ func share() -> float:
 	return clampf(_age / days, 0.0, 1.0)
 
 
-## Magicko it gives the village a second, now.
+## Magicko it gives the village a minute, now.
 func magicko_rate() -> float:
 	return lerpf(Balance.num("magic_tree_magicko_small"), Balance.num("magic_tree_magicko_full"), share())
 
@@ -65,7 +65,7 @@ func _process(delta: float) -> void:
 	_visual.scale = Vector3.ONE * lerpf(SMALL, 1.0, grown)
 	var village := Game.village
 	if is_instance_valid(village) and village.founded:
-		village.give("magicko", magicko_rate() * delta)
+		village.give("magicko", magicko_rate() / 60.0 * delta)
 	_seed_due -= delta
 	if _seed_due <= 0.0:
 		_seed_due = maxf(5.0, Balance.num("magic_tree_seed_minutes") * 60.0 * randf_range(0.7, 1.3))

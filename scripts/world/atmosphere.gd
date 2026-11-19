@@ -56,6 +56,11 @@ const MOODS := [
 ]
 
 var mood_index := 0
+## How far into the night mood the light is, 0..1: the dev menu's night
+## darkness (Game.settings.night_darkness) dims the picture this much.
+var _night := 0.0
+var _night_from := 0.0
+var _darkness_shown := 0.0
 
 var _env := Environment.new()
 var _sky_material := ShaderMaterial.new()
@@ -121,21 +126,30 @@ func next_mood(duration := 4.0) -> void:
 
 func set_mood(index: int, duration := 4.0) -> void:
 	mood_index = index
+	_night_from = _night
 	_from = _current.duplicate()
 	_blend = 0.0
 	_blend_time = maxf(duration, 0.01)
 	if duration <= 0.0:
 		_blend = 1.0
+		_night = _night_target()
 		_current = MOODS[index].duplicate()
 		_apply(_current)
 	mood_changed.emit(mood_name())
 
 
+func _night_target() -> float:
+	return 1.0 if MOODS[mood_index].name == "Night" else 0.0
+
+
 func _process(delta: float) -> void:
 	if _blend >= 1.0:
+		if not is_equal_approx(_darkness_shown, Game.settings.get("night_darkness", 0.0)):
+			_apply(_current)
 		return
 	_blend = minf(1.0, _blend + delta / _blend_time)
 	var t := smoothstep(0.0, 1.0, _blend)
+	_night = lerpf(_night_from, _night_target(), t)
 	var target: Dictionary = MOODS[mood_index]
 	for key in target:
 		if key == "name":
@@ -157,6 +171,9 @@ func _apply(m: Dictionary) -> void:
 	# Flat distance haze only: volumetric fog smears the clean cel-shaded shapes.
 	_env.fog_density = m.fog_density + m.mist_density * 0.2
 	_env.adjustment_saturation = m.saturation
+	# Darker (or lighter) nights, as the dev menu's slider says.
+	_darkness_shown = Game.settings.get("night_darkness", 0.0)
+	_env.tonemap_exposure = maxf(0.05, 1.0 - _night * _darkness_shown / 100.0)
 	_sky_material.set_shader_parameter("top_color", m.sky_top)
 	_sky_material.set_shader_parameter("horizon_color", m.sky_horizon)
 	_sky_material.set_shader_parameter("ground_color", m.sky_ground)

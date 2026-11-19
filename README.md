@@ -3,7 +3,7 @@
 A 3D village game built with [Godot 4](https://godotengine.org). Pick a start
 location on an island floating in the sky, and your tiny villagers gather
 lumber, stone and food, farm wheat, raise surreal buildings and have
-children. Every night at midnight the **goblins raid**: your villagers,
+children. Every night at nightfall the **goblins raid**: your villagers,
 warriors and wizards fight them off, helped by a giant, gloomy tortoise that
 stomps, throws and eats goblins. You cast **fireballs**, **rain**, **roots**
 and a **blood sacrifice** with magicko. Make your own islands in the **map editor**. The long-term plan is
@@ -55,8 +55,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    Storehouse, to the middle of the village); it only counts once it
    arrives. Each Storehouse holds 300 each of lumber, stone, food and
    bones, and each Granary 300 more food: anything over that is lost.
-   Magicko and **animus** have no limit; each **Shrine** makes 1 animus a
-   minute. Boulders come in small boulder
+   Magicko and **animus** have no limit; the village gets 1 animus a
+   minute to begin with (`animus_per_minute`) and each **Shrine** makes 1
+   more. Boulders come in small boulder
    fields dotted over the island. Trees and boulders run out, so the
    workers move on; a boulder holds a lot of stone and crumbles away
    slowly once it is used up. A worker carries a small load (2 units) home on its
@@ -115,8 +116,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **skeleton** warrior or archer, for 2 bones. A skeleton fights for you
    with half the health and damage of whoever it was, and crumbles after
    3 minutes; then the necromancer can raise another.
-   **Research.** With a Blacksmith, press **U** (or the Research button)
-   and pick something to research. It is paid for up front and one thing
+   **Research.** Click a Blacksmith (or press **U**) and pick something
+   to research. It is paid for up front and one thing
    is researched at a time: **Sharper swords** (5 minutes; warriors do 50%
    more damage), **Bows** (3 minutes; unlocks archers), and **Pitchforks**,
    **Mining picks** and **Axes** (2 minutes each; food, stone or lumber is
@@ -184,7 +185,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    the goblins finish adds an **ogre** with a spiked club (ten times a
    goblin's health, three times its damage, too big to pick up or throw,
    and only singed by fire); if it dies, the hut sends another at the next
-   midnight. From the third night on, every **watchtower** sends a
+   nightfall. From the third night on, every **watchtower** sends a
    **giant bat** with each raid, which snatches one of
    your villagers at random and carries it back to a cave for good. Knock
    the building down and no more come. A
@@ -194,7 +195,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    The goblins have a giant of their own, the **balrog**: a horned demon
    that hatches at one of their caves and grows just as your creature
    does. Until it is full grown it only guards its cave, attacking whoever
-   comes within 40 m of it. Full grown, it marches with every midnight
+   comes within 40 m of it. Full grown, it marches with every nightfall
    raid and stamps your buildings down. From half its full size it spits
    a **fireball** every 20 seconds (half as strong as yours). It has two
    little wings and cannot fly, and it walks a little slower than a goblin.
@@ -225,11 +226,15 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    it flies. Shorter trips on the flat it walks. Each starts at 15% of its full size and grows for 30 minutes,
    getting faster, stronger and tougher as it does (a small one cannot pick
    goblins up or flatten buildings, and stays out of raids unless you send
-   it). Growing takes **animus**: each tenth of the way is paid for from
-   the village's animus as it starts, 1 for the first tenth, 2 for the
-   second, and so on (55 in all; `growth_animus_step` in
-   `balancing.txt`). Without enough it waits, and says what it needs. It
-   also stops growing while the village has no food. Goblins attack a
+   it). Growing takes **animus**: it grows a tenth of the way at a time,
+   and each tenth must be paid for first, 1 for the first tenth, 2 for
+   the second, and so on (55 in all; `growth_animus_step` in
+   `balancing.txt`). Its **portrait**, left of its bars, sparkles yellow
+   when it has grown as far as it was paid for and the village has the
+   animus for the next tenth: click it to pay. Hold the mouse over it to
+   see how far it has grown and what the next tenth costs. It also stops
+   growing while the village has no food. Double-click any of its bars to
+   find it. Goblins attack a
    creature that comes close; at no health it **dies**, shrinks by a
    quarter of its size (it grows back) and lies where it fell. A
    **Resurrect** button then appears above its bars: it costs 5 animus and
@@ -253,8 +258,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    **forest seeding**: it tosses a magic acorn the size of a villager,
    sparkling with magic, somewhere within half the village's influence of
    its centre, and a **giant magic tree** grows there, as big as the
-   Storehouse's tree in 2 days. It gives the village magicko: 5 a second
-   when tiny, rising to 50 a second full grown. Now and then it drops a
+   Storehouse's tree in 2 days. It gives the village magicko: 10 a minute
+   when tiny, rising to 100 a minute full grown. Now and then it drops a
    seed that becomes a sapling, and pixies (half a gnome's size, in a
    glowing green ball, trailing green dust) flit about its crown. Nobody
    can chop it down. After the first acorn the squirrel must wait 15
@@ -353,11 +358,16 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
 9. **Cast spells** with the number keys or the squares on the spell bar
    (each shows its spell's sign, the one the pointer turns into). Every
    spell must first be **researched at a Shrine** (the Singing rocks):
-   click the Shrine to open its menu. Each costs 50 magicko and takes 30
-   seconds (`spell_research_magicko` and `spell_research_seconds` in
-   `balancing.txt`), one at a time. The spell bar shows only the spells
-   you know, in the order you learned them, key 1 first; **drag a spell
-   onto another** to move it there, and its key goes with it. The spell goes into your
+   click the Shrine to open its menu. The first costs 1 animus, the next
+   2, and so on, and each takes 30 seconds (`spell_research_animus`,
+   `spell_research_animus_step` and `spell_research_seconds` in
+   `balancing.txt`), one at a time. The spell bar has room for 10 spells
+   in a row, cast with 1 to 9 and 0 (or the numpad); the little **+** at
+   its top left adds a second row, cast with **Ctrl** and the number, and
+   a third, with **Shift**. **Drag a spell** onto any place on the bar to
+   move it there (onto another spell to swap them). Where you put each
+   spell is remembered: next game, a spell you research goes back where
+   you had it; otherwise it goes in the last spot, after the others. The spell goes into your
    hand and the pointer changes: a flame for Fireball, sparks for Chain
    Lightning, a cloud dripping water for Rain, roots for Roots, a skull
    dripping blood for Blood Sacrifice. Click to cast it (Shift+click casts
@@ -409,9 +419,15 @@ In the game, press **Esc** and **Show controls** for this list.
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
 | Click / right click | Walk the tortoise to that spot |
-| 1–9 (or a spell's square) | Take the spell in that place on the spell bar in hand (Fireball, Rain, Roots, Chain Lightning, Blood Sacrifice, Bless, Condemn, Gnomish Subcontractors, Charm Offensive, once researched); the same key again puts it away |
+| 1–9, 0 or the numpad (or a spell's square) | Take the spell in that place on the spell bar's first row in hand; the same key again puts it away (Bless and Condemn: casts it) |
+| Ctrl / Shift + 1–9, 0 | The spell bar's second and third rows (add them with its +) |
+| Drag a spell | Move it to another place on the spell bar |
+| Click the creature's portrait | Pay the animus for it to grow on (it sparkles when it can) |
+| Double-click the creature's bars | Find the creature |
+| Click a Shrine / a Blacksmith | Research spells / research |
+| Click outside a menu | Close it |
 | Click with a spell in hand | Cast it (Bless and Condemn: click anywhere); Shift+click keeps it in hand |
-| B / Backspace | Open or close the build menu (1–9 pick the field, the bridge or a building) |
+| B / Backspace (or the hammer) | Open or close the build menu (1–9 pick the field, the bridge or a building) |
 | U | Open or close the research menu (needs a Blacksmith) |
 | Hold and drag | Draw a wheat field (after picking it in the build menu) |
 | R / Shift+R | Rotate the building outline |
@@ -442,6 +458,7 @@ The version number is shown at the top of the dev menu.
 | Villager detail within | Villagers nearer the camera than this are drawn in full detail. At the top of the slider (the default) they always are; lower it on a slow machine |
 | Give 100 of everything | For testing |
 | Learn all spells | Researches every spell at once, for testing |
+| Night darkness | How much darker (or, below 0, lighter) the nights are |
 | Saplings planted | How many saplings the village plants a minute (starts at `saplings_per_minute` in `balancing.txt`) |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; Ctrl + mouse wheel (or `[` and `]`) changes the brush size |
 | New random world (N) | Generate a brand-new island of the same size |
@@ -547,7 +564,7 @@ and start the game again. Words in `{braces}` are filled in by the game.
   feet knock them down.
 - **Villagers and goblins:** villagers wander their villages; goblins
   loiter around a cave and their huts, far from the villages, until the
-  midnight raid. Both catch fire and get flung by explosions; the
+  nightfall raid. Both catch fire and get flung by explosions; the
   tortoise's footsteps squash goblins and strangers but not your own people.
 - **The creatures:** a 12 m gloomy tortoise of about 110,000 triangles,
   an 11 m nervous squirrel of about 65,000, a raven of about 155,000
@@ -595,7 +612,7 @@ scripts/
   spells/chain_lightning.gd  The chain lightning spell
   game/building_catalog.gd   Build menu: names, costs and what each building is for
   game/crop_field.gd       A wheat field: sowing, growing, reaping
-  game/goblin_raids.gd     Goblins spawning at the caves, the midnight raid, and what the goblins build
+  game/goblin_raids.gd     Goblins spawning at the caves, the nightfall raid, and what the goblins build
   game/spell_book.gd       Spells: names, costs and hints
   core/texts.gd            Reads Announcements.txt
   ui/spell_sparkles.gd     The blue sparkles on a spell that costs more for being cast recently

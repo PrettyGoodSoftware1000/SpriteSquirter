@@ -5,8 +5,8 @@ extends Node
 ## mood by hand in the dev menu holds only until the next part of the day.
 ##
 ## The night is half as long as the daylight (dawn + daytime + evening):
-## one third of the cycle. `midnight` fires halfway through it, which is
-## when the goblins raid, and `morning` fires when the night ends.
+## one third of the cycle. `nightfall` fires as it begins (when the goblins
+## raid), `midnight` halfway through it, and `morning` when the night ends.
 
 signal phase_changed(mood_index: int)
 signal nightfall

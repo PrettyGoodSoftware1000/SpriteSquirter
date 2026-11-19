@@ -9,8 +9,9 @@ extends RefCounted
 ## blesses or condemns it for that.
 ##
 ## Every spell must first be researched at the Shrine (the Singing rocks):
-## click it for its menu. Each costs Balance "spell_research_magicko" and
-## takes "spell_research_seconds". The spell bar shows the spells the
+## click it for its menu. The first costs Balance "spell_research_animus"
+## animus, and each after "spell_research_animus_step" more; each takes
+## "spell_research_seconds". The spell bar shows the spells the
 ## village knows, in the order it learned them (PlayerVillage.spell_order),
 ## and the player can drag them about.
 
@@ -42,10 +43,11 @@ static func needs_research(id: String) -> bool:
 	return index_of(id) >= 0
 
 
-## What researching a spell costs (in magicko).
-static func research_cost(_id: String) -> Dictionary:
-	var n := roundi(Balance.num("spell_research_magicko"))
-	return {"magicko": n} if n > 0 else {}
+## What researching a spell costs (in animus), when the village already
+## knows `known` spells: 1 for the first, 2 for the second, and so on.
+static func research_cost(known: int) -> Dictionary:
+	var n := roundi(Balance.num("spell_research_animus") + known * Balance.num("spell_research_animus_step"))
+	return {"animus": n} if n > 0 else {}
 
 
 static func research_seconds(_id: String) -> float:

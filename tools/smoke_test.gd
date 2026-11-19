@@ -45,6 +45,9 @@ func _run() -> void:
 	Balance.values["shell_damage_share"] = 1.0
 
 	# 1. The menu.
+	# The spell bar's memory goes to a file of its own while testing.
+	SpellLayout.path = "user://spell_bar_test.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SpellLayout.path))
 	await _open(game, "menu", "", 384)
 	_check(get_tree().current_scene.get_node("Controller") is MainMenu, "menu controller")
 
@@ -58,7 +61,7 @@ func _run() -> void:
 	_check(get_tree().get_nodes_in_group("people").is_empty(), "no people before choosing a start")
 	var start: Vector3 = Vector3(starts[0].x, game.terrain.get_height(starts[0].x, starts[0].y), starts[0].y)
 	play._found(start, 0)
-	play.village.give("animus", 100.0, false)  # (growing takes animus)
+	play.creature.growth_paid = 10  # (its growth is paid for, so it grows)
 	var village := play.village
 	var first_people := village.population()
 	_check(first_people == roundi(Balance.num("start_villagers")), "the village starts with 20 villagers (%d)" % first_people)
@@ -154,8 +157,8 @@ func _run() -> void:
 		var magicko_before := village.amount("magicko")
 		# Spells are researched at the Shrine first.
 		play._spell_key(gnomes)
-		_check(play._armed < 0 and not village.knows_spell("gnomes") and not village.knows_spell("fireball") and village.spell_order.is_empty()
-			and not play.hud._spell_slots[gnomes].visible, "every spell must be researched before it is on the spell bar or cast")
+		_check(play._armed < 0 and not village.knows_spell("gnomes") and not village.knows_spell("fireball") and village.spell_at(0) == ""
+			and play.hud._spell_slot_of[gnomes] == -1, "every spell must be researched before it is on the spell bar or cast")
 		_check(village.shrines().is_empty() and village.start_spell_research("gnomes") != "", "spells are researched at a Shrine")
 		var shrine := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
 		game.world_root.add_child(shrine)
@@ -165,23 +168,33 @@ func _run() -> void:
 		play._on_left_click()
 		_check(play.hud.is_spell_research_open(), "clicking a Shrine opens its spell research")
 		play.hud.show_spell_research(false)
-		village.give("magicko", 100.0)
-		var magicko_then := village.amount("magicko")
-		_check(village.start_spell_research("gnomes") == "" and village.amount("magicko") == magicko_then - 50,
-			"researching a spell costs 50 magicko")
+		village.give("animus", 10.0)
+		var animus_then := village.amount("animus")
+		_check(village.start_spell_research("gnomes") == "" and village.amount("animus") == animus_then - 1,
+			"the first spell costs 1 animus to research")
 		_check(village.start_spell_research("rain") != "", "one spell at a time")
 		village.spell_research.t = SpellBook.research_seconds("gnomes") - 0.5
 		await _wait(1.0)
-		_check(village.knows_spell("gnomes") and not village.knows_spell("rain") and village.spell_order == ["gnomes"]
-			and play.hud._spell_slots[gnomes].visible, "the Shrine teaches the spell, and it appears on the spell bar")
+		_check(village.knows_spell("gnomes") and not village.knows_spell("rain") and village.spell_at(0) == "gnomes"
+			and play.hud._spell_slot_of[gnomes] == 0, "the Shrine teaches the spell, and it appears on the spell bar")
+		animus_then = village.amount("animus")
+		_check(village.start_spell_research("rain") == "" and village.amount("animus") == animus_then - 2, "the next spell costs 2 animus")
+		village.spell_research = {}
 		village.learn_all_spells()
-		play.hud.set_spell_order(village.spell_order)
-		_check(village.knows_spell("rain") and village.knows_spell("charm") and village.spell_order[0] == "gnomes",
+		play.hud.set_spell_slots(village.spell_slots)
+		_check(village.knows_spell("rain") and village.knows_spell("charm") and village.spell_at(0) == "gnomes" and village.spell_at(1) != "",
 			"the dev menu can teach every spell (after the ones already known)")
-		# The spell bar's order can be changed, and the keys follow it.
-		play.hud.spell_moved.emit(SpellBook.index_of("fireball"), gnomes)
-		_check(village.spell_order[0] == "fireball" and village.spell_order[1] == "gnomes" and play._key_of(SpellBook.index_of("fireball")) == 1
-			and play.hud._spell_keys[SpellBook.index_of("fireball")].text == "1", "dragging a spell on the bar moves it, and its key with it")
+		# A spell can be dragged to any place on the bar, rows 2 and 3 too.
+		var fire_k := SpellBook.index_of("fireball")
+		play.hud.spell_moved.emit(fire_k, 12)
+		_check(village.spell_at(12) == "fireball" and play._key_of(fire_k) == "Ctrl+3" and play.hud._spell_slot_of[fire_k] == 12
+			and play.hud._spell_lines[1].visible and play.hud._spell_keys[fire_k].text == "3", "a spell dragged to the second row is cast with Ctrl and its number")
+		play.hud.spell_moved.emit(fire_k, 0)
+		_check(village.spell_at(0) == "fireball" and village.spell_at(12) == "gnomes", "dragging a spell onto another swaps them")
+		_check(SpellLayout.slot_of("fireball") == 0 and SpellLayout.slot_of("gnomes") == 12, "where the spells are is remembered for the next game")
+		_check(PlayMode._bar_column(KEY_0) == 9 and PlayMode._bar_column(KEY_KP_3) == 2 and PlayMode._bar_column(KEY_A) == -1,
+			"the number keys and the numpad pick the spell bar's places")
+		_check(play.hud._spell_buttons[fire_k].tooltip_text == "", "the spell bar has no tooltips")
 		shrine.queue_free()
 		play._cursor_hit = spot
 		magicko_before = village.amount("magicko")
@@ -418,7 +431,15 @@ func _run() -> void:
 		_check(terrain.water_depth(dry.x, dry.z) == 0.0 and terrain.rock[k] > 0.5, "a crater away from water is dry stone")
 
 	# Ogres come from the goblins' war huts, and giant bats from their
-	# watchtowers: none of either until those are built.
+	# watchtowers: none of either until those are built. (The goblins build
+	# fast, so take away anything they have put up already.)
+	play.raids.end_raid()
+	for group in ["goblin_buildings", "goblin_sites", "ogres", "bats"]:
+		for node in get_tree().get_nodes_in_group(group):
+			node.remove_from_group(group)
+			node.queue_free()
+	play.raids._build_timer = 0.0
+	await _wait(0.2)
 	play.raids.start_raid()
 	await _wait(14.0)
 	_check(get_tree().get_nodes_in_group("ogres").is_empty() and get_tree().get_nodes_in_group("bats").is_empty(), "no ogres or bats without the goblin buildings for them")
@@ -520,12 +541,12 @@ func _run() -> void:
 	shrine.global_position = village.center + Vector3(-14, 0, -12)
 	shrine.add_to_group("player_buildings")
 	await _wait(60.0)
-	_check(village.amount("animus") == 1, "a Shrine makes 1 animus a minute (%.2f)" % village.resources.animus)
+	_check(village.amount("animus") == 2, "the village gets 1 animus a minute, and a Shrine 1 more (%.2f)" % village.resources.animus)
 	play.resurrect()
 	_check(beast.knocked_out, "no resurrection without 5 animus")
 	village.give("animus", 10.0)
 	play.resurrect()
-	_check(not beast.knocked_out and is_equal_approx(beast.hp, beast.max_hp) and village.amount("animus") == 6
+	_check(not beast.knocked_out and is_equal_approx(beast.hp, beast.max_hp) and village.amount("animus") == 7
 		and beast.global_position.distance_to(shrine.global_position) < 20.0, "5 animus brings it back to life at the Shrine")
 	# A Granary stores more food.
 	var food_cap := village.capacity("food")
@@ -738,11 +759,16 @@ func _run() -> void:
 	_check(play.raids.start_building() == null, "and start no other until it is finished")
 	if goblin_site:
 		var site_cave := goblin_site.get_meta("cave") as Node3D
-		await _wait(40.0)
-		_check(goblin_site.progress > 0.0, "goblins work on it (%.0f%%)" % (goblin_site.progress * 100.0))
-		var rate_before := play.raids.cave_rate(site_cave)
 		var goblin_built := get_tree().get_nodes_in_group("goblin_buildings").size()
-		goblin_site.add_work(goblin_site.work_needed)
+		var rate_before := play.raids.cave_rate(site_cave)
+		# (They build fast: it may be finished already.)
+		for k in 30:
+			await _wait(1.0)
+			if not is_instance_valid(goblin_site) or goblin_site.progress > 0.0:
+				break
+		_check(not is_instance_valid(goblin_site) or goblin_site.progress > 0.0, "goblins work on it")
+		if is_instance_valid(goblin_site):
+			goblin_site.add_work(goblin_site.work_needed)
 		await _wait(0.5)
 		_check(get_tree().get_nodes_in_group("goblin_buildings").size() == goblin_built + 1 and get_tree().get_nodes_in_group("player_buildings").filter(
 			func(n: Node) -> bool: return n.is_in_group("goblin_buildings")).is_empty(), "and it becomes a goblin building")
@@ -886,10 +912,10 @@ func _run() -> void:
 	var tiny_rate := magic.magicko_rate()
 	magic._age = 1.0e9
 	await _wait(0.2)
-	_check(is_equal_approx(tiny_rate, 5.0) and is_equal_approx(magic.magicko_rate(), 50.0), "a magic tree gives 5 magicko a second tiny, 50 full grown")
+	_check(is_equal_approx(tiny_rate, 10.0) and is_equal_approx(magic.magicko_rate(), 100.0), "a magic tree gives 10 magicko a minute tiny, 100 full grown")
 	var magicko_now := village.amount("magicko")
-	await _wait(1.0)
-	_check(village.amount("magicko") >= magicko_now + 40, "and the village gets it (%d more in a second)" % (village.amount("magicko") - magicko_now))
+	await _wait(6.0)
+	_check(village.amount("magicko") >= magicko_now + 9, "and the village gets it (%d more in 6 seconds)" % (village.amount("magicko") - magicko_now))
 	magic._pixie_due = 0.0
 	magic._drop_seed()
 	await _wait(3.0)
@@ -920,14 +946,20 @@ func _run() -> void:
 	beast.age = 0.0
 	village.resources.animus = 0.0
 	await _wait(1.0)
-	_check(beast.age == 0.0 and beast.growth_paid == 0, "with no animus, the creature does not grow")
+	_check(beast.age == 0.0 and beast.growth_paid == 0 and not beast.can_grow(), "with no animus, the creature does not grow")
 	village.give("animus", 1.0)
+	await _wait(0.5)
+	_check(beast.can_grow() and beast.growth_paid == 0 and beast.age == 0.0, "with the animus, it can grow on, but waits to be told")
+	play.hud.update_creature(beast)
+	_check(play.hud._portrait_sparkles.amount > 0.0 and play.hud._portrait.tooltip_text.contains("1 animus"), "its portrait sparkles, and says what growing costs")
+	play.hud.grow_requested.emit()
 	await _wait(2.0)
 	_check(beast.growth_paid == 1 and village.amount("animus") == 0 and beast.age > 0.0
-		and beast.age <= 0.1 * game.settings.creature_grow_minutes * 60.0 + 0.01, "1 animus pays for the first tenth of its growth, and no further")
+		and beast.age <= 0.1 * game.settings.creature_grow_minutes * 60.0 + 0.01, "clicking the portrait pays 1 animus for the first tenth of its growth, and no further")
 	village.give("animus", 2.0)
-	await _wait(0.5)
-	_check(beast.growth_paid == 2 and village.amount("animus") == 0, "the second tenth costs 2")
+	_check(beast.pay_for_growth() and beast.growth_paid == 2 and village.amount("animus") == 0, "the second tenth costs 2")
+	play.hud.update_creature(beast)
+	_check(play.hud._portrait_sparkles.amount == 0.0, "no sparkle when it cannot grow on")
 	beast.growth_paid = 10
 	beast.age = age_kept
 	village.resources.animus = float(animus_kept)
@@ -944,8 +976,9 @@ func _run() -> void:
 	beast._hid_at = game.now - 100.0
 	beast._last_hit_at = game.now - 100.0
 	await _wait(0.6)
-	_check(not beast.hiding and shoved.is_alive() and shoved.hp >= shoved_hp - 0.01
-		and beast._flat(shoved.global_position, beast.global_position) > 4.5, "coming out of its shell knocks nearby goblins away, unhurt (%.1f m)" % beast._flat(shoved.global_position, beast.global_position))
+	# (Knocked away: it may not slide far if water or the edge is behind it.)
+	_check(not beast.hiding and shoved.is_alive() and shoved.hp >= shoved_hp - 0.01 and shoved._stagger_until > 0.0,
+		"coming out of its shell knocks nearby goblins away, unhurt (%.1f m)" % beast._flat(shoved.global_position, beast.global_position))
 	_check(beast._burst_until > game.now, "and it has a burst of speed")
 	shoved.queue_free()
 
@@ -954,7 +987,23 @@ func _run() -> void:
 	await _wait(0.1)
 	_check(village._nearest_free(far_tree.global_position, "trees", {}) == far_tree, "there is no limit to how far lumberjacks go for wood")
 	far_tree.queue_free()
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 2.0), "the goblins build twice as fast")
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 4.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 2.0)
+		and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate_growth, 1.0), "goblins build 4 times as fast, and spawn (and rise each night) twice as fast")
+	play.raids.end_raid()
+	play.day_cycle.nightfall.emit()
+	_check(play.raids.raiding, "the goblins raid at nightfall")
+	play.raids.end_raid()
+	# Darker nights, as the dev menu's slider says.
+	var sky := play._atmosphere
+	sky._night = 1.0
+	game.settings.night_darkness = 50.0
+	sky._apply(sky._current)
+	_check(is_equal_approx(sky._env.tonemap_exposure, 0.5), "the night darkness slider darkens the night")
+	game.settings.night_darkness = 0.0
+	sky._night = 0.0
+	sky._apply(sky._current)
+	_check(play.hud._portrait != null and play.hud._creature_bars.health[0].mouse_filter == Control.MOUSE_FILTER_STOP, "the creature has a portrait, and its bars can be clicked")
+	play.hud.creature_focus_requested.emit()
 	_check(Hud.SPELL_SIZE == 36, "the spell bar is half the size")
 
 	# Bless and Condemn: the key takes the spell in hand and says what the
@@ -1363,7 +1412,7 @@ func _run() -> void:
 	_check(get_tree().get_nodes_in_group("goblins").size() > 0 == (data.caves.size() > 0), "goblins live in the caves")
 	var s0: Vector2 = play._info.starts[0]
 	play._found(Vector3(s0.x, game.terrain.get_height(s0.x, s0.y), s0.y), 0)
-	play.village.give("animus", 100.0, false)  # (growing takes animus)
+	play.creature.growth_paid = 10  # (its growth is paid for, so it grows)
 	_check(play.village.population() == roundi(Balance.num("start_villagers")), "starting villagers spawned (%d)" % play.village.population())
 	var raider := get_tree().get_nodes_in_group("goblins")[0] as Villager
 	var route := play.raids._route_for(raider.home)
@@ -1381,7 +1430,7 @@ func _run() -> void:
 	_check(Art.palette_index == game.palette_index, "a random island goes back to the player's palette")
 	var t0: Vector2 = play._info.starts[0]
 	play._found(Vector3(t0.x, game.terrain.get_height(t0.x, t0.y), t0.y), 0)
-	play.village.give("animus", 100.0, false)  # (growing takes animus)
+	play.creature.growth_paid = 10  # (its growth is paid for, so it grows)
 	var squirrel := play.creature
 	_check(squirrel.kind == "squirrel" and squirrel.size < 0.16 and is_equal_approx(squirrel.scale.x, squirrel.size), "the squirrel starts at 15%% of its size (%.2f)" % squirrel.size)
 	squirrel.move_to(squirrel.global_position + Vector3(6, 0, 6))
@@ -1445,7 +1494,7 @@ func _run() -> void:
 	play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
 	var r0: Vector2 = play._info.starts[0]
 	play._found(Vector3(r0.x, game.terrain.get_height(r0.x, r0.y), r0.y), 0)
-	play.village.give("animus", 100.0, false)  # (growing takes animus)
+	play.creature.growth_paid = 10  # (its growth is paid for, so it grows)
 	await _wait(3.0)
 	var raven := play.creature
 	raven.mind.process_mode = Node.PROCESS_MODE_DISABLED

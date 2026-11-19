@@ -38,6 +38,10 @@ signal spell_research_selected(id: String)
 ## The dev menu's "Learn all spells".
 signal spells_requested
 signal resurrect_requested
+## The creature's portrait was clicked (to pay for its growth).
+signal grow_requested
+## One of the creature's bars was double-clicked (to find it).
+signal creature_focus_requested
 
 const SCULPT_NAMES := ["Raise", "Lower", "Flatten", "Smooth"]
 const RESOURCE_COLORS := {
@@ -47,6 +51,8 @@ const RESOURCE_COLORS := {
 }
 ## Resource icons in the village panel, and the spell squares (half of 3 times as big).
 const ICON_SIZE := 24
+## The size of all the HUD's text.
+const FONT_SIZE := 12
 const SPELL_SIZE := 36  # half of three resource icons
 ## gathering job -> what one worker on it is called
 const JOB_NAMES := {"lumber": "lumberjack", "stone": "miner", "food": "farmer", "build": "builder"}
@@ -69,6 +75,7 @@ const SETTING_SLIDERS := [
 	["training_time", "Training time", 0.1, 3.0, 0.1, "x"],
 	["influence_start", "Starting influence", 10.0, 150.0, 5.0, "m"],
 	["influence_per_person", "Influence per person", 0.0, 5.0, 0.25, "m"],
+	["night_darkness", "Night darkness", -50.0, 90.0, 5.0, "%"],
 ]
 const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.66, 0.26), "magicko": Color(0.5, 0.34, 0.86)}
 ## role -> [name in the jobs row, the building that trains it]
@@ -99,12 +106,25 @@ var _spell_sparkles: Array[SpellSparkles] = []
 ## the village's order), and the key number in its corner.
 var _spell_slots: Array[Control] = []
 var _spell_keys: Array[Label] = []
-var _spell_row: HBoxContainer
+## Each spell's slot on the bar (-1: not on it); the slots, and the rows.
+var _spell_slot_of: Array[int] = []
+var _slot_holders: Array[SlotHolder] = []
+var _spell_lines: Array[HBoxContainer] = []
+var _add_row_button: Button
+## The highest slot with a spell in it (so its row is shown).
+var _last_used_slot := -1
 var _spell_research_panel: PanelContainer
 var _spell_research_title: Label
 var _spell_research_rows := {}
 ## The creature's bars: stat -> [bar, label]
 var _creature_bars := {}
+## Its portrait: a little camera on its face, redrawn now and then, which
+## sparkles yellow when it can grow on (click to pay the animus).
+var _portrait: SubViewportContainer
+var _portrait_view: SubViewport
+var _portrait_camera: Camera3D
+var _portrait_sparkles: SpellSparkles
+var _portrait_timer := 0.0
 var _build_panel: PanelContainer
 var _build_buttons := {}
 var _build_previews: Array[BuildingPreview] = []
@@ -123,13 +143,23 @@ var _blood := false
 var _drop_timer := 0.0
 
 
+## Spells not on the bar are kept out of the tree: free them with the HUD.
+func _exit_tree() -> void:
+	for spell in _spell_slots:
+		if is_instance_valid(spell) and spell.get_parent() == null:
+			spell.free()
+
+
 func _ready() -> void:
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 	_root = root
-	root.theme = UiTheme.get_theme()
+	# Every piece of text on the HUD is one size (the size of "Warriors").
+	var look := UiTheme.get_theme().duplicate() as Theme
+	look.default_font_size = FONT_SIZE
+	root.theme = look
 	_build_status_panel(root)
 	_build_spell_bar(root)
 	_build_build_menu(root)
@@ -158,7 +188,7 @@ func _build_status_panel(root: Control) -> void:
 	top.add_theme_constant_override("separation", 10)
 	box.add_child(top)
 	top.add_child(ResourceIcon.make("people", ICON_SIZE))
-	var people := _text("", 20)
+	var people := _text("", 12)
 	people.add_theme_color_override("font_color", RESOURCE_COLORS.people)
 	people.custom_minimum_size = Vector2(84, 28)
 	people.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -166,12 +196,12 @@ func _build_status_panel(root: Control) -> void:
 	people.add_child(_fill_bar(Color(1.0, 0.95, 0.85, 0.3)))
 	top.add_child(people)
 	_resource_labels.people = people
-	_clock = _text("", 16)
+	_clock = _text("", 12)
 	_clock.modulate = Color(1.0, 0.9, 0.6)
 	_clock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top.add_child(_clock)
-	_warning = _text("", 13)
+	_warning = _text("", 12)
 	_warning.add_theme_color_override("font_color", Color(1.0, 0.45, 0.4))
 	_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_warning.visible = false
@@ -182,14 +212,14 @@ func _build_status_panel(root: Control) -> void:
 	grid.add_theme_constant_override("h_separation", 14)
 	grid.add_theme_constant_override("v_separation", 3)
 	box.add_child(grid)
-	_workers = _text("Workers", 18)
+	_workers = _text("Workers", 12)
 	_workers.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_workers.mouse_filter = Control.MOUSE_FILTER_STOP
 	_workers.tooltip_text = "Villagers you have not set to a job. They gather whatever is most needed and help on building sites."
 	grid.add_child(_workers)
-	_workers_count = _text("", 18)
+	_workers_count = _text("", 12)
 	grid.add_child(_workers_count)
-	var builders := _text("Builders", 15)
+	var builders := _text("Builders", 12)
 	builders.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	builders.mouse_filter = Control.MOUSE_FILTER_STOP
 	builders.tooltip_text = "Builders only build: they are first onto every building site, and wait when there is nothing to build."
@@ -201,12 +231,12 @@ func _build_status_panel(root: Control) -> void:
 		item.tooltip_text = res.capitalize()
 		item.mouse_filter = Control.MOUSE_FILTER_STOP
 		item.add_child(ResourceIcon.make(res, ICON_SIZE))
-		var amount := _text("", 19)
+		var amount := _text("", 12)
 		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		amount.add_theme_color_override("font_color", RESOURCE_COLORS[res])
 		amount.custom_minimum_size.x = 46
 		item.add_child(amount)
-		var rate := _text("", 15)
+		var rate := _text("", 12)
 		rate.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		rate.add_theme_color_override("font_color", RESOURCE_COLORS[res])
 		rate.custom_minimum_size.x = 40
@@ -233,7 +263,7 @@ func _build_status_panel(root: Control) -> void:
 		var singular: String = ROLES[role][2]
 		var less := _button("-")
 		less.custom_minimum_size = Vector2(20, 18)
-		less.add_theme_font_size_override("font_size", 11)
+		less.add_theme_font_size_override("font_size", 12)
 		less.tooltip_text = "Remove %s" % singular
 		less.pressed.connect(func() -> void: jobs_changed.emit(role, -1))
 		row.add_child(less)
@@ -246,7 +276,7 @@ func _build_status_panel(root: Control) -> void:
 		row.add_child(count)
 		var more := _button("+")
 		more.custom_minimum_size = Vector2(20, 18)
-		more.add_theme_font_size_override("font_size", 11)
+		more.add_theme_font_size_override("font_size", 12)
 		more.tooltip_text = "Add %s" % singular
 		more.pressed.connect(func() -> void: jobs_changed.emit(role, 1))
 		row.add_child(more)
@@ -263,7 +293,7 @@ func _quota_controls(kind: String) -> Control:
 	less.tooltip_text = "Remove %s" % singular
 	less.pressed.connect(func() -> void: quota_changed.emit(kind, -1))
 	row.add_child(less)
-	var count := _text("0", 18)
+	var count := _text("0", 12)
 	count.custom_minimum_size.x = 34
 	count.mouse_filter = Control.MOUSE_FILTER_STOP
 	count.tooltip_text = "Villagers you have set to gather this. + takes one of the unassigned Workers, - sends one back." if kind != "build" \
@@ -308,7 +338,7 @@ func _build_spell_bar(root: Control) -> void:
 	_hint.custom_minimum_size = Vector2(700, 0)
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint.add_theme_font_size_override("font_size", 14)
+	_hint.add_theme_font_size_override("font_size", 12)
 	box.add_child(_hint)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -317,33 +347,59 @@ func _build_spell_bar(root: Control) -> void:
 	var menus := VBoxContainer.new()
 	menus.add_theme_constant_override("separation", 2)
 	row.add_child(menus)
-	var build := _button("Build (B)")
+	# The build menu: a hammer. (Research: click a Blacksmith, or U.)
+	var build := _button("")
+	build.icon = spell_icon("hammer")
+	build.expand_icon = true
+	build.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE)
+	build.tooltip_text = "Build (B or Backspace)"
 	build.pressed.connect(func() -> void: build_menu_requested.emit())
 	menus.add_child(build)
-	var research := _button("Research (U)")
-	research.pressed.connect(func() -> void: research_menu_requested.emit())
-	menus.add_child(research)
-	# Each spell is a square with its sign (the one the mouse pointer turns
-	# into when it is in hand), its key in the corner and its cost underneath.
-	# Only the spells the village knows are shown, in its order; drag one
-	# onto another to move it there.
-	_spell_row = HBoxContainer.new()
-	_spell_row.add_theme_constant_override("separation", 4)
-	row.add_child(_spell_row)
+	# The spell bar: rows of SpellLayout.PER_ROW slots (room for 10 spells
+	# whatever is known), one row to begin with; the + in its corner adds a
+	# second (Ctrl + number) and a third (Shift + number). Each spell is a
+	# square with its sign (the one the mouse pointer turns into when it is
+	# in hand), its key in the corner and its cost underneath; drag it onto
+	# another slot to move it there.
+	var spell_area := VBoxContainer.new()
+	spell_area.add_theme_constant_override("separation", 2)
+	row.add_child(spell_area)
+	_add_row_button = _button("+")
+	_add_row_button.custom_minimum_size = Vector2(16, 16)
+	_add_row_button.add_theme_font_size_override("font_size", 12)
+	_add_row_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_add_row_button.pressed.connect(func() -> void:
+		SpellLayout.set_rows(_spell_row_count() + 1)
+		_show_spell_rows())
+	spell_area.add_child(_add_row_button)
+	for r in SpellLayout.ROWS_MOST:
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 4)
+		spell_area.add_child(line)
+		var prefix := _text(["", "Ctrl", "Shift"][r], 12)
+		prefix.custom_minimum_size.x = 30
+		prefix.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		line.add_child(prefix)
+		for c in SpellLayout.PER_ROW:
+			var holder := SlotHolder.new()
+			holder.slot = r * SpellLayout.PER_ROW + c
+			holder.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE + 16)
+			holder.on_drop = func(from: int, onto_slot: int) -> void: spell_moved.emit(from, onto_slot)
+			line.add_child(holder)
+			_slot_holders.append(holder)
+		_spell_lines.append(line)
 	for k in SpellBook.SPELLS.size():
 		var spell: Dictionary = SpellBook.SPELLS[k]
 		var slot := VBoxContainer.new()
 		slot.add_theme_constant_override("separation", 1)
-		slot.visible = false
-		_spell_row.add_child(slot)
+		slot.set_anchors_preset(Control.PRESET_FULL_RECT)
 		var b := SpellButton.new()
 		b.spell_index = k
-		b.on_drop = func(from: int, onto: int) -> void: spell_moved.emit(from, onto)
+		b.on_drop = func(from: int, onto: int) -> void: spell_moved.emit(from, _spell_slot_of[onto])
 		b.focus_mode = Control.FOCUS_NONE
 		b.toggle_mode = true
 		b.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE)
 		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		b.tooltip_text = "%s: %s" % [spell.name, spell.hint]
 		var icon := TextureRect.new()
 		icon.texture = spell_icon(spell.id)
 		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -355,9 +411,11 @@ func _build_spell_bar(root: Control) -> void:
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(icon)
-		var key := _text(str(k + 1), 7)
-		key.position = Vector2(3, 0)
-		key.modulate = Color(1, 1, 1, 0.7)
+		var key := _text("", 12)
+		key.position = Vector2(2, -3)
+		key.modulate = Color(1, 1, 1, 0.75)
+		key.add_theme_color_override("font_outline_color", Color.BLACK)
+		key.add_theme_constant_override("outline_size", 3)
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(key)
 		var sparkles := SpellSparkles.new()
@@ -368,17 +426,40 @@ func _build_spell_bar(root: Control) -> void:
 		slot.add_child(b)
 		var cost_label: Label = null
 		if spell.cost > 0:
-			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 7)
+			var cost_row := ResourceIcon.cost_row({"magicko": spell.cost}, 12)
 			cost_label = cost_row.get_child(0) as Label
 			slot.add_child(cost_row)
 		else:
-			slot.add_child(_text("free", 7))
+			slot.add_child(_text("free", 12))
 		_spell_buttons.append(b)
 		_spell_costs.append(cost_label)
 		_spell_sparkles.append(sparkles)
 		_spell_slots.append(slot)
 		_spell_keys.append(key)
-	# The creature's health, stamina and magicko, to the right of the spells.
+		_spell_slot_of.append(-1)
+	_show_spell_rows()
+	# The creature's portrait, then its health, stamina and magicko.
+	_portrait = SubViewportContainer.new()
+	_portrait.custom_minimum_size = Vector2(64, 64)
+	_portrait.stretch = true
+	_portrait.mouse_filter = Control.MOUSE_FILTER_STOP
+	_portrait.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_portrait.gui_input.connect(func(event: InputEvent) -> void:
+		var click := event as InputEventMouseButton
+		if click and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+			grow_requested.emit())
+	row.add_child(_portrait)
+	_portrait_view = SubViewport.new()
+	_portrait_view.size = Vector2i(64, 64)
+	_portrait_view.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_portrait.add_child(_portrait_view)
+	_portrait_camera = Camera3D.new()
+	_portrait_camera.fov = 35.0
+	_portrait_view.add_child(_portrait_camera)
+	_portrait_sparkles = SpellSparkles.new()
+	_portrait_sparkles.wash = Color(1.0, 0.8, 0.15)
+	_portrait_sparkles.glint = Color(1.0, 0.92, 0.45)
+	_portrait.add_child(_portrait_sparkles)
 	var stats := VBoxContainer.new()
 	stats.add_theme_constant_override("separation", 3)
 	stats.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -411,6 +492,13 @@ func _build_spell_bar(root: Control) -> void:
 		bar.add_child(label)
 		stats.add_child(bar)
 		_creature_bars[stat] = [bar, label]
+		# A double click on any of them finds the creature.
+		bar.mouse_filter = Control.MOUSE_FILTER_STOP
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar.gui_input.connect(func(event: InputEvent) -> void:
+			var click := event as InputEventMouseButton
+			if click and click.pressed and click.double_click and click.button_index == MOUSE_BUTTON_LEFT:
+				creature_focus_requested.emit())
 
 
 ## The creature's bars, each with its level and how much of it has been
@@ -429,6 +517,33 @@ func update_creature(beast: Creature) -> void:
 		if stat == "health" and beast.knocked_out:
 			text = "Dead"
 		(_creature_bars[stat][1] as Label).text = text
+	_update_portrait(beast)
+
+
+## Points the portrait's camera at the creature's face and redraws it now
+## and then; sparkles when it can grow on; says how it is growing.
+func _update_portrait(beast: Creature) -> void:
+	_portrait_sparkles.set_extra(SpellSparkles.FULL * 0.6 if beast.can_grow() else 0.0)
+	var village := Game.village
+	var have: int = village.amount("animus") if is_instance_valid(village) else 0
+	if beast.growth_paid >= 10:
+		_portrait.tooltip_text = "%s: grown %d%%. Fully paid for." % [beast.species_name(), roundi(beast.grown() * 100.0)]
+	else:
+		_portrait.tooltip_text = "%s: grown %d%%, step %d of 10 paid for.\nThe next step costs %d animus (you have %d).%s" % [
+			beast.species_name(), roundi(beast.grown() * 100.0), beast.growth_paid, beast.growth_cost(), have,
+			"\nClick to grow." if beast.can_grow() else ""]
+	_portrait_timer -= 1.0
+	if _portrait_timer > 0.0:
+		return
+	_portrait_timer = 5.0
+	if _portrait_view.world_3d == null:
+		_portrait_view.world_3d = get_viewport().find_world_3d()
+	var head := beast.head_position()
+	var ahead := Vector3(sin(beast.heading), 0.0, cos(beast.heading))
+	var reach := 2.2 + 2.6 * beast.size
+	_portrait_camera.position = head + ahead * reach + Vector3.UP * 0.3 * reach
+	_portrait_camera.look_at(head, Vector3.UP)
+	_portrait_view.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 func _build_build_menu(root: Control) -> void:
@@ -451,9 +566,9 @@ func _build_build_menu(root: Control) -> void:
 		var b := _button("")
 		b.custom_minimum_size = Vector2(330, 100)
 		var title: String = "%d  %s" % [k + 1, info.title] if k < 9 else (info.title as String)
-		var lines: Array[Control] = [_text(title, 16), _text(info.desc, 13)]
+		var lines: Array[Control] = [_text(title, 12), _text(info.desc, 12)]
 		if not (info.cost as Dictionary).is_empty():
-			lines.append(ResourceIcon.cost_row(info.cost, 14))
+			lines.append(ResourceIcon.cost_row(info.cost, 12))
 		var row := HBoxContainer.new()
 		row.set_anchors_preset(Control.PRESET_FULL_RECT)
 		row.offset_left = 4
@@ -495,8 +610,8 @@ func _build_research_menu(root: Control) -> void:
 		var b := _button("")
 		b.custom_minimum_size = Vector2(430, 78)
 		var minutes: float = item.seconds / 60.0
-		var lines: Array[Control] = [_text(item.name, 16), _text("%s.  Takes %s min" % [item.desc, _number(minutes)], 13),
-			ResourceIcon.cost_row(item.cost, 14)]
+		var lines: Array[Control] = [_text(item.name, 12), _text("%s.  Takes %s min" % [item.desc, _number(minutes)], 12),
+			ResourceIcon.cost_row(item.cost, 12)]
 		b.add_child(_stacked(lines))
 		var id: String = item.id
 		b.pressed.connect(func() -> void: research_selected.emit(id))
@@ -505,7 +620,7 @@ func _build_research_menu(root: Control) -> void:
 		state.alignment = BoxContainer.ALIGNMENT_CENTER
 		state.custom_minimum_size.x = 130
 		row.add_child(state)
-		var status := _text("", 15)
+		var status := _text("", 12)
 		status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		state.add_child(status)
 		var bar := ProgressBar.new()
@@ -516,7 +631,7 @@ func _build_research_menu(root: Control) -> void:
 		_research_rows[id] = {"button": b, "status": status, "bar": bar}
 	var note := Label.new()
 	note.text = "The Blacksmith also gives your workers wheelbarrows, which carry three times as much."
-	note.add_theme_font_size_override("font_size", 13)
+	note.add_theme_font_size_override("font_size", 12)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
 
@@ -587,10 +702,7 @@ func _build_spell_research_menu(root: Control) -> void:
 		row.add_child(icon)
 		var b := _button("")
 		b.custom_minimum_size = Vector2(300, 70)
-		var cost := SpellBook.research_cost(spell.id)
-		var lines: Array[Control] = [_text(spell.name, 16), _text("Takes %s min" % _number(SpellBook.research_seconds(spell.id) / 60.0), 13)]
-		if not cost.is_empty():
-			lines.append(ResourceIcon.cost_row(cost, 14))
+		var lines: Array[Control] = [_text(spell.name, 12), _text("Takes %s min" % _number(SpellBook.research_seconds(spell.id) / 60.0), 12)]
 		b.add_child(_stacked(lines))
 		b.tooltip_text = spell.hint
 		var id: String = spell.id
@@ -600,7 +712,7 @@ func _build_spell_research_menu(root: Control) -> void:
 		state.alignment = BoxContainer.ALIGNMENT_CENTER
 		state.custom_minimum_size.x = 90
 		row.add_child(state)
-		var status := _text("", 15)
+		var status := _text("", 12)
 		state.add_child(status)
 		var bar := ProgressBar.new()
 		bar.show_percentage = false
@@ -609,8 +721,8 @@ func _build_spell_research_menu(root: Control) -> void:
 		state.add_child(bar)
 		_spell_research_rows[id] = {"button": b, "status": status, "bar": bar}
 	var note := Label.new()
-	note.text = "Every spell is researched here, one at a time, before it appears on the spell bar.\nDrag the spells on the bar to put them in the order you like."
-	note.add_theme_font_size_override("font_size", 13)
+	note.text = "Every spell is researched here, one at a time, before it appears on the spell bar.\nEach costs 1 animus more than the last. Drag the spells on the bar to put them where you like."
+	note.add_theme_font_size_override("font_size", 12)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
 
@@ -619,7 +731,10 @@ func _build_spell_research_menu(root: Control) -> void:
 func show_spell_research(shown: bool, title := "") -> void:
 	_spell_research_panel.visible = shown
 	if title != "":
-		_spell_research_title.text = "%s: research spells  (Esc to close)" % title
+		_spell_research_place = title
+
+
+var _spell_research_place := "Shrine"
 
 
 func is_spell_research_open() -> bool:
@@ -627,6 +742,8 @@ func is_spell_research_open() -> bool:
 
 
 func update_spell_research(village: PlayerVillage) -> void:
+	var cost: int = village.spell_research_cost().get("animus", 0)
+	_spell_research_title.text = "%s: research spells. The next costs %d animus (you have %d)." % [_spell_research_place, cost, village.amount("animus")]
 	for id: String in _spell_research_rows:
 		var row: Dictionary = _spell_research_rows[id]
 		var b := row.button as Button
@@ -638,7 +755,7 @@ func update_spell_research(village: PlayerVillage) -> void:
 		var status := row.status as Label
 		status.text = "Known" if done else ("%d%%" % floori(progress * 100.0) if running else "")
 		b.disabled = done or running
-		b.modulate = Color.WHITE if done or running or village.can_afford(SpellBook.research_cost(id)) else Color(1.0, 0.6, 0.6, 0.8)
+		b.modulate = Color.WHITE if done or running or village.can_afford(village.spell_research_cost()) else Color(1.0, 0.6, 0.6, 0.8)
 
 
 ## The sign of spell `id`, as a texture (the mouse pointer's, see SpellCursors).
@@ -754,7 +871,7 @@ func _build_dev_menu(root: Control) -> void:
 
 	_stats = Label.new()
 	_stats.modulate = Color(1, 1, 1, 0.8)
-	_stats.add_theme_font_size_override("font_size", 13)
+	_stats.add_theme_font_size_override("font_size", 12)
 	dev.add_child(_stats)
 
 
@@ -763,7 +880,7 @@ func _setting_row(s: Array) -> Control:
 	var row := HBoxContainer.new()
 	var label := Label.new()
 	label.custom_minimum_size.x = 230
-	label.add_theme_font_size_override("font_size", 13)
+	label.add_theme_font_size_override("font_size", 12)
 	row.add_child(label)
 	var slider := HSlider.new()
 	slider.min_value = s[2]
@@ -809,7 +926,7 @@ func _text(text: String, font_size: int) -> Label:
 func _heading(text: String) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_font_size_override("font_size", 12)
 	label.modulate = Color(1.0, 0.9, 0.6)
 	return label
 
@@ -952,18 +1069,55 @@ func update_spells(magicko: int, costs: Array[int], extras: Array[float], enable
 		_spell_sparkles[k].set_extra(extras[k])
 
 
-## Shows the spells in `order` (ids) on the spell bar, in that order, each
-## with its key (1, 2, ...); the rest are hidden.
-func set_spell_order(order: Array[String]) -> void:
+## Puts each spell in its slot on the bar (`bar`: each slot's spell id, or
+## ""), with its key (1-9, 0) in the corner; spells not on it are hidden.
+func set_spell_slots(bar: Array[String]) -> void:
+	_last_used_slot = -1
 	for k in SpellBook.SPELLS.size():
-		var at := order.find(SpellBook.SPELLS[k].id)
-		_spell_slots[k].visible = at >= 0
+		var at := bar.find(SpellBook.SPELLS[k].id)
+		_spell_slot_of[k] = at
+		var spell := _spell_slots[k]
+		if spell.get_parent() != null:
+			spell.get_parent().remove_child(spell)
 		if at >= 0:
-			_spell_row.move_child(_spell_slots[k], at)
-			_spell_keys[k].text = str(at + 1)
+			_slot_holders[at].add_child(spell)
+			_spell_keys[k].text = str((at % SpellLayout.PER_ROW + 1) % 10)
+			_last_used_slot = maxi(_last_used_slot, at)
+	_show_spell_rows()
 
 
-## A spell's square: drag it onto another to swap places on the bar.
+func _spell_row_count() -> int:
+	@warning_ignore("integer_division")
+	return clampi(maxi(SpellLayout.row_count(), _last_used_slot / SpellLayout.PER_ROW + 1), 1, SpellLayout.ROWS_MOST)
+
+
+func _show_spell_rows() -> void:
+	var rows := _spell_row_count()
+	for r in _spell_lines.size():
+		_spell_lines[r].visible = r < rows
+	_add_row_button.visible = rows < SpellLayout.ROWS_MOST
+
+
+## A place on the spell bar: a faint square when empty, and somewhere to
+## drop a spell.
+class SlotHolder extends Panel:
+	var slot := 0
+	var on_drop: Callable
+
+	func _ready() -> void:
+		var look := StyleBoxFlat.new()
+		look.bg_color = Color(1, 1, 1, 0.05)
+		look.set_corner_radius_all(4)
+		add_theme_stylebox_override("panel", look)
+
+	func _can_drop_data(_at: Vector2, data: Variant) -> bool:
+		return data is Dictionary and (data as Dictionary).has("spell")
+
+	func _drop_data(_at: Vector2, data: Variant) -> void:
+		on_drop.call(int((data as Dictionary).spell), slot)
+
+
+## A spell's square: drag it onto another slot to move it there.
 class SpellButton extends Button:
 	var spell_index := -1
 	var on_drop: Callable

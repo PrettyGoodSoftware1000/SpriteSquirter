@@ -5,14 +5,14 @@ extends Node
 ## Every cave that was there when the game began spawns goblins all the
 ## time, at Game.settings.goblin_rate per minute, and the rate goes up by
 ## goblin_rate_growth every night. Every finished goblin building adds
-## Balance "goblin_rate_per_building" more at its cave. Halfway through
-## each night every goblin leaves its cave and marches on the village; in
-## the morning the survivors go home. Call setup() with the DayCycle.
+## Balance "goblin_rate_per_building" more at its cave. At nightfall every
+## goblin leaves its cave and marches on the village; in the morning the
+## survivors go home. Call setup() with the DayCycle.
 ##
 ## Ogres and giant bats come from what the goblins have built. Every war
 ## hut (OGRE_HOME) keeps Balance "ogres_per_war_hut" ogres: they appear when
 ## it is finished, and any that have died are replaced at the next
-## midnight. Every watchtower (BAT_HOME) sends "bats_per_watchtower" giant
+## nightfall. Every watchtower (BAT_HOME) sends "bats_per_watchtower" giant
 ## bats with each raid to carry villagers off, from night "bats_from_night"
 ## on. No hut, no ogres; no tower, no bats.
 ##
@@ -66,8 +66,9 @@ var marching := 0
 
 
 func setup(day_cycle: DayCycle) -> void:
-	day_cycle.nightfall.connect(func() -> void: nights += 1)
-	day_cycle.midnight.connect(start_raid)
+	day_cycle.nightfall.connect(func() -> void:
+		nights += 1
+		start_raid())
 	day_cycle.morning.connect(end_raid)
 	for node in get_tree().get_nodes_in_group("caves"):
 		_caves.append(node as Node3D)

@@ -107,7 +107,8 @@ start_villagers = 20                # villagers a new village starts with (on a 
 # are lost. Magicko and animus are not stored, so they have no limit.
 storehouse_holds = 300              # of each, for every Storehouse
 granary_holds = 300                 # more food, for every Granary
-animus_per_shrine = 1               # animus each Shrine makes a minute
+animus_per_minute = 1               # animus the village gets a minute without any Shrine (base income)
+animus_per_shrine = 1               # animus each Shrine makes a minute, on top
 
 # --- Saplings -----------------------------------------------------------------
 # Now and then an unassigned worker or a lumberjack kneels and plants a
@@ -120,7 +121,8 @@ sapling_grow_days = 2           # days (of the day length) for a sapling to grow
 # --- Spells researched at the Shrine ----------------------------------------
 # Click a Shrine (the Singing rocks) to research spells, one at a time.
 # Every spell must be researched before it appears on the spell bar.
-spell_research_magicko = 50     # magicko each spell costs to research, paid when it starts
+spell_research_animus = 1       # animus the first spell costs to research, paid when it starts...
+spell_research_animus_step = 1  # ...and each one after costs this much more than the last
 spell_research_seconds = 30     # how long each takes, while a Shrine stands
 
 # --- Charm Offensive ----------------------------------------------------------
@@ -175,7 +177,7 @@ lightning_wet_bonus = 2             # damage is multiplied by this for anything 
 wet_seconds = 20                    # how long rain leaves villagers and goblins wet
 
 # --- The giant bat --------------------------------------------------------------
-ogres_per_war_hut = 1               # ogres every goblin war hut keeps (dead ones are replaced at midnight)
+ogres_per_war_hut = 1               # ogres every goblin war hut keeps (dead ones are replaced at nightfall)
 bats_per_watchtower = 1             # giant bats every goblin watchtower sends with a raid; each carries one villager off to a cave
 bats_from_night = 3                 # no bats before this night
 bat_health = 80                     # a fireball or lightning can bring it down
@@ -286,11 +288,11 @@ forest_seed_cooldown_1 = 15     # minutes
 forest_seed_cooldown_2 = 30
 forest_seed_cooldown_3 = 60
 seed_judge_points = 30          # Bless and Condemn move its affinity this much at a time (a rare action)
-# The magic tree: magicko it gives the village a SECOND, tiny and full
-# grown, how many days it takes to grow, and how often it drops a seed
-# that becomes a sapling.
-magic_tree_magicko_small = 5
-magic_tree_magicko_full = 50
+# The magic tree: magicko it gives the village a minute, tiny and full
+# grown (it rises between the two as it grows), how many days it takes to
+# grow, and how often it drops a seed that becomes a sapling.
+magic_tree_magicko_small = 10
+magic_tree_magicko_full = 100
 magic_tree_grow_days = 2
 magic_tree_seed_minutes = 2
 

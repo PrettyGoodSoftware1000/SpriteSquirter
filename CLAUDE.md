@@ -69,3 +69,7 @@
 - The project owner creates and names branches.
 - Work on the branch you are given, and keep `main` up to date with it
   (a fast-forward push) after every finished update.
+- The owner edits files such as `balancing.txt` straight on `main`.
+  Fetch `main` and merge it into the branch before pushing, keep the
+  owner's values, and make the smoke test read numbers from
+  `balancing.txt` rather than expect particular ones.

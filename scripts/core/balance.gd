@@ -11,7 +11,7 @@ const DEFAULTS := {
 	"villager_health": 30.0, "villager_damage": 6.0, "villager_attack_seconds": 1.0,
 	"warrior_health": 120.0, "warrior_damage": 12.0, "sharper_swords_bonus": 1.5,
 	"archer_health": 45.0, "archer_arrow_damage": 12.0, "archer_arrow_seconds": 1.5,
-	"wizard_firebolt_damage": 11.0, "wizard_firebolt_seconds": 0.7,
+	"wizard_health": 30.0, "wizard_firebolt_damage": 11.0, "wizard_firebolt_seconds": 0.7,
 	"goblin_health": 30.0, "goblin_damage": 6.0, "goblin_attack_seconds": 1.0,
 	"ogre_health": 300.0, "ogre_damage": 18.0,
 	"tortoise_health": 1200.0,

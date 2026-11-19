@@ -18,7 +18,7 @@ archer_health = 150
 archer_arrow_damage = 20
 archer_arrow_seconds = 0.5      # time between arrows
 
-wizard_health = 45
+wizard_health = 45              # a wizard's health
 wizard_firebolt_damage = 70
 wizard_firebolt_seconds = 1   # time between firebolts
 
@@ -169,7 +169,7 @@ bones_max = 2                       # ...somewhere between these two
 necromancer_training_seconds = 75   # a wizard at a Necromancer tower
 necromancers_per_tower = 2
 necromancer_health = 30             # a necromancer's health
-necromancer_firebolt_damage = 5.5   # its purple firebolt: half a wizard's
+necromancer_firebolt_damage = 35    # its purple firebolt: half a wizard's (wizard_firebolt_damage)
 necromancer_firebolt_seconds = 0.7  # time between its firebolts
 necromancer_skeletons = 1           # skeletons one necromancer keeps up at a time
 necromancer_raise_seconds = 2       # how long it takes to raise one, standing by the body

@@ -1603,6 +1603,8 @@ func become_wizard(post: Vector3) -> void:
 	pin = ""
 	wizard = true
 	add_to_group("wizards")
+	max_hp = Balance.num("wizard_health")
+	hp = max_hp
 	home = post
 	home_radius = 10.0
 	_wear(_wizard_looks[randi() % _wizard_looks.size()])

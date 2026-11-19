@@ -6,7 +6,7 @@ extends CanvasLayer
 
 signal menu_requested
 
-const CONTROLS := [
+var CONTROLS := [
 	["W A S D", "Move the camera"],
 	["Q / E", "Turn the camera"],
 	["Mouse wheel", "Zoom"],
@@ -22,8 +22,8 @@ const CONTROLS := [
 	["Shift + click", "Cast and keep the spell in hand"],
 	["Bless / Condemn", "Shows what your creature last did; press the key again (or click) to bless or condemn it"],
 	["B or Backspace (or the hammer)", "Build menu"],
-	["Click a Shrine", "Research spells"],
-	["Click a Blacksmith (or U)", "Research"],
+	["Click the %s" % BuildingCatalog.role_name("shrine"), "Research spells"],
+	["Click the %s (or U)" % BuildingCatalog.role_name("smith"), "Research"],
 	["R / Shift+R, T", "Turn a building's outline, try another look"],
 	["Shift + click", "Keep placing"],
 	["Esc", "Cancel, or pause"],

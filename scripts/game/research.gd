@@ -9,7 +9,7 @@ const ITEMS := [
 	{"id": "swords", "name": "Sharper swords", "seconds": 300.0, "cost": {"lumber": 30, "stone": 60},
 		"desc": "Warriors do 50% more damage"},
 	{"id": "bows", "name": "Bows", "seconds": 180.0, "cost": {"lumber": 80, "stone": 10},
-		"desc": "Each Town guard can train 2 archers"},
+		"desc": "Each guard building can train 2 archers"},
 	{"id": "pitchforks", "name": "Pitchforks", "seconds": 120.0, "cost": {"lumber": 40, "stone": 15},
 		"desc": "Food is gathered and reaped twice as fast"},
 	{"id": "picks", "name": "Mining picks", "seconds": 120.0, "cost": {"lumber": 30, "stone": 30},

@@ -413,9 +413,9 @@ func start_research(id: String) -> String:
 	if item.is_empty() or has_research(id):
 		return "That is already researched."
 	if not has_blacksmith():
-		return "Research needs a Blacksmith: build one first."
+		return "Research needs a %s: build one first." % BuildingCatalog.role_name("smith")
 	if not research.is_empty():
-		return "The Blacksmith is busy with %s." % (Research.find(research.id).name as String).to_lower()
+		return "The %s is busy with %s." % [BuildingCatalog.role_name("smith"), (Research.find(research.id).name as String).to_lower()]
 	var short := shortfall(item.cost)
 	if short != "":
 		return "Need %s more." % short
@@ -461,9 +461,9 @@ func start_spell_research(id: String) -> String:
 	if knows_spell(id):
 		return "You know that spell already."
 	if shrines().is_empty():
-		return "Spells are researched at a Shrine: build one first."
+		return "Spells are researched at the %s: build one first." % BuildingCatalog.role_name("shrine")
 	if not spell_research.is_empty():
-		return "The Shrine is busy with %s." % SpellBook.find(spell_research.id).name
+		return "The %s is busy with %s." % [BuildingCatalog.role_name("shrine"), SpellBook.find(spell_research.id).name]
 	var cost := spell_research_cost()
 	var short := shortfall(cost)
 	if short != "":
@@ -918,7 +918,9 @@ func work(v: Villager, delta: float) -> void:
 						v.guard = post
 						v.become_archer(post.global_position)
 					"necromancer":
+						# A wizard upgraded: no longer one of the wizards asked for.
 						v.become_necromancer(post.global_position)
+						wanted.wizard = maxi(0, wanted.wizard - 1)
 					_:
 						v.become_wizard(post.global_position)
 		"plant":

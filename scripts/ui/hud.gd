@@ -81,10 +81,10 @@ const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.6
 ## role -> [name in the jobs row, the building that trains it]
 ## role -> [name in the panel, the building that trains it, one of them]
 const ROLES := {
-	"warrior": ["Warriors", "Town guard", "warrior"],
-	"archer": ["Archers", "Town guard", "archer"],
-	"wizard": ["Wizards", "Wizardry tower", "wizard"],
-	"necromancer": ["Necromancers", "Necromancer tower", "necromancer"],
+	"warrior": ["Warriors", "guard", "warrior"],
+	"archer": ["Archers", "guard", "archer"],
+	"wizard": ["Wizards", "wizard", "wizard"],
+	"necromancer": ["Necromancers", "necro", "necromancer"],
 }
 
 var _hint: Label
@@ -118,13 +118,13 @@ var _spell_research_title: Label
 var _spell_research_rows := {}
 ## The creature's bars: stat -> [bar, label]
 var _creature_bars := {}
-## Its portrait: a little camera on its face, redrawn now and then, which
-## sparkles yellow when it can grow on (click to pay the animus).
+## Its portrait: its model seen three-quarters on, drawn once in a little
+## world of its own, which sparkles yellow when it can grow on (click to
+## pay the animus).
 var _portrait: SubViewportContainer
 var _portrait_view: SubViewport
-var _portrait_camera: Camera3D
+var _portrait_kind := ""
 var _portrait_sparkles: SpellSparkles
-var _portrait_timer := 0.0
 var _build_panel: PanelContainer
 var _build_buttons := {}
 var _build_previews: Array[BuildingPreview] = []
@@ -451,11 +451,10 @@ func _build_spell_bar(root: Control) -> void:
 	row.add_child(_portrait)
 	_portrait_view = SubViewport.new()
 	_portrait_view.size = Vector2i(64, 64)
+	_portrait_view.own_world_3d = true
+	_portrait_view.transparent_bg = true
 	_portrait_view.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_portrait.add_child(_portrait_view)
-	_portrait_camera = Camera3D.new()
-	_portrait_camera.fov = 35.0
-	_portrait_view.add_child(_portrait_camera)
 	_portrait_sparkles = SpellSparkles.new()
 	_portrait_sparkles.wash = Color(1.0, 0.8, 0.15)
 	_portrait_sparkles.glint = Color(1.0, 0.92, 0.45)
@@ -464,8 +463,8 @@ func _build_spell_bar(root: Control) -> void:
 	stats.add_theme_constant_override("separation", 3)
 	stats.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_child(stats)
-	_resurrect = _button("Resurrect at a Shrine (%d animus)" % roundi(Balance.num("resurrect_animus")))
-	_resurrect.tooltip_text = "Your creature is dead. Bring it back to life beside a Shrine."
+	_resurrect = _button("Resurrect at the %s (%d animus)" % [BuildingCatalog.role_name("shrine"), roundi(Balance.num("resurrect_animus"))])
+	_resurrect.tooltip_text = "Your creature is dead. Bring it back to life beside the %s." % BuildingCatalog.role_name("shrine")
 	_resurrect.add_theme_color_override("font_color", RESOURCE_COLORS.animus)
 	_resurrect.pressed.connect(func() -> void: resurrect_requested.emit())
 	_resurrect.visible = false
@@ -532,17 +531,51 @@ func _update_portrait(beast: Creature) -> void:
 		_portrait.tooltip_text = "%s: grown %d%%, step %d of 10 paid for.\nThe next step costs %d animus (you have %d).%s" % [
 			beast.species_name(), roundi(beast.grown() * 100.0), beast.growth_paid, beast.growth_cost(), have,
 			"\nClick to grow." if beast.can_grow() else ""]
-	_portrait_timer -= 1.0
-	if _portrait_timer > 0.0:
-		return
-	_portrait_timer = 5.0
-	if _portrait_view.world_3d == null:
-		_portrait_view.world_3d = get_viewport().find_world_3d()
-	var head := beast.head_position()
-	var ahead := Vector3(sin(beast.heading), 0.0, cos(beast.heading))
-	var reach := 2.2 + 2.6 * beast.size
-	_portrait_camera.position = head + ahead * reach + Vector3.UP * 0.3 * reach
-	_portrait_camera.look_at(head, Vector3.UP)
+	if _portrait_kind != beast.kind:
+		_portrait_kind = beast.kind
+		_pose_portrait(Creature.SPECIES[beast.kind].model)
+
+
+## Puts the creature's model (`model`, a scene) in the portrait's little
+## world, three-quarters on, lit from the side, and draws it once.
+func _pose_portrait(model: String) -> void:
+	for child in _portrait_view.get_children():
+		child.queue_free()
+	var body := (load(model) as PackedScene).instantiate() as Node3D
+	var hide := ShaderMaterial.new()
+	hide.shader = Art.shader("creature")
+	hide.set_shader_parameter("detail_tex", Art.tex("hide_detail"))
+	hide.next_pass = Art.outline(1.0)
+	for node in body.find_children("*", "MeshInstance3D", true, false):
+		(node as MeshInstance3D).material_override = hide
+	body.rotation.y = deg_to_rad(35.0)
+	_portrait_view.add_child(body)
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CLEAR_COLOR
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.75, 0.78, 0.85)
+	env.ambient_light_energy = 0.6
+	var world := WorldEnvironment.new()
+	world.environment = env
+	_portrait_view.add_child(world)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(deg_to_rad(-35.0), deg_to_rad(-40.0), 0.0)
+	sun.light_energy = 1.2
+	_portrait_view.add_child(sun)
+	# Framed on the whole model.
+	var box := AABB()
+	var first := true
+	for node in body.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		var b := mi.transform * mi.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	var cam := Camera3D.new()
+	cam.fov = 30.0
+	var middle := box.get_center()
+	var reach := maxf(box.size.y, maxf(box.size.x, box.size.z)) * 0.5 / tan(deg_to_rad(15.0)) * 1.15
+	_portrait_view.add_child(cam)
+	cam.look_at_from_position(middle + Vector3(0.0, 0.15, 1.0).normalized() * reach, middle)
 	_portrait_view.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
@@ -602,7 +635,7 @@ func _build_research_menu(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	_research_panel.add_child(box)
-	box.add_child(_heading("Research  (needs a Blacksmith; one thing at a time;  U / Esc to close)"))
+	box.add_child(_heading("Research  (needs a %s; one thing at a time;  U / Esc to close)" % BuildingCatalog.role_name("smith")))
 	for item in Research.ITEMS:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
@@ -630,7 +663,7 @@ func _build_research_menu(root: Control) -> void:
 		state.add_child(bar)
 		_research_rows[id] = {"button": b, "status": status, "bar": bar}
 	var note := Label.new()
-	note.text = "The Blacksmith also gives your workers wheelbarrows, which carry three times as much."
+	note.text = "The %s also gives your workers wheelbarrows, which carry three times as much." % BuildingCatalog.role_name("smith")
 	note.add_theme_font_size_override("font_size", 12)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
@@ -660,7 +693,7 @@ func update_research(village: PlayerVillage) -> void:
 		elif running:
 			status.text = "%d%%" % floori(progress * 100.0)
 		elif not smith:
-			status.text = "No Blacksmith"
+			status.text = "No %s" % BuildingCatalog.role_name("smith")
 		else:
 			status.text = ""
 		b.disabled = done or running
@@ -813,7 +846,7 @@ func _build_dev_menu(root: Control) -> void:
 	cheat.pressed.connect(func() -> void: resources_requested.emit())
 	cheats.add_child(cheat)
 	var spells := _button("Learn all spells")
-	spells.tooltip_text = "Researches every spell at once, without a Shrine."
+	spells.tooltip_text = "Researches every spell at once."
 	spells.pressed.connect(func() -> void: spells_requested.emit())
 	cheats.add_child(spells)
 
@@ -973,7 +1006,7 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 		if village.amount("food") <= 0:
 			warning = "Out of food! No births, and people will starve" if village.hungry_for < PlayerVillage.STARVE_AFTER else "Starving!"
 		elif village.population() >= village.housing():
-			warning = "No room for more villagers: build a Home"
+			warning = "No room for more villagers: build a %s" % BuildingCatalog.role_name("home")
 	_warning.text = warning
 	_warning.visible = warning != ""
 
@@ -994,7 +1027,7 @@ func _update_jobs(village: PlayerVillage) -> void:
 		var asked := maxi(want, village.count(role) + village.training_progress(role).size())
 		(w.count as Label).text = "%d/%d" % [asked, top]
 		(w.count as Label).tooltip_text = "%d trained, %d in training, of the %d your %s buildings allow. + trains one more, while %s free to train." % [
-			village.count(role), maxi(0, asked - village.count(role)), top, ROLES[role][1],
+			village.count(role), maxi(0, asked - village.count(role)), top, BuildingCatalog.role_name(ROLES[role][1]),
 			"a wizard is" if role == "necromancer" else "an unassigned worker is"]
 		# Archers appear once bows have been researched, and necromancers
 		# once there is a tower for them.

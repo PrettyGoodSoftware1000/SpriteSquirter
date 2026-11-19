@@ -433,7 +433,7 @@ func _set_mode(m: Mode) -> void:
 			hud.set_hint("Click or right-click the ground to walk the %s there. %s B or Backspace opens the build menu." \
 				% [(Creature.SPECIES[Game.creature_kind].name as String).to_lower(),
 				"The number keys take a spell in hand." if village.spell_slots.any(func(id: String) -> bool: return id != "")
-				else "Click a Shrine to research spells."])
+				else "Click the %s to research spells." % BuildingCatalog.role_name("shrine")])
 		Mode.PLACE:
 			hud.set_hint(_place_hint())
 		Mode.SCULPT:
@@ -503,7 +503,7 @@ func _on_research_selected(id: String) -> void:
 func open_spell_research(shrine: Destructible) -> void:
 	hud.show_build_menu(false)
 	hud.show_research_menu(false)
-	hud.show_spell_research(true, BuildingCatalog.find(shrine.get_meta("kind", "")).get("gameplay", "Shrine"))
+	hud.show_spell_research(true, BuildingCatalog.title(shrine.get_meta("kind", "")))
 	hud.update_spell_research(village)
 
 
@@ -668,7 +668,7 @@ func _spell_key(index: int) -> void:
 		return
 	var spell: Dictionary = SpellBook.SPELLS[index]
 	if not village.knows_spell(spell.id):
-		hud.set_hint("%s must be researched first: click a Shrine to research spells." % spell.name)
+		hud.set_hint("%s must be researched first: click the %s to research spells." % [spell.name, BuildingCatalog.role_name("shrine")])
 		return
 	if mode != Mode.COMMAND:
 		_set_mode(Mode.COMMAND)

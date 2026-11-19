@@ -55,17 +55,18 @@ const DEFAULT_GAMEPLAY := {
 	"singing_rocks": "Shrine", "necro_tower": "Necromancer tower", "windmill": "Granary",
 	"crystal_tower": "Decoration", "tall_house": "Town guard",
 }
-## gameplay name (lower case) -> [name, role, cost id, what the menu says]
+## gameplay effect (lower case) -> [name, role, cost id, what the menu says].
+## Players never see the gameplay effect: the game shows in-game names.
 const GAMEPLAY := {
-	"home": ["Home", "home", "home", "Home: room for %d villagers"],
-	"cottage": ["Cottage", "home", "cottage", "Cottage: room for %d villagers"],
-	"storehouse": ["Storehouse", "store", "storehouse", "Storehouse: stores goods, houses %d"],
-	"granary": ["Granary", "granary", "granary", "Granary: stores food"],
-	"shrine": ["Shrine", "shrine", "shrine", "Shrine: animus, revives creature"],
-	"town guard": ["Town guard", "guard", "town_guard", "Town guard: trains warriors"],
-	"blacksmith": ["Blacksmith", "smith", "blacksmith", "Blacksmith: barrows, research (U)"],
-	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Wizardry tower: trains wizards"],
-	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Necromancer tower: raises the dead"],
+	"home": ["Home", "home", "home", "Room for %d villagers"],
+	"cottage": ["Cottage", "home", "cottage", "Room for %d villagers"],
+	"storehouse": ["Storehouse", "store", "storehouse", "Stores goods, houses %d"],
+	"granary": ["Granary", "granary", "granary", "Stores food"],
+	"shrine": ["Shrine", "shrine", "shrine", "Makes animus; research spells, revive the creature"],
+	"town guard": ["Town guard", "guard", "town_guard", "Trains warriors"],
+	"blacksmith": ["Blacksmith", "smith", "blacksmith", "Wheelbarrows; research"],
+	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Trains wizards"],
+	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Turns wizards into necromancers"],
 	"decoration": ["Decoration", "", "decoration", "No use yet"],
 }
 ## Menu entries that are not placed like buildings.
@@ -156,6 +157,18 @@ static func find(kind: String) -> Dictionary:
 ## What players see building `kind` called (its in-game name).
 static func title(kind: String) -> String:
 	return find(kind).get("title", MISSING_NAME)
+
+
+## What players call the building with `role` (its in-game name: the
+## first one in Names.txt with that gameplay effect).
+static func role_name(role: String) -> String:
+	if _all.is_empty():
+		apply_balance()
+	for pair: Array in ASSETS:
+		var entry: Dictionary = _all.get(pair[0], {})
+		if entry.get("role", "") == role:
+			return entry.title
+	return MISSING_NAME
 
 
 static func housing(kind: String) -> int:

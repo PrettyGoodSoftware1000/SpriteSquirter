@@ -1,13 +1,15 @@
 # SpriteSquirter building names
 #
-# Each line is:   Asset name = Gameplay name = In-game name
+# Each line is:   Asset name = Gameplay effect = In-game name
 #
 # The asset name is the model. It never changes, and players never see it
 # (it shows in the build menu, when you point at a building, only while
 # the dev menu is open).
-# The in-game name is what players see the building called. A building
-# with no in-game name is shown as "Name missing".
-# The gameplay name decides what the building does. Write one of these
+# The in-game name is flavor text: what players see the building called.
+# It changes nothing else. A building with no in-game name is shown as
+# "Name missing".
+# The gameplay effect decides what the building does; players never see
+# it. It matches the model to its job for the game. Write one of these
 # after the first = sign, save the file, and start the game again:
 #
 #   Home               room for more villagers (home_housing in balancing.txt)
@@ -15,15 +17,17 @@
 #   Storehouse         villagers carry what they gather to it
 #   Town guard         trains warriors, and archers once bows are researched
 #   Blacksmith         wheelbarrows and research
-#   Wizard school      trains wizards
+#   Wizardry tower     trains wizards
+#   Granary            stores more food
+#   Shrine             makes animus; spells are researched and the creature revived there
 #   Necromancer tower  turns wizards into necromancers
 #   Decoration         can be built, but does nothing yet
 #
-# Leave the gameplay name empty to keep a building out of the build menu.
-# What a building costs goes with its gameplay name (see balancing.txt).
-# Treehouses can be joined by rope bridges whatever their gameplay name.
+# Leave the gameplay effect empty to keep a building out of the build menu.
+# What a building costs goes with its gameplay effect (see balancing.txt).
+# Treehouses can be joined by rope bridges whatever their gameplay effect.
 
-# Asset name        = Gameplay name     = In-game name
+# Asset name        = Gameplay effect   = In-game name
 Treehouse           = Home              = House in a tree
 Lookout treehouse   = Home              = Lookout house
 Twin treehouse      = Home              = Double Treehouse

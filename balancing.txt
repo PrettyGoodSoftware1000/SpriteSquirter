@@ -10,8 +10,8 @@ villager_health = 30
 villager_damage = 6             # per blow
 villager_attack_seconds = 1.0   # time between blows
 
-warrior_health = 300
-warrior_damage = 24
+warrior_health = 250
+warrior_damage = 30
 sharper_swords_bonus = 1.5      # warrior damage is multiplied by this once researched
 
 archer_health = 150
@@ -19,7 +19,7 @@ archer_arrow_damage = 20
 archer_arrow_seconds = 0.5      # time between arrows
 
 wizard_health = 45
-wizard_firebolt_damage = 50
+wizard_firebolt_damage = 70
 wizard_firebolt_seconds = 1   # time between firebolts
 
 # --- Goblins ----------------------------------------------------------------
@@ -27,7 +27,7 @@ goblin_health = 40
 goblin_damage = 6
 goblin_attack_seconds = 1.0
 
-ogre_health = 800
+ogre_health = 600
 ogre_damage = 40
 
 # --- Creatures (full grown; a newborn has 30% of the health) -----------------
@@ -64,10 +64,10 @@ balrog_bones = 200              # bones the village gets for killing a full-grow
 # --- Fireball ---------------------------------------------------------------
 fireball_damage = 150           # to villagers and goblins; anything with less health is killed
 fireball_building_damage = 160  # in the middle of the blast
-creature_friendly_fire = 0.1    # share of that damage your own villagers and buildings take from the creature's fireball
+creature_friendly_fire = 0.2    # share of that damage your own villagers and buildings take from the creature's fireball
 
 # --- Buildings --------------------------------------------------------------
-building_health = 70
+building_health = 250
 building_health_per_metre = 5   # added for every metre of the building's height
 
 # What each building costs. The cost goes with the gameplay name in
@@ -98,7 +98,7 @@ cost_necromancer_tower_lumber = 0
 cost_necromancer_tower_stone = 60
 cost_necromancer_tower_bones = 200
 cost_bridge_lumber_per_metre = 1    # rope bridges between treehouses
-bridge_max_length = 35              # metres: about 20 villagers lying end to end
+bridge_max_length = 50              # metres: about 20 villagers lying end to end
 home_housing = 6                    # villagers a Home has room for
 cottage_housing = 3
 storehouse_housing = 25             # the Storehouse is a block of homes too
@@ -151,12 +151,12 @@ rock_stone = 120                    # stone in a full-size boulder before it is 
 rock_crumble_seconds = 4            # how long a used-up boulder takes to crumble away
 
 # --- Bones, necromancers and skeletons ----------------------------------------
-bones_min = 2                       # bones the village gets when a villager, goblin or ogre dies...
-bones_max = 4                       # ...somewhere between these two
+bones_min = 1                       # bones the village gets when a villager, goblin or ogre dies...
+bones_max = 2                       # ...somewhere between these two
 necromancer_training_seconds = 75   # a wizard at a Necromancer tower
 necromancers_per_tower = 2
 raise_bones = 2                     # bones a necromancer spends to raise a skeleton
-skeleton_seconds = 180              # how long a skeleton lasts
+skeleton_seconds = 1800              # how long a skeleton lasts
 skeleton_share = 0.5                # its health and damage, as a share of who it was raised from
 
 # --- Goblin buildings -----------------------------------------------------------
@@ -217,8 +217,8 @@ cooldown_lightning = 10
 # What each of the creature's own spells costs it in magicko
 creature_cost_fireball = 25
 creature_cost_rain = 30
-creature_cost_roots = 35
-creature_cost_lightning = 35
+creature_cost_roots = 25
+creature_cost_lightning = 20
 creature_cost_blood = 20
 
 # --- The creature's stamina and magicko -----------------------------------------
@@ -319,7 +319,7 @@ notice_chance = 60%
 # ...and when it does, this is the chance it learns extra, for an average
 # knowledge seeker (see knowledgeSeeker personality below), and how much
 # extra (100% doubles what it learned).
-bonus_knowledge_chance = 25%
+bonus_knowledge_chance = 50%
 bonus_knowledge = 100%
 
 # --- Personality traits ---------------------------------------------------------
@@ -357,7 +357,7 @@ bonus_knowledge = 100%
 #   anything.
 tortoise_flee_personality = 100%
 tortoise_mischief_personality = 100%
-tortoise_spellcaster_personality = 100%
+tortoise_spellcaster_personality = 80%
 tortoise_observant_personality = 150%        # watchful
 tortoise_knowledgeSeeker_personality = 150%  # curious
 squirrel_flee_personality = 150%             # a nervous creature
@@ -368,8 +368,8 @@ squirrel_knowledgeSeeker_personality = 100%
 squirrel_forestSeeder_personality = 100%     # how keen it is on forest seeding (only the squirrel does it)
 raven_flee_personality = 100%
 raven_mischief_personality = 100%
-raven_spellcaster_personality = 150%         # a natural spellcaster
-raven_observant_personality = 100%
+raven_spellcaster_personality = 200%         # a natural spellcaster
+raven_observant_personality = 110%
 raven_knowledgeSeeker_personality = 150%     # curious
 
 

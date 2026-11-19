@@ -24,16 +24,16 @@
 # Treehouses can be joined by rope bridges whatever their gameplay name.
 
 # Asset name        = Gameplay name     = In-game name
-Treehouse           = Home              =
-Lookout treehouse   = Home              =
-Twin treehouse      = Home              =
-Great treehouse     = Home              =
-Stacked houses      = Storehouse        =
+Treehouse           = Home              = House in a tree
+Lookout treehouse   = Home              = Lookout house
+Twin treehouse      = Home              = Double Treehouse
+Great treehouse     = Home              = Big Old Treehouse
+Stacked houses      = Storehouse        = Storehouse 
 Moon tower          = Wizardry tower    = Wizardry tower
-Blacksmith          = Blacksmith        =
-Mushroom cottage    = Cottage           =
-Singing rocks       = Shrine            =
-Skull tower         = Necromancer tower =
-Windmill            = Granary           =
-Crystal tower       = Decoration        =
-Tall house          = Town guard        =
+Blacksmith          = Blacksmith        = Forger
+Mushroom cottage    = Cottage           = Shroom Home
+Singing rocks       = Shrine            = Singing Stones
+Skull tower         = Necromancer tower = Tower of Bone
+Windmill            = Granary           = Windmill
+Crystal tower       = Decoration        = Ain't doing nothing
+Tall house          = Town guard        = Guard House

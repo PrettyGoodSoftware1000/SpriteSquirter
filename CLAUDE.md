@@ -7,8 +7,9 @@
 - Raise it by 0.01 with every update you make to the game (0.10, 0.11,
   0.12, ...), in the same commit as the update, and say the new number
   when you report back.
-- The project owner downloads the game from `main`, so finished updates
-  go to `main` when they ask for that.
+- The project owner downloads the game from `main`, so `main` always has
+  the latest code: every finished update goes to `main` as well as the
+  working branch, until the owner decides a separate branch is needed.
 
 ## Asset names
 
@@ -66,4 +67,5 @@
   GitHub, including pushing to a branch name that does not exist yet
   (that creates it).
 - The project owner creates and names branches.
-- Work on the branch you are given. `main` holds the merged game.
+- Work on the branch you are given, and keep `main` up to date with it
+  (a fast-forward push) after every finished update.

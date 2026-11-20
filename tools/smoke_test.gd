@@ -1510,6 +1510,11 @@ func _run() -> void:
 		node.queue_free()
 	beast._action = Creature.Action.NONE
 	beast.drop_load()
+	# (Back by the village, on open ground, wherever its last errand left it.)
+	var by_village := village.center + Vector3(12, 0, 12)
+	beast.global_position = Vector3(by_village.x, game.terrain.get_height(by_village.x, by_village.z), by_village.z)
+	beast.has_target = false
+	await _wait(0.5)
 	beast.stamina = beast.max_stamina * 0.5
 	var walk_to := beast.global_position
 	for k in 72:

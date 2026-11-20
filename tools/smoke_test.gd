@@ -1602,8 +1602,8 @@ func _run() -> void:
 	for other: String in ["food", "stone"] + CreatureMind.SPELLS:
 		Balance.values["knowledge_" + other] = Balance.DEFAULTS["knowledge_" + other]
 	Balance.values["wander_weight"] = Balance.DEFAULTS["wander_weight"]
-	_check(fetched, "the creature fetches a tree for the storehouse (task %s, last action %s, knocked out %s, speed %.1f, %.0f m from the village)" % [
-		mind._task, mind.last_action, beast.knocked_out, beast.speed, beast.global_position.distance_to(village.center)])
+	_check(fetched, "the creature fetches a tree for the storehouse (task %s, last action %s, knocked out %s, speed %.1f, %.0f m from the village, target %s %.0f m, action %d)" % [
+		mind._task, mind.last_action, beast.knocked_out, beast.speed, beast.global_position.distance_to(village.center), beast.has_target, beast._flat(beast.target, beast.global_position), beast._action])
 	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT
 
 	# Rain puts out fires.

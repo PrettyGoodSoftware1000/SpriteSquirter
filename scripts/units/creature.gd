@@ -949,9 +949,10 @@ func _steep_towards(angle: float) -> bool:
 
 
 ## `angle` if the way is clear, else the nearest heading either side of it
-## that is, or INF if none is.
+## that is (as far round as going back the way it came, so it works its
+## way along a grey rock slope instead of standing stuck), or INF if none is.
 func _round_steep(angle: float) -> float:
-	for turn: float in [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5]:
+	for turn: float in [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 2.5, -2.5, PI]:
 		if not _steep_towards(angle + turn):
 			return angle + turn
 	return INF

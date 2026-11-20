@@ -47,9 +47,11 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
 1. **Choose a start location.** Numbered banners mark them; click one. On a
    random island each banner is an existing village, which becomes yours. On
    a map from the editor you start with no buildings. Either way the
-   village starts with 20 villagers.
+   village starts with 20 villagers, and 100 each of lumber, stone, food
+   and magicko (`start_...` in `balancing.txt`).
 2. **Your villagers work by themselves.** Grown-ups fell trees (lumber),
-   break up boulders (stone) and forage near the village (food), and every
+   break up boulders (stone) and farm wheat fields (food: there is no other
+   way to get it, so draw a field early), and every
    grown-up adds a trickle of magicko. Workers carry each load to the
    nearest **Storehouse** (food may go to a **Granary** too; with no
    Storehouse, to the middle of the village); it only counts once it
@@ -122,8 +124,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    and then the necromancer can raise another. All of this is in
    `balancing.txt` (`necromancer_...`, `skeleton_...`, `raise_bones`).
    **Research.** Click a Blacksmith (or press **U**) and pick something
-   to research. It is paid for up front and one thing
-   is researched at a time: **Sharper swords** (5 minutes; warriors do 50%
+   to research. It is paid for up front, and each Blacksmith researches
+   one thing at a time (two Blacksmiths, two things at once; the same for
+   Shrines and spells, and for Wizardry towers): **Sharper swords** (5 minutes; warriors do 50%
    more damage), **Bows** (3 minutes; unlocks archers), **Wheelbarrows**,
    and **Pitchforks**, **Mining picks** and **Axes** in three tiers each
    (food, stone or lumber gathered 50% faster after the third;
@@ -147,9 +150,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    what it does.
    Builders only build: they are first onto every building site and wait
    when there is nothing to build. Only Builders and unassigned Workers
-   build; set one to another job and it drops the building at once. Farmers (and anyone foraging) gather
-   food twice as fast as other workers gather, and sow and reap fields
-   twice as fast too. No job's **+** works unless there is a free Worker
+   build; set one to another job and it drops the building at once. Farmers sow and reap fields twice as fast as other workers. No job's **+** works unless there is a free Worker
    for it (one not already promised to a warrior, archer or wizard you
    asked for); a necromancer needs a free wizard.
 4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
@@ -176,11 +177,14 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    in proportion to its size before that, but only half that until it is
    half grown (1.5 a minute at the start).
    With no food, no children are born, and after a minute without food
-   someone starves every 30 seconds until there is food again.
+   someone starves every 30 seconds until there is food again. "Out of
+   food" floats up over the Storehouse (no oftener than every 45 seconds,
+   `food_warning_seconds`).
 6. **Farm.** Pick **Wheat field** in the build menu, then hold the left
    mouse button and drag out a square on the ground (1 lumber per 10 m²).
-   Villagers sow it, the wheat grows and turns gold, and they reap it for
-   much more food than foraging gives. Then they sow it again.
+   Villagers sow it, the wheat grows and turns gold (in 200 seconds,
+   `crop_grow_seconds`), and they reap it for food. Then they sow it again.
+   Fields are the only source of food.
 7. **Grow.** A tiny villager is born every *birth timer* seconds while there
    is housing (10, plus what your Homes add) and food. Children grow up in a minute
    and then start working.
@@ -394,9 +398,11 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    row, no click needed. Spells only work inside your village's influence, and a
    fireball that flies out of it fizzles out. After it is cast a spell
    **cools down** (`spell_cooldown_...` in `balancing.txt`) and cannot be
-   cast again until it has; its square sparkles blue meanwhile. With
-   Overcast it can be cast once during the cooldown, for twice the
-   magicko. **Fireball** blows
+   cast again until it has. Meanwhile a see-through band rises over its
+   square, reaching the top when it is ready, and its cost shows red. With
+   Overcast it can be cast once during the cooldown for twice the magicko:
+   the cost shows doubled, in blue with blue sparkles, until it is
+   overcast, and then red. **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while (and makes wheat under the cloud grow three
    times as fast while it is wet), and **Roots** grows a glowing green patch
@@ -422,7 +428,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    glow green and the two go off into the nearest building for 2 minutes.
    Then births come twice as fast for 2 minutes, and every child born then
    is a **fey** girl with four dragonfly wings, front and back pairs
-   beating in turn. The fey fly (over water and cliffs too), 50% faster,
+   beating in turn. The fey fly (over water and cliffs too, landing only
+   to gather), 50% faster,
    and make twice the magicko. Once archers can be trained, **Fey
    Archers** can be too (up to the number of winged villagers, taking
    twice as long): they fly about, landing now and then but never with
@@ -521,7 +528,7 @@ game, villagers build everything.
 | Rocks | Click or hold to place rocks |
 | Erase | Hold to remove trees, rocks, start locations and caves inside the brush |
 | Cut cliff | Click on low ground and drag into a hill: it is sliced down to that height, leaving a sheer cliff nobody can climb |
-| Goblin path | Draw from a goblin cave to a start location (or back): raiders from that cave loosely follow it. Several paths can join the same two; each has its own colour, shown only while this brush is picked. Shift+click removes one |
+| Goblin path | Draw from a goblin cave to a start location (or back): raiders from that cave loosely follow it. Several paths can join the same two; each has its own colour, shown only while this brush is picked. Right-click (or Shift+click) removes one |
 
 **Ctrl+Z** undoes the last change (each click or stroke is one change).
 Pick the map's **colour palette** in the editor panel: the map is played
@@ -644,7 +651,8 @@ scripts/
   game/goblin_raids.gd     Goblins spawning at the caves, the nightfall raid, and what the goblins build
   game/spell_book.gd       Spells: names, costs and hints
   core/texts.gd            Reads Announcements.txt
-  ui/spell_sparkles.gd     The blue sparkles on a spell that costs more for being cast recently
+  ui/spell_sparkles.gd     The blue sparkles by a spell's cost while Overcast can cast it
+  ui/cooldown_fill.gd      The band that rises over a spell's square while it cools down
   editor/editor_mode.gd    The map editor's tools and saving
   world/terrain.gd         Island heightmap (any map size), land mask and rock skirt, water
                            layer that flows and pours off the edge, paint layers, sculpting

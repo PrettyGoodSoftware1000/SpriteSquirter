@@ -105,11 +105,16 @@ func _run() -> void:
 	# (Checked after a minute: in two the field can be reaped and under the plough again.)
 	await _wait(60.0)
 	_check(field.stage != CropField.Stage.SOWING or field.progress > 0.3, "villagers sow the field (stage %d, %.2f)" % [field.stage, field.progress])
+	# (Ripe at once: it takes crop_grow_seconds by itself.)
+	if field.stage == CropField.Stage.GROWING:
+		field.progress = 0.999
 	await _wait(60.0)
 	var jobs := {}
 	for v in village.people():
 		jobs[v.job] = jobs.get(v.job, 0) + 1
 	print("  jobs %s" % jobs)
+	_check(not jobs.has("food"), "food is gathered only from crop fields (no foraging)")
+	_check(village.resources.lumber >= 0.0 and is_equal_approx(Balance.num("start_lumber"), Balance.values.get("start_lumber", 100.0)), "the village starts with balancing.txt's resources")
 	for res in ["lumber", "stone", "magicko"]:
 		_check(village.resources[res] > before[res], "%s is gathered (%.1f -> %.1f)" % [res, before[res], village.resources[res]])
 	# (Food is eaten as fast as it comes in while a child is born every 5
@@ -178,14 +183,23 @@ func _run() -> void:
 		var animus_then := village.amount("animus")
 		_check(village.start_spell_research("gnomes") == "" and village.amount("animus") == animus_then - 1,
 			"the first spell costs 1 animus to research")
-		_check(village.start_spell_research("rain") != "", "one spell at a time")
-		village.spell_research.t = SpellBook.research_seconds("gnomes") - 0.5
+		_check(village.start_spell_research("rain") != "", "one spell at a time for one Shrine")
+		village.spell_job("gnomes").t = SpellBook.research_seconds("gnomes") - 0.5
 		await _wait(1.0)
 		_check(village.knows_spell("gnomes") and not village.knows_spell("rain") and village.spell_at(0) == "gnomes"
 			and play.hud._spell_slot_of[gnomes] == 0, "the Shrine teaches the spell, and it appears on the spell bar")
 		animus_then = village.amount("animus")
 		_check(village.start_spell_research("rain") == "" and village.amount("animus") == animus_then - 2, "the next spell costs 2 animus")
-		village.spell_research = {}
+		var shrine_2 := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
+		game.world_root.add_child(shrine_2)
+		shrine_2.global_position = village.center + Vector3(-16, 0, 12)
+		shrine_2.add_to_group("player_buildings")
+		_check(village.start_spell_research("roots") == "" and village.spell_jobs.size() == 2 and village.start_spell_research("lightning") != "",
+			"two Shrines research two spells at once (and no more)")
+		await _wait(1.0)
+		_check(village.spell_job("rain").t > 0.5 and village.spell_job("roots").t > 0.5, "both at the same time")
+		village.spell_jobs.clear()
+		shrine_2.queue_free()
 		village.learn_all_spells()
 		play.hud.set_spell_slots(village.spell_slots)
 		_check(village.knows_spell("rain") and village.knows_spell("charm") and village.spell_at(0) == "gnomes" and village.spell_at(1) != "",
@@ -419,6 +433,10 @@ func _run() -> void:
 	var fed := village.population()
 	await _wait(1.0)
 	_check(village.next_birth_in() < 0.0, "no births without food")
+	_check(get_tree().get_nodes_in_group("food_warnings").size() == 1 and not play.hud._warning.text.contains("food"),
+		"\"Out of food\" floats up over the Storehouse, not in the village panel")
+	await _wait(5.5)
+	_check(get_tree().get_nodes_in_group("food_warnings").size() == 0, "and not again within %d seconds" % Balance.num("food_warning_seconds"))
 	for k in 12:
 		await _wait(15.0)
 		village.resources.food = minf(village.resources.food, 0.0)
@@ -508,7 +526,7 @@ func _run() -> void:
 	game.world_root.add_child(wet)
 	wet.cast(field.global_position)
 	await _wait(10.0)
-	_check(field.stage != CropField.Stage.GROWING or field.progress > 10.0 / CropField.GROW_SECONDS * 1.8, "rain speeds up the wheat (%.2f)" % field.progress)
+	_check(field.stage != CropField.Stage.GROWING or field.progress > 10.0 / Balance.num("crop_grow_seconds") * 1.8, "rain speeds up the wheat (%.2f)" % field.progress)
 
 	# The creature: full grown by now; it eats, and can be knocked out.
 	var beast := play.creature
@@ -593,12 +611,12 @@ func _run() -> void:
 	_check(village.max_count("archer") == 0, "no archers before bows")
 	_check(village.start_research("bows") == "", "bows can be researched")
 	_check(village.start_research("axes_1") != "", "one research at a time")
-	village.research.t = Research.find("bows").seconds - 2.0
+	village.research_job("bows").t = Research.find("bows").seconds - 2.0
 	await _wait(4.0)
 	_check(village.has_research("bows") and village.max_count("archer") >= PlayerVillage.ARCHERS_PER_GUARD,
 		"bows allow 2 archers per Town guard (%d allowed)" % village.max_count("archer"))
 	_check(is_equal_approx(Research.find("swords").seconds, 300.0), "sharper swords take 5 minutes")
-	_check(village.start_research("picks_2") != "" or village.research.get("id", "") != "", "a tool's second tier waits for its first")
+	_check(village.start_research("picks_2") != "" or not village.researching("smith").is_empty(), "a tool's second tier waits for its first")
 	play.hud.show_research_menu(true, "smith")
 	var tier_rows: Dictionary = play.hud._research_rows
 	_check(tier_rows.pitchforks_1.row.visible and not tier_rows.pitchforks_2.row.visible and not tier_rows.pitchforks_3.row.visible,
@@ -607,7 +625,8 @@ func _run() -> void:
 		for res in ["lumber", "stone", "food"]:
 			village.give(res, 300.0)
 		village.start_research(id)
-		village.research.t = Research.find(id).seconds - 0.5
+		if not village.research_job(id).is_empty():
+			village.research_job(id).t = Research.find(id).seconds - 0.5
 		await _wait(1.5)
 	play.hud.update_research(village)
 	_check(tier_rows.pitchforks_2.row.visible and not tier_rows.pitchforks_3.row.visible, "and shows it once that one is done")
@@ -617,11 +636,27 @@ func _run() -> void:
 		for res in ["lumber", "stone", "food"]:
 			village.give(res, 300.0)
 		village.start_research(id)
-		village.research.t = Research.find(id).seconds - 0.5
+		if not village.research_job(id).is_empty():
+			village.research_job(id).t = Research.find(id).seconds - 0.5
 		await _wait(1.5)
 	_check(village.has_research("swords") and absf(village.tool_bonus("food") - 1.5) < 0.01
 		and absf(village.tool_bonus("stone") - 1.5) < 0.01 and absf(village.tool_bonus("lumber") - 1.5) < 0.01,
 		"swords researched, and all three tool tiers: 50%% faster (%.3f)" % village.tool_bonus("food"))
+	# Two Blacksmiths research two things at once.
+	var smithy_2 := BuildingFactory.create("blacksmith", RandomNumberGenerator.new())
+	game.world_root.add_child(smithy_2)
+	smithy_2.global_position = village.center + Vector3(-22, 0, -14)
+	smithy_2.add_to_group("player_buildings")
+	village.researched.erase("swords")
+	village.researched.erase("bows")
+	for res in ["lumber", "stone", "food"]:
+		village.give(res, 600.0)
+	_check(village.start_research("swords") == "" and village.start_research("bows") == "" and village.researching("smith").size() == 2,
+		"two Blacksmiths research two things at once")
+	village.researching("smith").clear()
+	village.researched["swords"] = true
+	village.researched["bows"] = true
+	smithy_2.queue_free()
 	# Overcast is researched at a Wizardry tower (see the spells' checks).
 	_check(Research.find("overcast").place == "wizard" and Research.find("overcast").cost.get("animus", 0) == 10, "Overcast is researched at the Wizardry tower for 10 animus")
 	village.set_wanted("archer", 1)
@@ -1089,6 +1124,20 @@ func _run() -> void:
 	kid._age = 1.0e9
 	await _wait(2.0)
 	_check(kid.is_adult() and kid._hover > 0.3 and village.fey_adults() >= 1, "and grows up flying (%.1f m up)" % kid._hover)
+	var kid_was := [kid.state, kid._working, kid.job]
+	kid.state = Villager.State.JOB
+	kid._working = true
+	kid.job = "lumber"
+	for k in 5:
+		kid._update_fey(1.0)
+	var gathering_at := kid._hover
+	kid.job = "build"
+	for k in 5:
+		kid._update_fey(1.0)
+	_check(gathering_at < 0.05 and kid._hover > 1.5, "fey fly unless they are gathering (%.1f m gathering, %.1f m building)" % [gathering_at, kid._hover])
+	kid.state = kid_was[0]
+	kid._working = kid_was[1]
+	kid.job = kid_was[2]
 	village.fey_until = 0.0
 	# Fey Archers: as many as there are winged villagers, once archers can be trained.
 	_check(village.max_count("fey_archer") == village.fey_adults(), "Fey Archers: as many as there are winged villagers (%d)" % village.max_count("fey_archer"))
@@ -1224,12 +1273,21 @@ func _run() -> void:
 	play._cooldowns[fire_k] = SpellBook.cooldown("fireball")
 	village.researched.erase("overcast")
 	_check(not play.spell_ready(fire_k), "a spell cannot be cast while it cools down")
+	play._update_ui()
+	_check(play.spell_cost(fire_k) == fire_cost and play.spell_state(fire_k) == 1 and play.hud._spell_fills[fire_k].left > 0.9
+		and play.hud._spell_costs[fire_k].get_theme_color("font_color") == Hud.COST_COOLING,
+		"cooling down, without Overcast: the same cost in red, and the icon fills from the bottom")
 	village.researched["overcast"] = true
 	play._cooldowns[fire_k] = SpellBook.cooldown("fireball") - 1.0
 	_check(play.spell_ready(fire_k) and play.spell_cost(fire_k) == fire_cost * 2, "with Overcast it can, for twice the magicko (%d)" % play.spell_cost(fire_k))
+	play._update_ui()
+	_check(play.spell_state(fire_k) == 2 and play.hud._spell_costs[fire_k].get_theme_color("font_color") == Hud.COST_OVERCAST
+		and play.hud._spell_sparkles[fire_k].amount > 0.0, "the cost shows blue, with sparkles, while Overcast can cast it")
 	village.give("magicko", 1000.0, false)
 	play._pay_for(fire_k)
 	_check(not play.spell_ready(fire_k), "but only once in each cooldown")
+	play._update_ui()
+	_check(play.spell_state(fire_k) == 1 and play.hud._spell_sparkles[fire_k].amount == 0.0, "then it turns red and the sparkles go")
 	play._cooldowns[fire_k] = 0.0
 	play._overcast_used[fire_k] = false
 

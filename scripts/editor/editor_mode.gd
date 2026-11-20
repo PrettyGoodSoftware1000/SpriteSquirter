@@ -32,7 +32,7 @@ const TOOL_HINTS := [
 	"Click or hold to place rocks. Rocks give stone.",
 	"Hold left mouse to remove trees, rocks, start locations and caves inside the brush.",
 	"Click on low ground and drag into a hill: everything under the brush is sliced down to the height where you clicked, leaving a sheer cliff nobody can climb.",
-	"Draw the way the goblins take: hold left mouse from a goblin cave and drag to a start location (or the other way). A cave and a start can have several paths. Shift+click a path to remove it.",
+	"Draw the way the goblins take: hold left mouse from a goblin cave and drag to a start location (or the other way). A cave and a start can have several paths. Right-click (or Shift+click) a path to remove it.",
 ]
 ## The colours of the goblin paths, in turn.
 const PATH_COLORS := [Color(1.0, 0.3, 0.25), Color(0.3, 0.7, 1.0), Color(1.0, 0.85, 0.2), Color(0.5, 1.0, 0.4), Color(1.0, 0.45, 0.9),
@@ -194,6 +194,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().gui_release_focus()
 	if button and button.pressed and button.button_index == MOUSE_BUTTON_LEFT and _cursor_hit != null:
 		_on_click(_cursor_hit)
+	elif button and button.pressed and button.button_index == MOUSE_BUTTON_RIGHT and tool == Tool.PATH and _cursor_hit != null:
+		# Right-click a goblin path to remove it.
+		_begin_undo()
+		_remove_path(_cursor_hit)
 
 
 func _set_tool(t: Tool) -> void:

@@ -191,6 +191,14 @@ stage.
 - 12-hour clock (4:00 pm, not 16:00)
 - "Goblin Spawn Rate" in the dev menu; goblin spawn rate charts
 
+## Version 0.30: Fields, research per building, cooldown bars ✅
+- "Out of food" floats over the Storehouse (every 45 s at most)
+- Right-click removes a goblin path in the editor
+- Start with 100 of each resource; food only from crop fields; crops grow at a quarter of the speed
+- Cooldowns show as a rising band over the spell; cost red while cooling, blue (doubled, sparkling) while Overcast can cast it
+- One research per Shrine, per Blacksmith and per Wizardry tower at a time
+- Fey fly everywhere and land only to gather
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

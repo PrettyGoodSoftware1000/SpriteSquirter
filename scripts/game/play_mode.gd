@@ -649,10 +649,25 @@ func spell_ready(index: int) -> bool:
 		and SpellBook.cooldown(SpellBook.SPELLS[index].id) - _cooldowns[index] >= SPELL_DEBOUNCE
 
 
+## True while spell `index` cools down but Overcast can still cast it
+## (once each cooldown, for twice the magicko).
+func overcast_open(index: int) -> bool:
+	return _cooldowns[index] > 0.0 and village.has_research("overcast") and not _overcast_used[index]
+
+
 ## What a spell costs in magicko right now: twice as much to overcast it.
+## (Cooling without Overcast it costs what it always does, shown red.)
 func spell_cost(index: int) -> int:
 	var base := SpellBook.cost(SpellBook.SPELLS[index].id)
-	return base * (2 if _cooldowns[index] > 0.0 else 1)
+	return base * (2 if overcast_open(index) else 1)
+
+
+## How the spell bar shows spell `index`: 0 ready, 1 cooling (red cost),
+## 2 cooling but Overcast can cast it (blue cost, sparkles).
+func spell_state(index: int) -> int:
+	if _cooldowns[index] <= 0.0:
+		return 0
+	return 2 if overcast_open(index) else 1
 
 
 ## Says why a spell cannot be cast yet. False if it can.
@@ -1412,11 +1427,13 @@ func _update_ring() -> void:
 func _update_ui() -> void:
 	hud.set_resources(village, day_cycle.clock_text() if not _choosing else "")
 	var costs: Array[int] = []
-	var extras: Array[float] = []
+	var cooling: Array[float] = []
+	var states: Array[int] = []
 	for k in SpellBook.SPELLS.size():
 		costs.append(spell_cost(k))
-		extras.append(cooling_share(k) * SpellSparkles.FULL)
-	hud.update_spells(village.amount("magicko"), costs, extras, not _choosing)
+		cooling.append(cooling_share(k))
+		states.append(spell_state(k))
+	hud.update_spells(village.amount("magicko"), costs, cooling, states, not _choosing)
 	hud.update_creature(creature)
 	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():

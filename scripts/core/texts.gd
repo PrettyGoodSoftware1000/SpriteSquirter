@@ -26,6 +26,9 @@ const DEFAULTS := {
 	"research_done": "The Blacksmith has finished: {research}.",
 	"spell_researched": "The Shrine has taught you a new spell: {spell}.",
 	"spell_unlocked": "Your {creature} has grown: you can now cast {spell}.",
+	# Floats up over the Storehouse (no oftener than Balance "food_warning_seconds").
+	"out_of_food": "Out of food! No births, and people will starve",
+	"starving": "Starving!",
 	"fey_birthing": "The fey are about: children come twice as fast, and every one is born a girl with wings.",
 	"creature_died": "The {creature} has died! Bring it back to life at a Shrine for {animus} animus.",
 	"creature_resurrected": "The {creature} lives again!",

@@ -16,7 +16,7 @@ const LUMBER_PER_M2 := 0.1
 const SPACING := 0.8
 const SOW_SECONDS := 0.2
 const REAP_SECONDS := 0.25
-const GROW_SECONDS := 50.0
+## How long sown wheat takes to ripen by itself: Balance "crop_grow_seconds".
 ## Rained-on wheat grows this many times faster, while it is wet.
 const WET_GROWTH := 3.0
 ## Food from one square metre of ripe wheat at the default food rate.
@@ -176,7 +176,7 @@ func _process(delta: float) -> void:
 	_wet = maxf(0.0, _wet - delta)
 	if stage != Stage.GROWING:
 		return
-	progress += delta / GROW_SECONDS * (WET_GROWTH if _wet > 0.0 else 1.0)
+	progress += delta / maxf(1.0, Balance.num("crop_grow_seconds")) * (WET_GROWTH if _wet > 0.0 else 1.0)
 	if progress >= 1.0:
 		stage = Stage.RIPE
 		progress = 0.0

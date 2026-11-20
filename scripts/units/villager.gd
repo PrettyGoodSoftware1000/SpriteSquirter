@@ -1423,7 +1423,8 @@ func _update_fey(delta: float) -> void:
 		var side := 1.0 if k % 2 == 0 else -1.0
 		var beat := sin(_wing_phase + (0.0 if front else PI))
 		_wings[k].rotation.z = side * (0.35 * beat + (0.15 if front else -0.25))
-	var want := 0.7 + 0.12 * sin(_wing_phase * 0.11)
+	# Fey fly everywhere, well off the ground, and land only to gather.
+	var want := 2.2 + 0.25 * sin(_wing_phase * 0.11)
 	if fey_archer:
 		_land_timer -= delta
 		if _land_timer <= 0.0:
@@ -1434,8 +1435,8 @@ func _update_fey(delta: float) -> void:
 		want = 0.0 if _landed else 3.5 + 0.5 * sin(_wing_phase * 0.07)
 		if _fey_dust:
 			_fey_dust.emitting = not _landed and fmod(_wing_phase * 0.05, 3.0) < 1.2
-	elif state == State.JOB and _working:
-		want = 0.25
+	elif state == State.JOB and _working and job in ["lumber", "stone", "food", "farm"]:
+		want = 0.0
 	_hover = move_toward(_hover, want, delta * 2.0)
 
 

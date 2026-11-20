@@ -102,6 +102,11 @@ var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_costs: Array[Label] = []
 var _spell_sparkles: Array[SpellSparkles] = []
+var _spell_fills: Array[CooldownFill] = []
+## Spell costs: red while it cools down and cannot be cast, blue while
+## Overcast can cast it on its cooldown (for twice the magicko).
+const COST_COOLING := Color(1.0, 0.38, 0.32)
+const COST_OVERCAST := Color(0.45, 0.72, 1.0)
 ## Each spell's square and cost (shown only once it is known, in
 ## the village's order), and the key number in its corner.
 var _spell_slots: Array[Control] = []
@@ -436,8 +441,9 @@ func _build_spell_bar(root: Control) -> void:
 		key.add_theme_constant_override("outline_size", 3)
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(key)
+		var fill := CooldownFill.new()
+		b.add_child(fill)
 		var sparkles := SpellSparkles.new()
-		b.add_child(sparkles)
 		b.pressed.connect(func() -> void: spell_selected.emit(k))
 		b.mouse_entered.connect(func() -> void: spell_hovered.emit(k))
 		b.mouse_exited.connect(func() -> void: spell_hovered.emit(-1))
@@ -447,11 +453,15 @@ func _build_spell_bar(root: Control) -> void:
 			var cost_row := ResourceIcon.cost_row({"magicko": SpellBook.cost(spell.id)}, 12)
 			cost_label = cost_row.get_child(0) as Label
 			slot.add_child(cost_row)
+			# Blue sparkles by the number while Overcast can cast it on cooldown.
+			cost_label.add_child(sparkles)
 		else:
 			slot.add_child(_text("free", 12))
+			b.add_child(sparkles)
 		_spell_buttons.append(b)
 		_spell_costs.append(cost_label)
 		_spell_sparkles.append(sparkles)
+		_spell_fills.append(fill)
 		_spell_slots.append(slot)
 		_spell_keys.append(key)
 		_spell_slot_of.append(-1)
@@ -707,7 +717,7 @@ func show_research_menu(shown: bool, place := "") -> void:
 	_research_panel.visible = shown
 	if place != "":
 		_research_place = place
-	_research_heading.text = "%s: research, one thing at a time  (Esc to close)" % BuildingCatalog.role_name(_research_place)
+	_research_heading.text = "%s: research, one thing at a time for each %s  (Esc to close)" % [BuildingCatalog.role_name(_research_place), BuildingCatalog.role_name(_research_place)]
 	if is_instance_valid(Game.village):
 		update_research(Game.village)
 
@@ -728,7 +738,7 @@ func update_research(village: PlayerVillage) -> void:
 			continue
 		var b := row.button as Button
 		var done := village.has_research(item.id)
-		var running: bool = village.research_at(item.place).get("id", "") == item.id
+		var running: bool = not village.research_job(item.id).is_empty()
 		var progress := village.research_progress(item.id)
 		(row.bar as ProgressBar).value = progress
 		(row.bar as ProgressBar).visible = running
@@ -821,12 +831,13 @@ func is_spell_research_open() -> bool:
 
 func update_spell_research(village: PlayerVillage) -> void:
 	var cost: int = village.spell_research_cost().get("animus", 0)
-	_spell_research_title.text = "%s: research spells. The next costs %d animus (you have %d)." % [_spell_research_place, cost, village.amount("animus")]
+	_spell_research_title.text = "%s: research spells, one at a time for each %s (%d at once). The next costs %d animus (you have %d)." % [
+		_spell_research_place, BuildingCatalog.role_name("shrine"), maxi(1, village.shrines().size()), cost, village.amount("animus")]
 	for id: String in _spell_research_rows:
 		var row: Dictionary = _spell_research_rows[id]
 		var b := row.button as Button
 		var done := village.knows_spell(id)
-		var running: bool = village.spell_research.get("id", "") == id
+		var running: bool = not village.spell_job(id).is_empty()
 		var progress := village.spell_research_progress(id)
 		(row.bar as ProgressBar).value = progress
 		(row.bar as ProgressBar).visible = running
@@ -1048,9 +1059,8 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 	_clock.text = clock
 	var warning := ""
 	if village.founded:
-		if village.amount("food") <= 0:
-			warning = "Out of food! No births, and people will starve" if village.hungry_for < PlayerVillage.STARVE_AFTER else "Starving!"
-		elif village.population() >= village.housing():
+		# (Running out of food is said over the Storehouse: PlayerVillage._eat().)
+		if village.population() >= village.housing():
 			warning = "No room for more villagers: build a %s" % BuildingCatalog.role_name("home")
 	_warning.text = warning
 	_warning.visible = warning != ""
@@ -1128,21 +1138,30 @@ func _process(delta: float) -> void:
 	fall.chain().tween_callback(drop.queue_free)
 
 
-## `costs`: what each spell costs now. `extras`: the share more than usual
-## it costs for being cast recently, shown as blue sparkles.
 ## Shows spell `index` as the one in hand (-1: none).
 func set_spell(index: int) -> void:
 	for k in _spell_buttons.size():
 		_spell_buttons[k].set_pressed_no_signal(k == index)
 
 
-func update_spells(magicko: int, costs: Array[int], extras: Array[float], enabled: bool) -> void:
+## `costs`: what each spell costs now. `cooling`: the share of its
+## cooldown still to go (0: ready). `states`: 0 ready, 1 cooling (red
+## cost), 2 cooling but Overcast can cast it (blue cost and sparkles).
+func update_spells(magicko: int, costs: Array[int], cooling: Array[float], states: Array[int], enabled: bool) -> void:
 	for k in _spell_buttons.size():
 		var ready_now: bool = enabled and magicko >= costs[k]
 		_spell_buttons[k].modulate = Color.WHITE if ready_now else Color(1.0, 0.6, 0.6, 0.75)
+		_spell_fills[k].set_left(cooling[k])
 		if _spell_costs[k] != null:
 			_spell_costs[k].text = str(costs[k])
-		_spell_sparkles[k].set_extra(extras[k])
+			match states[k]:
+				1:
+					_spell_costs[k].add_theme_color_override("font_color", COST_COOLING)
+				2:
+					_spell_costs[k].add_theme_color_override("font_color", COST_OVERCAST)
+				_:
+					_spell_costs[k].remove_theme_color_override("font_color")
+		_spell_sparkles[k].set_extra(SpellSparkles.FULL * 0.5 if states[k] == 2 else 0.0)
 
 
 ## Puts each spell in its slot on the bar (`bar`: each slot's spell id, or

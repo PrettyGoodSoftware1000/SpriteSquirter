@@ -48,7 +48,7 @@ extends Node
 ## STARVE_EVERY seconds until there is food again.
 
 const RESOURCES := ["lumber", "stone", "food", "bones", "animus", "magicko"]
-const START_RESOURCES := {"lumber": 80.0, "stone": 50.0, "food": 40.0, "bones": 0.0, "animus": 0.0, "magicko": 30.0}
+const START_RESOURCES := {"lumber": 100.0, "stone": 100.0, "food": 100.0, "bones": 0.0, "animus": 0.0, "magicko": 30.0}
 ## What the Storehouses (and, for food, the Granaries) hold.
 const STORED := ["lumber", "stone", "food", "bones"]
 const HOME_RADIUS := 16.0
@@ -117,10 +117,10 @@ var fey_until := 0.0
 var _trysts := {}
 ## Finished research: id -> true.
 var researched := {}
-## The research under way at the Blacksmith, and at the Wizardry tower:
-## {"id": ..., "t": seconds done}, or empty.
-var research := {}
-var wizard_research := {}
+## The research under way at the Blacksmiths ("smith") and the Wizardry
+## towers ("wizard"): each a list of {"id": ..., "t": seconds done}, as
+## many at once as there are buildings of that kind.
+var research_jobs := {"smith": [], "wizard": []}
 ## Spells researched at the Shrine: id -> true.
 var spells_known := {}
 ## The spell bar: each slot's spell id, or "" (0-9 the first row, cast with
@@ -128,8 +128,9 @@ var spells_known := {}
 ## Shift). A spell learned goes where the player had it last game
 ## (SpellLayout), or else in the last spot, after the others.
 var spell_slots: Array[String] = []
-## The spell being researched at the Shrine: {"id": ..., "t": seconds done}, or empty.
-var spell_research := {}
+## The spells being researched at the Shrines: a list of {"id": ...,
+## "t": seconds done}, one for each Shrine at most.
+var spell_jobs: Array = []
 ## True once Wheelbarrows are researched: loads three times as big.
 var barrows := false
 ## How many villagers the player has set to each job (Villager.pin): the
@@ -160,6 +161,8 @@ var _army_timer := 0.0
 var _plant_due := 0.0
 var _planting := {}
 var _starve_timer := 0.0
+## When the out-of-food warning last floated up over the Storehouse.
+var _food_warned_at := -INF
 ## Training building -> {"v": the trainee, "t": seconds trained, "role": ...}
 var _training := {}
 
@@ -167,6 +170,9 @@ var _training := {}
 func _ready() -> void:
 	for res in RESOURCES:
 		resources[res] = START_RESOURCES[res]
+		# (The owner's starting amounts, from balancing.txt.)
+		if Balance.DEFAULTS.has("start_" + res):
+			resources[res] = Balance.num("start_" + res)
 
 
 ## Starts the village at `pos`. In a random world, `site` is the village
@@ -449,15 +455,27 @@ func tool_bonus(kind: String) -> float:
 
 
 ## The research under way at `place` ("smith" or "wizard").
-func research_at(place: String) -> Dictionary:
-	return wizard_research if place == "wizard" else research
+func researching(place: String) -> Array:
+	return research_jobs[place]
 
 
-func _set_research(place: String, value: Dictionary) -> void:
-	if place == "wizard":
-		wizard_research = value
-	else:
-		research = value
+## How many things `place` can research at once: one for each of its
+## buildings that stands.
+func research_slots(place: String) -> int:
+	var count := 0
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		if BuildingCatalog.role(node.get_meta("kind", "")) == place and not (node as Destructible).destroyed:
+			count += 1
+	return count
+
+
+## The research job for `id` under way ({"id", "t"}), or empty.
+func research_job(id: String) -> Dictionary:
+	for place: String in research_jobs:
+		for job: Dictionary in research_jobs[place]:
+			if job.id == id:
+				return job
+	return {}
 
 
 ## Starts researching. Returns why it can't, or "" if it began.
@@ -465,19 +483,20 @@ func start_research(id: String) -> String:
 	var item := Research.find(id)
 	if item.is_empty() or has_research(id):
 		return "That is already researched."
+	if not research_job(id).is_empty():
+		return "That is being researched."
 	var place: String = item.place
 	if not has_role(place):
 		return "Research needs a %s: build one first." % BuildingCatalog.role_name(place)
 	if item.has("needs") and not has_research(item.needs):
 		return "Research %s first." % Research.find(item.needs).name
-	var busy := research_at(place)
-	if not busy.is_empty():
-		return "The %s is busy with %s." % [BuildingCatalog.role_name(place), (Research.find(busy.id).name as String).to_lower()]
+	if researching(place).size() >= research_slots(place):
+		return "Every %s is busy: build another to research more at once." % BuildingCatalog.role_name(place)
 	var short := shortfall(item.cost)
 	if short != "":
 		return "Need %s more." % short
 	spend(item.cost)
-	_set_research(place, {"id": id, "t": 0.0})
+	researching(place).append({"id": id, "t": 0.0})
 	return ""
 
 
@@ -485,31 +504,33 @@ func start_research(id: String) -> String:
 func research_progress(id: String) -> float:
 	if has_research(id):
 		return 1.0
-	var item := Research.find(id)
-	var busy := research_at(item.get("place", "smith"))
-	if busy.get("id", "") == id:
-		return clampf(busy.t / item.seconds, 0.0, 1.0)
+	var job := research_job(id)
+	if not job.is_empty():
+		return clampf(job.t / Research.find(id).seconds, 0.0, 1.0)
 	return 0.0
 
 
-## Research goes on at each place while a building for it stands.
+## Research goes on at each place, one thing for each building that stands.
 func _update_research(delta: float) -> void:
-	for place: String in ["smith", "wizard"]:
-		var busy := research_at(place)
-		if busy.is_empty() or not has_role(place):
-			continue
-		busy.t += delta
-		var id: String = busy.id
-		if busy.t < Research.find(id).seconds:
-			continue
-		_set_research(place, {})
-		researched[id] = true
-		if id == "swords":
-			for v in people():
-				v.sharpen()
-		if id == "wheelbarrows":
-			barrows = true
-		research_done.emit(id)
+	for place: String in research_jobs:
+		var jobs: Array = research_jobs[place]
+		var slots := research_slots(place)
+		for job: Dictionary in jobs.duplicate():
+			if slots <= 0:
+				break
+			slots -= 1
+			job.t += delta
+			var id: String = job.id
+			if job.t < Research.find(id).seconds:
+				continue
+			jobs.erase(job)
+			researched[id] = true
+			if id == "swords":
+				for v in people():
+					v.sharpen()
+			if id == "wheelbarrows":
+				barrows = true
+			research_done.emit(id)
 
 
 # --- Spells researched at the Shrine (the Singing rocks) ------------------------
@@ -520,8 +541,8 @@ func knows_spell(id: String) -> bool:
 	return spells_known.has(id)
 
 
-## Starts researching spell `id` at the Shrine. Returns why it can't, or
-## "" if it began. One spell at a time, paid for up front.
+## Starts researching spell `id` at a Shrine. Returns why it can't, or
+## "" if it began. One spell for each Shrine at a time, paid for up front.
 func start_spell_research(id: String) -> String:
 	if knows_spell(id):
 		return "You know that spell already."
@@ -529,46 +550,61 @@ func start_spell_research(id: String) -> String:
 		return "That spell comes as your creature grows."
 	if shrines().is_empty():
 		return "Spells are researched at the %s: build one first." % BuildingCatalog.role_name("shrine")
-	if not spell_research.is_empty():
-		return "The %s is busy with %s." % [BuildingCatalog.role_name("shrine"), SpellBook.find(spell_research.id).name]
+	if not spell_job(id).is_empty():
+		return "That spell is being researched."
+	if spell_jobs.size() >= shrines().size():
+		return "Every %s is busy: build another to research more spells at once." % BuildingCatalog.role_name("shrine")
 	var cost := spell_research_cost()
 	var short := shortfall(cost)
 	if short != "":
 		return "Need %s more." % short
 	spend(cost)
-	spell_research = {"id": id, "t": 0.0}
+	spell_jobs.append({"id": id, "t": 0.0})
 	return ""
 
 
-## What the next spell costs to research (see SpellBook.research_cost()).
+## The research of spell `id` under way ({"id", "t"}), or empty.
+func spell_job(id: String) -> Dictionary:
+	for job: Dictionary in spell_jobs:
+		if job.id == id:
+			return job
+	return {}
+
+
+## What the next spell costs to research (see SpellBook.research_cost()):
+## spells being researched count as known.
 func spell_research_cost() -> Dictionary:
-	var researched := 0
+	var researched := spell_jobs.size()
 	for id: String in spells_known:
 		if SpellBook.needs_research(id):
 			researched += 1
 	return SpellBook.research_cost(researched)
 
 
-## 0..1 for the spell being researched, 1 for one known, else 0.
+## 0..1 for a spell being researched, 1 for one known, else 0.
 func spell_research_progress(id: String) -> float:
 	if knows_spell(id):
 		return 1.0
-	if spell_research.get("id", "") == id:
-		return clampf(spell_research.t / maxf(0.01, SpellBook.research_seconds(id)), 0.0, 1.0)
+	var job := spell_job(id)
+	if not job.is_empty():
+		return clampf(job.t / maxf(0.01, SpellBook.research_seconds(id)), 0.0, 1.0)
 	return 0.0
 
 
-## Research goes on while a Shrine stands.
+## Research goes on at the Shrines, one spell for each that stands.
 func _update_spell_research(delta: float) -> void:
-	if spell_research.is_empty() or shrines().is_empty():
-		return
-	spell_research.t += delta
-	var id: String = spell_research.id
-	if spell_research.t < SpellBook.research_seconds(id):
-		return
-	spell_research = {}
-	_learn_spell(id)
-	spell_researched.emit(id)
+	var slots := shrines().size()
+	for job: Dictionary in spell_jobs.duplicate():
+		if slots <= 0:
+			break
+		slots -= 1
+		job.t += delta
+		var id: String = job.id
+		if job.t < SpellBook.research_seconds(id):
+			continue
+		spell_jobs.erase(job)
+		_learn_spell(id)
+		spell_researched.emit(id)
 
 
 func _learn_spell(id: String) -> void:
@@ -704,7 +740,7 @@ func _tryst(v: Villager, delta: float) -> void:
 func learn_all_spells() -> void:
 	for spell in SpellBook.SPELLS:
 		_learn_spell(spell.id)
-	spell_research = {}
+	spell_jobs.clear()
 
 
 ## Food the creature eats per minute: its full appetite once grown, in
@@ -1029,6 +1065,9 @@ func _eat(delta: float) -> void:
 		return
 	resources.food = 0.0
 	hungry_for += delta
+	if founded and Game.now >= _food_warned_at + Balance.num("food_warning_seconds"):
+		_food_warned_at = Game.now
+		_float_over_storehouse(Texts.line("out_of_food" if hungry_for < STARVE_AFTER else "starving"))
 	if hungry_for < STARVE_AFTER:
 		return
 	_starve_timer -= delta
@@ -1037,6 +1076,37 @@ func _eat(delta: float) -> void:
 		var all := people()
 		if not all.is_empty():
 			all[randi() % all.size()].starve()
+
+
+## A line of text floats up from the Storehouse (the nearest to the
+## middle of the village), or from the middle if there is none.
+func _float_over_storehouse(text: String) -> void:
+	var at := center
+	var high := 6.0
+	var best := INF
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if b != null and not b.destroyed and BuildingCatalog.role(b.get_meta("kind", "")) == "store" and b.global_position.distance_to(center) < best:
+			best = b.global_position.distance_to(center)
+			at = b.global_position
+			high = b.height
+	var label := Label3D.new()
+	label.text = text
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.fixed_size = true
+	label.pixel_size = 0.0011
+	label.font_size = 26
+	label.outline_size = 10
+	label.modulate = Color(1.0, 0.55, 0.4)
+	label.add_to_group("food_warnings")
+	Game.effects.add_child(label)
+	label.global_position = at + Vector3.UP * (high + 1.5)
+	var tw := label.create_tween()
+	tw.tween_property(label, "position:y", 4.0, 5.0).as_relative()
+	tw.parallel().tween_property(label, "modulate:a", 0.0, 1.5).set_delay(3.5)
+	tw.parallel().tween_property(label, "outline_modulate:a", 0.0, 1.5).set_delay(3.5)
+	tw.tween_callback(label.queue_free)
 
 
 func _spawn_child() -> Villager:
@@ -1190,6 +1260,7 @@ func _assign_jobs() -> void:
 				per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
 		elif v.job == "farm" and is_instance_valid(v.job_target):
 			farmers[v.job_target] = farmers.get(v.job_target, 0) + 1
+			per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
 			farming += 1
 	# The villagers the player set to a job keep to it.
 	for v in workers:
@@ -1357,14 +1428,23 @@ func _nearest_wizard(to: Vector3) -> Villager:
 func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
 	match kind:
 		"food":
-			for attempt in 8:
-				var a := randf() * TAU
-				var d := randf_range(8.0, 22.0)
-				var p := center + Vector3(cos(a) * d, 0.0, sin(a) * d)
-				var t := Game.terrain
-				if t.is_dry(p.x, p.z) and t.get_normal(p.x, p.z).y > 0.85:
-					v.assign_job("food", p, self)
-					return true
+			# Food comes only from crop fields: sowing or reaping the one
+			# that has the fewest hands on it (nothing while all are growing).
+			var best: CropField = null
+			var fewest := 1 << 30
+			for node in get_tree().get_nodes_in_group("fields"):
+				var field := node as CropField
+				if field == null or not field.needs_work():
+					continue
+				var on: int = per_target.get(field, 0)
+				if on < fewest:
+					fewest = on
+					best = field
+			if best == null:
+				return false
+			v.assign_job("farm", best.work_spot(), best)
+			per_target[best] = fewest + 1
+			return true
 		"lumber", "stone":
 			var target := _nearest_free(v.global_position, "trees" if kind == "lumber" else "rocks", per_target)
 			if target == null:

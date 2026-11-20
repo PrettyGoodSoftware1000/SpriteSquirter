@@ -107,6 +107,14 @@ cottage_housing = 3
 storehouse_housing = 25             # the Storehouse is a block of homes too
 start_villagers = 20                # villagers a new village starts with (on a map with no village site there)
 
+# --- What the village starts with --------------------------------------------
+start_lumber = 100
+start_stone = 100
+start_food = 100
+start_magicko = 100
+food_warning_seconds = 45           # "Out of food" floats up over the Storehouse no oftener than this
+crop_grow_seconds = 200             # how long sown wheat takes to ripen by itself (rain makes it faster)
+
 # --- Storage ------------------------------------------------------------------
 # What the village can keep. Lumber, stone, food and bones over the limit
 # are lost. Magicko and animus are not stored, so they have no limit.

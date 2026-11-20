@@ -1,8 +1,8 @@
 class_name SpellSparkles
 extends Control
-## Blue sparkles over a spell button. A spell cast recently costs more for a
-## while (see PlayMode.spell_cost), and the more it costs the bluer the
-## button and the more sparkles, up to FULL (300% more).
+## Blue sparkles by a spell's cost while Overcast can cast it on its
+## cooldown (see PlayMode.spell_state), and yellow ones over the creature's
+## portrait while it can grow. `amount` sets how many, up to FULL.
 
 const FULL := 3.0
 const MOST := 30

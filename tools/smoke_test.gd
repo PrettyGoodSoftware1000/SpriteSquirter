@@ -74,7 +74,7 @@ func _run() -> void:
 		if b.get_meta("kind", "") == "store" and (b as Node3D).global_position.distance_to(village.center) < 45.0:
 			free_store = true
 	_check(free_store, "a free Storehouse stands at the start location")
-	_check(BuildingCatalog.housing("store") == 25, "a Storehouse houses 25")
+	_check(BuildingCatalog.housing("store") == roundi(Balance.num("storehouse_housing")), "a Storehouse houses storehouse_housing (%d)" % BuildingCatalog.housing("store"))
 	# What the village can store, and what came in over the last minute.
 	var lumber_cap := village.capacity("lumber")
 	village.give("lumber", 5000.0)

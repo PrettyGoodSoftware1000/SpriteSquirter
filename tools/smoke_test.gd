@@ -914,6 +914,9 @@ func _run() -> void:
 	for node in get_tree().get_nodes_in_group("skeletons"):
 		node.queue_free()
 	await _wait(1.0)
+	# (No births meanwhile, so the count shows the one taken.)
+	var births_were: float = game.settings.birth_seconds
+	game.settings.birth_seconds = 1.0e9
 	var before_bat := village.population()
 	play.raids.raiding = true
 	var bat := play.raids.launch_bat()
@@ -928,6 +931,7 @@ func _run() -> void:
 				break
 		_check(taken[0] and village.population() == before_bat - 1, "it snatches a villager and takes it into the cave (%d -> %d, shot down %s)" % [
 			before_bat, village.population(), is_instance_valid(bat) and not bat.is_alive()])
+	game.settings.birth_seconds = births_were
 	var doomed := play.raids.launch_bat()
 	if doomed:
 		doomed.take_hit(Balance.num("bat_health") + 1.0, null)

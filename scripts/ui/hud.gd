@@ -68,6 +68,7 @@ const SETTING_SLIDERS := [
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 	["goblin_build_speed", "Goblin build speed", 0.25, 10.0, 0.25, "x"],
+	["crop_growth_rate", "Crop growth rate", 0.1, 5.0, 0.1, "x"],
 	["sapling_rate", "Saplings planted", 0.0, 20.0, 0.5, "a minute"],
 	["villager_detail", "Villager detail within", 0.0, 300.0, 10.0, "m"],
 	["construction_rate", "Construction rate", 0.25, 10.0, 0.25, "x"],
@@ -101,10 +102,13 @@ var _research_rows := {}
 var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_costs: Array[Label] = []
-var _spell_sparkles: Array[SpellSparkles] = []
+var _spell_sparkles: Array[CostBolts] = []
+## Each spell's state on the bar last time (see update_spells()).
+var _spell_states: Array[int] = []
 var _spell_fills: Array[CooldownFill] = []
-## Spell costs: red while it cools down and cannot be cast, blue while
-## Overcast can cast it on its cooldown (for twice the magicko).
+## Spell costs: red while it cools down and cannot be cast, blue (with red
+## lightning round it) while Overcast can cast it on its cooldown, for
+## twice the magicko.
 const COST_COOLING := Color(1.0, 0.38, 0.32)
 const COST_OVERCAST := Color(0.45, 0.72, 1.0)
 ## Each spell's square and cost (shown only once it is known, in
@@ -443,7 +447,7 @@ func _build_spell_bar(root: Control) -> void:
 		b.add_child(key)
 		var fill := CooldownFill.new()
 		b.add_child(fill)
-		var sparkles := SpellSparkles.new()
+		var sparkles := CostBolts.new()
 		b.pressed.connect(func() -> void: spell_selected.emit(k))
 		b.mouse_entered.connect(func() -> void: spell_hovered.emit(k))
 		b.mouse_exited.connect(func() -> void: spell_hovered.emit(-1))
@@ -453,7 +457,7 @@ func _build_spell_bar(root: Control) -> void:
 			var cost_row := ResourceIcon.cost_row({"magicko": SpellBook.cost(spell.id)}, 12)
 			cost_label = cost_row.get_child(0) as Label
 			slot.add_child(cost_row)
-			# Blue sparkles by the number while Overcast can cast it on cooldown.
+			# Red lightning round the number while Overcast can cast it on cooldown.
 			cost_label.add_child(sparkles)
 		else:
 			slot.add_child(_text("free", 12))
@@ -690,7 +694,7 @@ func _build_research_menu(root: Control) -> void:
 		var b := _button("")
 		b.custom_minimum_size = Vector2(330, 62)
 		var minutes: float = item.seconds / 60.0
-		var lines: Array[Control] = [_text(item.name, 12), _text("%s.  Takes %s min" % [item.desc, _number(minutes)], 12),
+		var lines: Array[Control] = [_text(item.name, 12), _text("%s.  Takes %s min" % [Research.describe(item), _number(minutes)], 12),
 			ResourceIcon.cost_row(item.cost, 12)]
 		b.add_child(_stacked(lines))
 		var id: String = item.id
@@ -726,14 +730,15 @@ func is_research_menu_open() -> bool:
 	return _research_panel.visible
 
 
-## Shows the research of the open menu's building, all but what is still
-## locked: an item with `needs` (a higher tier) stays out of sight until
-## the one it needs has been researched.
+## Shows the research of the open menu's building, all but what is
+## locked or done: an item with `needs` (a higher tier) stays out of sight
+## until the one it needs has been researched, and researched items leave
+## the menu.
 func update_research(village: PlayerVillage) -> void:
 	for item in Research.ITEMS:
 		var row: Dictionary = _research_rows[item.id]
 		var waiting: bool = item.has("needs") and not village.has_research(item.needs)
-		(row.row as Control).visible = item.place == _research_place and not waiting
+		(row.row as Control).visible = item.place == _research_place and not waiting and not village.has_research(item.id)
 		if not (row.row as Control).visible:
 			continue
 		var b := row.button as Button
@@ -807,9 +812,9 @@ func _build_spell_research_menu(root: Control) -> void:
 		bar.max_value = 1.0
 		bar.custom_minimum_size = Vector2(90, 8)
 		state.add_child(bar)
-		_spell_research_rows[id] = {"button": b, "status": status, "bar": bar}
+		_spell_research_rows[id] = {"button": b, "status": status, "bar": bar, "row": row}
 	var note := Label.new()
-	note.text = "Every spell is researched here, one at a time, before it appears on the spell bar.\nEach costs 1 animus more than the last. Drag the spells on the bar to put them where you like."
+	note.text = "Every spell is researched here (one at a time for each %s), before it appears on the spell bar. Known spells leave this list.\nEach costs 1 animus more than the last. Drag the spells on the bar to put them where you like." % BuildingCatalog.role_name("shrine")
 	note.add_theme_font_size_override("font_size", 12)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
@@ -837,6 +842,8 @@ func update_spell_research(village: PlayerVillage) -> void:
 		var row: Dictionary = _spell_research_rows[id]
 		var b := row.button as Button
 		var done := village.knows_spell(id)
+		# Spells already known leave the menu.
+		(row.row as Control).visible = not done
 		var running: bool = not village.spell_job(id).is_empty()
 		var progress := village.spell_research_progress(id)
 		(row.bar as ProgressBar).value = progress
@@ -1146,7 +1153,8 @@ func set_spell(index: int) -> void:
 
 ## `costs`: what each spell costs now. `cooling`: the share of its
 ## cooldown still to go (0: ready). `states`: 0 ready, 1 cooling (red
-## cost), 2 cooling but Overcast can cast it (blue cost and sparkles).
+## cost), 2 cooling but Overcast can cast it (lightning round the cost; it
+## bursts outwards when the spell is overcast).
 func update_spells(magicko: int, costs: Array[int], cooling: Array[float], states: Array[int], enabled: bool) -> void:
 	for k in _spell_buttons.size():
 		var ready_now: bool = enabled and magicko >= costs[k]
@@ -1161,7 +1169,12 @@ func update_spells(magicko: int, costs: Array[int], cooling: Array[float], state
 					_spell_costs[k].add_theme_color_override("font_color", COST_OVERCAST)
 				_:
 					_spell_costs[k].remove_theme_color_override("font_color")
-		_spell_sparkles[k].set_extra(SpellSparkles.FULL * 0.5 if states[k] == 2 else 0.0)
+		var was: int = _spell_states[k] if k < _spell_states.size() else 0
+		if was == 2 and states[k] == 1:
+			_spell_sparkles[k].burst()
+		else:
+			_spell_sparkles[k].set_active(states[k] == 2)
+	_spell_states = states.duplicate()
 
 
 ## Puts each spell in its slot on the bar (`bar`: each slot's spell id, or

@@ -41,6 +41,24 @@ const TOOLS := {"food": "pitchforks", "stone": "picks", "lumber": "axes"}
 const TIERS := 3
 
 
+## What the menu says an item does. A gathering tool's tier says how much
+## it adds to the base gathering speed, and where that leaves it.
+static func describe(item: Dictionary) -> String:
+	var id: String = item.id
+	for kind: String in TOOLS:
+		if id.begins_with(TOOLS[kind] + "_"):
+			var tier := int(id.get_slice("_", 1))
+			var bonus := Balance.num("tool_tier_bonus") * 100.0
+			return "+%s%% of base %s gathering speed (%s%% of base after this tier)" % [
+				_pct(bonus), kind, _pct(100.0 + bonus * tier)]
+	return item.desc
+
+
+static func _pct(value: float) -> String:
+	var text := "%.1f" % value
+	return text.trim_suffix(".0")
+
+
 static func find(id: String) -> Dictionary:
 	for item in ITEMS:
 		if item.id == id:

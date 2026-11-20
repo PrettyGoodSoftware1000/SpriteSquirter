@@ -199,6 +199,14 @@ stage.
 - One research per Shrine, per Blacksmith and per Wizardry tower at a time
 - Fey fly everywhere and land only to gather
 
+## Version 0.31: Bounce back, crop slider, lightning ✅
+- The owner's saved sliders are the defaults (10-minute day, Goblin Spawn Rate 0, goblin build speed 1)
+- Goblin population bounce back: under 5 goblins, 5 a minute until there are 6
+- Crop growth rate slider; a field shows how far it is to harvest under the mouse
+- Overcast: red lightning round the cost, bursting outwards when it is cast
+- Flying fey lean into their flight
+- Researched upgrades and known spells leave their menus; tool tiers say what they add
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

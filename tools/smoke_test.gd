@@ -23,6 +23,9 @@ func _run() -> void:
 	var game := Game
 	Engine.time_scale = 8.0
 	game.settings.birth_seconds = 5.0
+	# Goblins spawn and build as they used to, for the raid checks.
+	game.settings.goblin_rate = 2.0
+	game.settings.goblin_build_speed = 4.0
 	# The creature grows up in a few seconds and eats nothing, so the older
 	# checks see the full-grown creature and the food they expect.
 	game.settings.creature_grow_minutes = 0.1
@@ -105,6 +108,11 @@ func _run() -> void:
 	# (Checked after a minute: in two the field can be reaped and under the plough again.)
 	await _wait(60.0)
 	_check(field.stage != CropField.Stage.SOWING or field.progress > 0.3, "villagers sow the field (stage %d, %.2f)" % [field.stage, field.progress])
+	play._cursor_hit = field.global_position
+	play._hover_field()
+	_check(field._label != null and field._label.visible and field._label.text.contains("% to harvest") or field.stage == CropField.Stage.RIPE,
+		"the mouse over a field shows how far it is to harvest (%s)" % (field._label.text if field._label else "none"))
+	_check(Game.DEFAULT_SETTINGS.has("crop_growth_rate"), "a slider sets how fast crops grow")
 	# (Ripe at once: it takes crop_grow_seconds by itself.)
 	if field.stage == CropField.Stage.GROWING:
 		field.progress = 0.999
@@ -414,8 +422,27 @@ func _run() -> void:
 	play.creature.process_mode = Node.PROCESS_MODE_DISABLED
 	await _wait(11.0)
 	play.creature.process_mode = Node.PROCESS_MODE_INHERIT
-	game.settings.goblin_rate = Game.DEFAULT_SETTINGS.goblin_rate
+	game.settings.goblin_rate = 2.0
 	_check(get_tree().get_nodes_in_group("goblins").size() > before_goblins, "caves keep spawning goblins")
+	# Goblin population bounce back: with fewer than 5 left, the caves
+	# spawn 5 a minute until there are 6 again.
+	game.settings.goblin_rate = 0.0
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if not g.ogre:
+			g.remove_from_group("goblins")
+			g.queue_free()
+	play.creature.process_mode = Node.PROCESS_MODE_DISABLED
+	await _wait(1.0)
+	_check(play.raids.bouncing, "with fewer than %d goblins the goblin population bounces back" % roundi(Balance.num("goblin_bounce_below")))
+	for k in 12:
+		await _wait(10.0)
+		if not play.raids.bouncing:
+			break
+	_check(play.raids.goblin_count() >= roundi(Balance.num("goblin_bounce_until")) and not play.raids.bouncing,
+		"5 a minute until there are %d again (%d)" % [roundi(Balance.num("goblin_bounce_until")), play.raids.goblin_count()])
+	play.creature.process_mode = Node.PROCESS_MODE_INHERIT
+	game.settings.goblin_rate = 2.0
 
 	# Hunger: no births without food, then people starve. The wheat is held
 	# growing so no harvest comes in.
@@ -634,6 +661,12 @@ func _run() -> void:
 		await _wait(1.5)
 	play.hud.update_research(village)
 	_check(tier_rows.pitchforks_2.row.visible and not tier_rows.pitchforks_3.row.visible, "and shows it once that one is done")
+	_check(not tier_rows.pitchforks_1.row.visible and not tier_rows.swords.row.visible, "researched upgrades leave the menu")
+	_check(Research.describe(Research.find("picks_2")).contains("% of base stone gathering speed") and Research.describe(Research.find("picks_2")).contains(
+		Research._pct(100.0 + 2.0 * Balance.num("tool_tier_bonus") * 100.0) + "%"), "each tool tier says what it adds to the base speed (%s)" % Research.describe(Research.find("picks_2")))
+	play.hud.update_spell_research(village)
+	var known_row: Dictionary = play.hud._spell_research_rows.get("gnomes", {})
+	_check(not known_row.is_empty() and not (known_row.row as Control).visible, "known spells leave the Shrine's menu")
 	play.hud.show_research_menu(false)
 	_check(village.barrows and is_equal_approx(village.tool_bonus("stone"), 1.0 + Balance.num("tool_tier_bonus")), "wheelbarrows, and a tool's first tier")
 	for id: String in ["pitchforks_2", "pitchforks_3", "picks_2", "picks_3", "axes_2", "axes_3"]:
@@ -1146,6 +1179,10 @@ func _run() -> void:
 	kid.state = kid_was[0]
 	kid._working = kid_was[1]
 	kid.job = kid_was[2]
+	kid._moving = true
+	for k in 10:
+		kid._animate(0.2)
+	_check(kid._body.rotation.x > 0.4, "a flying fey leans forwards as she flies along (%.2f)" % kid._body.rotation.x)
 	village.fey_until = 0.0
 	# Fey Archers: as many as there are winged villagers, once archers can be trained.
 	_check(village.max_count("fey_archer") == village.fey_adults(), "Fey Archers: as many as there are winged villagers (%d)" % village.max_count("fey_archer"))
@@ -1173,9 +1210,9 @@ func _run() -> void:
 	await _wait(0.1)
 	_check(village._nearest_free(far_tree.global_position, "trees", {}) == far_tree, "there is no limit to how far lumberjacks go for wood")
 	far_tree.queue_free()
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 4.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 2.0)
-		and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "goblins build 4 times as fast; their spawning grows only with their buildings")
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 24.0) and play.day_cycle.clock_text().contains(":"), "a day is 24 minutes, a minute an hour (%s)" % play.day_cycle.clock_text())
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 1.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 0.0)
+		and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "the owner's sliders are the defaults: Goblin Spawn Rate 0, goblin build speed 1")
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 10.0) and play.day_cycle.clock_text().contains(":"), "a day is 10 minutes by default (%s)" % play.day_cycle.clock_text())
 	_check(DayCycle.twelve_hour(16.0) == "4:00 pm" and DayCycle.twelve_hour(0.5) == "12:30 am" and DayCycle.twelve_hour(12.25) == "12:15 pm"
 		and DayCycle.twelve_hour(9.0) == "9:00 am" and (play.day_cycle.clock_text().contains(" am (") or play.day_cycle.clock_text().contains(" pm (")),
 		"the clock is a 12-hour one (%s)" % play.day_cycle.clock_text())
@@ -1295,12 +1332,13 @@ func _run() -> void:
 	_check(play.spell_ready(fire_k) and play.spell_cost(fire_k) == fire_cost * 2, "with Overcast it can, for twice the magicko (%d)" % play.spell_cost(fire_k))
 	play._update_ui()
 	_check(play.spell_state(fire_k) == 2 and play.hud._spell_costs[fire_k].get_theme_color("font_color") == Hud.COST_OVERCAST
-		and play.hud._spell_sparkles[fire_k].amount > 0.0, "the cost shows blue, with sparkles, while Overcast can cast it")
+		and play.hud._spell_sparkles[fire_k].active, "the cost shows blue, with red lightning round it, while Overcast can cast it")
 	village.give("magicko", 1000.0, false)
 	play._pay_for(fire_k)
 	_check(not play.spell_ready(fire_k), "but only once in each cooldown")
 	play._update_ui()
-	_check(play.spell_state(fire_k) == 1 and play.hud._spell_sparkles[fire_k].amount == 0.0, "then it turns red and the sparkles go")
+	_check(play.spell_state(fire_k) == 1 and not play.hud._spell_sparkles[fire_k].active and play.hud._spell_sparkles[fire_k]._burst >= 0.0,
+		"overcast, it turns red and the lightning bursts outwards and goes")
 	play._cooldowns[fire_k] = 0.0
 	play._overcast_used[fire_k] = false
 

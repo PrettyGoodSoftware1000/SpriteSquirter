@@ -9,6 +9,7 @@ extends RefCounted
 const PATH := "res://balancing.txt"
 const DEFAULTS := {
 	"start_lumber": 100.0, "start_stone": 100.0, "start_food": 100.0, "start_magicko": 100.0,
+	"goblin_bounce_below": 5.0, "goblin_bounce_until": 6.0, "goblin_bounce_rate": 5.0,
 	"food_warning_seconds": 45.0, "crop_grow_seconds": 200.0,
 	"villager_health": 30.0, "villager_damage": 6.0, "villager_attack_seconds": 1.0,
 	"warrior_health": 120.0, "warrior_damage": 12.0, "sharper_swords_bonus": 1.5,

@@ -230,6 +230,7 @@ func _process(delta: float) -> void:
 	_cursor_hit = Game.pick_ground(get_viewport().get_mouse_position())
 	if _choosing:
 		_update_hover()
+	_hover_field()
 	if _prompt_timer > 0.0:
 		_prompt_timer -= delta
 		if _prompt_timer <= 0.0:
@@ -388,6 +389,26 @@ func _update_hover() -> void:
 		_hover = best
 		if _hover:
 			_hover.set_highlight(true)
+
+
+## The wheat field under the mouse shows how far along it is.
+var _field_hovered: CropField
+
+
+func _hover_field() -> void:
+	var over: CropField = null
+	if _cursor_hit != null and not get_viewport().gui_get_hovered_control():
+		for node in get_tree().get_nodes_in_group("fields"):
+			var field := node as CropField
+			if field != null and field.contains(_cursor_hit):
+				over = field
+				break
+	if over != _field_hovered:
+		if is_instance_valid(_field_hovered):
+			_field_hovered.show_progress(false)
+		_field_hovered = over
+	if over != null:
+		over.show_progress(true)
 
 
 ## Founds the village at a start location. In a random world each start is

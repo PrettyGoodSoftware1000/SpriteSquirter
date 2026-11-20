@@ -131,7 +131,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    and **Pitchforks**, **Mining picks** and **Axes** in three tiers each
    (food, stone or lumber gathered 50% faster after the third;
    `tool_tier_bonus` a tier; a tier shows in the menu once the one
-   before it is researched). Click a **Wizardry tower** for **Overcast**
+   before it is researched, says how much it adds to the base gathering
+   speed, and researched upgrades leave the menu). Click a **Wizardry tower** for **Overcast**
    (10 animus): any spell can be cast once while it cools down, for twice
    the magicko.
    Your first **Storehouse** is free: it appears on the start location
@@ -183,7 +184,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
 6. **Farm.** Pick **Wheat field** in the build menu, then hold the left
    mouse button and drag out a square on the ground (1 lumber per 10 m²).
    Villagers sow it, the wheat grows and turns gold (in 200 seconds,
-   `crop_grow_seconds`), and they reap it for food. Then they sow it again.
+   `crop_grow_seconds`, divided by the dev menu's crop growth rate), and
+   they reap it for food. Hold the mouse over a field to see how far along
+   it is (the share of the way to harvest). Then they sow it again.
    Fields are the only source of food.
 7. **Grow.** A tiny villager is born every *birth timer* seconds while there
    is housing (10, plus what your Homes add) and food. Children grow up in a minute
@@ -401,8 +404,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    cast again until it has. Meanwhile a see-through band rises over its
    square, reaching the top when it is ready, and its cost shows red. With
    Overcast it can be cast once during the cooldown for twice the magicko:
-   the cost shows doubled, in blue with blue sparkles, until it is
-   overcast, and then red. **Fireball** blows
+   the cost shows doubled, in blue with red lightning crackling round it,
+   until it is overcast; then the lightning bursts outwards and goes, and
+   the cost turns red. **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
    so it can't burn for a while (and makes wheat under the cloud grow three
    times as fast while it is wet), and **Roots** grows a glowing green patch
@@ -480,14 +484,14 @@ The version number is shown at the top of the dev menu.
 
 | Control | Action |
 |---|---|
-| Day length | Minutes for a whole day and night (24 by default: 16 of day and 8 of night; a minute is an hour on the 12-hour clock: dawn at 6:00 am, nightfall at 10:00 pm) |
+| Day length | Minutes for a whole day and night (10 by default: two thirds day, one third night; the 12-hour clock always runs dawn at 6:00 am to nightfall at 10:00 pm) |
 | Lumber / Stone / Food rate | Units each worker gathers per minute |
 | Birth timer | Seconds between new villagers |
 | Magicko rate | Magicko each grown-up worker adds per minute (wizards make 5) |
-| Goblin Spawn Rate | Goblins each starting cave spawns per minute before its buildings add more (each finished goblin building adds `goblin_rate_per_building`) |
+| Goblin Spawn Rate | Goblins each starting cave spawns per minute before its buildings add more (each finished goblin building adds `goblin_rate_per_building`). 0 by default. **Goblin population bounce back**: with fewer than 5 goblins left, the caves spawn 5 a minute until there are 6 (`goblin_bounce_...` in `balancing.txt`) |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
-| Goblin build speed | How many times as fast the goblins start and finish buildings |
+| Goblin build speed | How many times as fast the goblins start and finish buildings (1 by default) |
 | Construction rate | How many times as fast your buildings go up |
 | Training time | Multiplies every training time |
 | Starting influence / Influence per person | How far the village's influence reaches at first, and how much further for every villager |
@@ -495,6 +499,7 @@ The version number is shown at the top of the dev menu.
 | Give 100 of everything | For testing |
 | Learn all spells | Researches every spell at once, for testing |
 | Night darkness | How much darker (or, below 0, lighter) the nights are |
+| Crop growth rate | How many times as fast wheat ripens (1: `crop_grow_seconds`) |
 | Saplings planted | How many saplings the village plants a minute (starts at `saplings_per_minute` in `balancing.txt`) |
 | Raise / Lower / Flatten / Smooth (keys 4–7) | Sculpt the terrain; Ctrl + mouse wheel (or `[` and `]`) changes the brush size |
 | New random world (N) | Generate a brand-new island of the same size |
@@ -651,7 +656,8 @@ scripts/
   game/goblin_raids.gd     Goblins spawning at the caves, the nightfall raid, and what the goblins build
   game/spell_book.gd       Spells: names, costs and hints
   core/texts.gd            Reads Announcements.txt
-  ui/spell_sparkles.gd     The blue sparkles by a spell's cost while Overcast can cast it
+  ui/spell_sparkles.gd     The yellow sparkles on the creature's portrait while it can grow
+  ui/cost_bolts.gd         The red lightning round a spell's cost while Overcast can cast it
   ui/cooldown_fill.gd      The band that rises over a spell's square while it cools down
   editor/editor_mode.gd    The map editor's tools and saving
   world/terrain.gd         Island heightmap (any map size), land mask and rock skirt, water

@@ -8,22 +8,23 @@ extends Node
 
 ## Gameplay numbers the dev menu (~) can change while playing.
 const DEFAULT_SETTINGS := {
-	"day_minutes": 24.0, # length of a full day-night cycle
+	"day_minutes": 10.0, # length of a full day-night cycle
 	"lumber_rate": 6.0, # per worker per minute
 	"stone_rate": 4.0, # per worker per minute
 	"food_rate": 6.0, # per worker per minute
 	"birth_seconds": 30.0, # time between new villagers
 	"magicko_rate": 1.0, # per grown-up villager per minute
-	"goblin_rate": 2.0, # goblins per starting cave per minute, on day 1
+	"goblin_rate": 0.0, # Goblin Spawn Rate: goblins per starting cave per minute, before its buildings add more
 	"creature_food": 20.0, # food a full-grown creature eats per minute
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size
-	"goblin_build_speed": 4.0, # how many times as fast the goblins start and finish buildings
+	"goblin_build_speed": 1.0, # how many times as fast the goblins start and finish buildings
 	"sapling_rate": 2.0, # saplings the village plants a minute (balancing.txt saplings_per_minute)
 	"villager_detail": 300.0, # metres from the camera within which villagers are drawn in full detail (300: always)
 	"construction_rate": 1.0, # how many times as fast the village's buildings go up
 	"training_time": 1.0, # training times are multiplied by this
 	"influence_start": 45.0, # radius in metres of a new village's influence
 	"influence_per_person": 1.0, # metres the influence grows for every villager
+	"crop_growth_rate": 1.0, # how many times as fast wheat ripens (balancing.txt crop_grow_seconds at 1)
 	"night_darkness": -100.0, # percent darker the night is than it was made (negative: lighter)
 }
 

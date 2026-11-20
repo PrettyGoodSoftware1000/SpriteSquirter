@@ -36,6 +36,8 @@ var _spots := PackedVector3Array()
 var _turns := PackedFloat32Array()
 var _shown_scale := -1.0
 var _wet := 0.0
+## Shown over the field while the mouse is on it (show_progress()).
+var _label: Label3D
 
 
 static func cost_for(field_size: Vector2) -> Dictionary:
@@ -152,6 +154,45 @@ func add_work(seconds: float) -> float:
 	return food
 
 
+## 0..1 of the way from sowing to ripe wheat (sowing counts as the first
+## tenth, growing the rest); 1 once it is ripe.
+func ready_share() -> float:
+	match stage:
+		Stage.SOWING:
+			return 0.1 * progress
+		Stage.GROWING:
+			return 0.1 + 0.9 * progress
+	return 1.0
+
+
+## What the mouse-over label says: how far along it is.
+func progress_text() -> String:
+	match stage:
+		Stage.SOWING:
+			return "Wheat field: sowing, %d%% to harvest" % floori(ready_share() * 100.0)
+		Stage.GROWING:
+			return "Wheat field: growing, %d%% to harvest" % floori(ready_share() * 100.0)
+	return "Wheat field: ripe, 100%% (reaping %d%% done)" % floori(progress * 100.0)
+
+
+## Shows (or hides) how far along it is, over the field.
+func show_progress(shown: bool) -> void:
+	if shown and _label == null:
+		_label = Label3D.new()
+		_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_label.no_depth_test = true
+		_label.fixed_size = true
+		_label.pixel_size = 0.0011
+		_label.font_size = 24
+		_label.outline_size = 8
+		add_child(_label)
+		_label.position = Vector3(0.0, 3.0, 0.0)
+	if _label != null:
+		_label.visible = shown
+		if shown:
+			_label.text = progress_text()
+
+
 ## Rain: the field stays wet, and grows faster, for `seconds`.
 func water(seconds: float) -> void:
 	_wet = maxf(_wet, seconds)
@@ -176,7 +217,7 @@ func _process(delta: float) -> void:
 	_wet = maxf(0.0, _wet - delta)
 	if stage != Stage.GROWING:
 		return
-	progress += delta / maxf(1.0, Balance.num("crop_grow_seconds")) * (WET_GROWTH if _wet > 0.0 else 1.0)
+	progress += delta * maxf(0.0, Game.settings.crop_growth_rate) / maxf(1.0, Balance.num("crop_grow_seconds")) * (WET_GROWTH if _wet > 0.0 else 1.0)
 	if progress >= 1.0:
 		stage = Stage.RIPE
 		progress = 0.0
@@ -186,6 +227,8 @@ func _process(delta: float) -> void:
 ## Shows the stage: rows appear as they are sown, grow and turn gold, and
 ## disappear as they are reaped.
 func _refresh() -> void:
+	if _label != null and _label.visible:
+		_label.text = progress_text()
 	var count := _spots.size()
 	var grown := 1.0
 	var colour := GOLD

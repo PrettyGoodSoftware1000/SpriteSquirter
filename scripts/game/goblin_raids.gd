@@ -55,6 +55,12 @@ var paths: Array = []
 
 var _caves: Array[Node3D] = []
 var _spawned := {}
+## Goblin population bounce back: true from when the goblins fall below
+## Balance "goblin_bounce_below" until they are back to
+## "goblin_bounce_until"; meanwhile they spawn at least
+## "goblin_bounce_rate" a minute in all.
+var bouncing := false
+var _bounce_due := 0.0
 var _build_timer := 0.0
 var _site_timer := 0.0
 ## Seconds until the next balrog hatches (if there is room for one).
@@ -102,6 +108,7 @@ func _process(delta: float) -> void:
 			due -= 1.0
 			spawn_at(cave)
 		_spawned[cave] = due
+	_bounce_back(delta)
 	if get_tree().get_nodes_in_group("balrogs").size() < roundi(Balance.num("balrogs")):
 		_balrog_timer -= delta
 		if _balrog_timer <= 0.0:
@@ -115,6 +122,43 @@ func _process(delta: float) -> void:
 	if _site_timer <= 0.0:
 		_site_timer = 1.0
 		_manage_builders()
+
+
+## How many goblins there are (alive, not charmed; ogres not counted).
+func goblin_count() -> int:
+	var count := 0
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g != null and g.is_alive() and not g.ogre and not g.charmed():
+			count += 1
+	return count
+
+
+## Goblin population bounce back: when fewer than "goblin_bounce_below"
+## goblins are left, the caves spawn at least "goblin_bounce_rate" a
+## minute in all until there are "goblin_bounce_until" again.
+func _bounce_back(delta: float) -> void:
+	var count := goblin_count()
+	if count < roundi(Balance.num("goblin_bounce_below")):
+		bouncing = true
+	elif count >= roundi(Balance.num("goblin_bounce_until")):
+		bouncing = false
+	if not bouncing:
+		_bounce_due = 0.0
+		return
+	var caves: Array[Node3D] = []
+	var usual := 0.0
+	for cave in _caves:
+		if is_instance_valid(cave):
+			caves.append(cave)
+			usual += cave_rate(cave)
+	if caves.is_empty():
+		return
+	# Only what the caves do not spawn already.
+	_bounce_due += maxf(0.0, Balance.num("goblin_bounce_rate") - usual) / 60.0 * delta
+	while _bounce_due >= 1.0:
+		_bounce_due -= 1.0
+		spawn_at(caves[randi() % caves.size()])
 
 
 ## A new balrog, as small as a newborn creature, at one of the caves.

@@ -217,6 +217,10 @@ skeleton_share = 0.5                # its health and damage, as a share of who i
 goblin_build_minutes = 5            # the goblins start a new building this often
 goblin_buildings_max = 40          # and stop when they have this many
 goblin_rate_per_building = 5      # every finished goblin building adds this many goblins a minute at its cave
+# Goblin population bounce back: with fewer goblins than this left alive,
+goblin_bounce_below = 5
+goblin_bounce_rate = 5              # the caves spawn at least this many a minute in all
+goblin_bounce_until = 6             # until there are this many again
 # The goblins do not pay for theirs, but the bigger the number the longer
 # it takes them (build_work_per_resource above applies to them too).
 goblin_tent_resources = 150

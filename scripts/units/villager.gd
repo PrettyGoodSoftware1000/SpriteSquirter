@@ -32,6 +32,8 @@ enum State { IDLE, WALK, FLEE, BURNING, DEAD, JOB, FIGHT, HELD, RAISE, CROSS }
 
 const LOOKS := 14
 const GROW_SECONDS := 60.0
+## How far a flying fey leans forwards (radians) when flying along.
+const FLY_LEAN := 0.6
 const CHILD_SCALE := 0.45
 ## The same for grown-up villagers and goblins.
 static var HEALTH := 30.0
@@ -2532,6 +2534,15 @@ func _animate(delta: float) -> void:
 		_body.position.y = absf(lift) * 0.05
 	else:
 		_body.position.y = lerpf(_body.position.y, 0.0, blend)
+	if fey and _hover > 0.5:
+		# Flying: no steps; leaning into the flight when going forwards,
+		# legs trailing, upright while hovering in place.
+		stride = 0.0
+		_body.position.y = lerpf(_body.position.y, 0.0, blend)
+		_body.rotation.x = lerpf(_body.rotation.x, FLY_LEAN if _moving else 0.05, minf(1.0, delta * 4.0))
+		for k in 2:
+			_pose(k, 0.35 if _moving else 0.1, 0.5 if _moving else 0.25, 0.4 if _moving else 0.1, 0.3, 0.2, blend)
+		return
 	_body.rotation.x = lerpf(_body.rotation.x, 0.22 if panicking and _moving else 0.0, blend)
 	for k in 2:
 		var s := 1.0 if k == 0 else -1.0

@@ -1541,7 +1541,7 @@ func _run() -> void:
 		last_stamina = beast.stamina
 	_check(drained, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s, action %d, target %s %.1f m)" % [
 		stamina_then, beast.stamina, top_speed, game.now < beast.snared_until, beast._alert, beast.hiding, beast._action, beast.has_target, beast._flat(walk_to, beast.global_position)])
-	game.settings.goblin_rate = goblin_rate_was
+	game.settings.goblin_rate = 2.0
 	Balance.values["goblin_bounce_below"] = Balance.DEFAULTS["goblin_bounce_below"]
 	beast.has_target = false
 	beast.mind.process_mode = Node.PROCESS_MODE_INHERIT
@@ -1587,7 +1587,7 @@ func _run() -> void:
 		var spot_for := beast.global_position.lerp(village.center, 0.5) + Vector3(6, 0, 6)
 		sapling.global_position = Vector3(spot_for.x, game.terrain.get_height(spot_for.x, spot_for.z), spot_for.z)
 	# (No goblins about to fight, so it is not kept from its task.)
-	var goblin_rate_was: float = game.settings.goblin_rate
+
 	game.settings.goblin_rate = 0.0
 	Balance.values["goblin_bounce_below"] = 0.0
 	for node in get_tree().get_nodes_in_group("goblins"):

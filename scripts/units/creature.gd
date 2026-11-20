@@ -180,6 +180,12 @@ var carrying: Node3D
 
 var has_target := false
 var target := Vector3.ZERO
+## The way to `target` round grey rock slopes and water (PathGrid), the
+## corner it is making for, and when to work it out again.
+var _route := PackedVector3Array()
+var _route_i := 0
+var _route_goal := Vector3.INF
+var _route_at := 0.0
 var speed := 0.0
 var heading := 0.0
 
@@ -890,6 +896,11 @@ func _update_locomotion(delta: float) -> void:
 			has_target = false
 			_auto = false
 		else:
+			# Far off, it follows a route round the grey rock slopes.
+			var via := _route_aim() - global_position
+			via.y = 0.0
+			if via.length() > 0.5:
+				to = via
 			var want := atan2(to.x, to.z)
 			heading = rotate_toward(heading, want, turn_speed * (COMBAT_TURN if _alert else 1.0) * delta)
 			var facing := cos(angle_difference(heading, want))
@@ -933,6 +944,23 @@ func _update_locomotion(delta: float) -> void:
 	_ground_y = lerpf(_ground_y, feet_y * 0.6 + under * 0.4, 1.0 - exp(-5.0 * delta))
 	p.y = _ground_y
 	global_position = p
+
+
+## The next point on the way to `target`: straight there if the way is
+## clear, else the next corner of a route round the slopes and water. The
+## route is worked out again when the target moves and every few seconds.
+func _route_aim() -> Vector3:
+	if _flat(target, global_position) < 6.0 or _spec.get("climbs", false):
+		return target
+	if _route_goal.distance_squared_to(target) > 4.0 or Game.now >= _route_at:
+		_route_goal = target
+		_route_at = Game.now + 4.0
+		_route_i = 0
+		var grid := Game.path_grid()
+		_route = PackedVector3Array() if grid.clear_line(global_position, target) else grid.find(global_position, target)
+	while _route_i < _route.size() and _flat(_route[_route_i], global_position) < 2.0 + size:
+		_route_i += 1
+	return _route[_route_i] if _route_i < _route.size() else target
 
 
 ## True if the ground in direction `angle` is a grey rock slope it would

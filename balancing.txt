@@ -99,7 +99,7 @@ cost_decoration_stone = 30
 
 cost_necromancer_tower_lumber = 0
 cost_necromancer_tower_stone = 60
-cost_necromancer_tower_bones = 200
+cost_necromancer_tower_bones = 100
 cost_bridge_lumber_per_metre = 1    # rope bridges between treehouses
 bridge_max_length = 50              # metres: about 20 villagers lying end to end
 home_housing = 6                    # villagers a Home has room for
@@ -215,15 +215,15 @@ skeleton_share = 0.5                # its health and damage, as a share of who i
 
 # --- Goblin buildings -----------------------------------------------------------
 goblin_build_minutes = 5            # the goblins start a new building this often
-goblin_buildings_max = 30           # and stop when they have this many
+goblin_buildings_max = 40          # and stop when they have this many
 goblin_rate_per_building = 5      # every finished goblin building adds this many goblins a minute at its cave
 # The goblins do not pay for theirs, but the bigger the number the longer
 # it takes them (build_work_per_resource above applies to them too).
-goblin_tent_resources = 20
-goblin_war_hut_resources = 30
-goblin_forge_resources = 40
-goblin_potion_hut_resources = 30
-goblin_watchtower_resources = 30
+goblin_tent_resources = 150
+goblin_war_hut_resources = 150
+goblin_forge_resources = 150
+goblin_potion_hut_resources = 150
+goblin_watchtower_resources = 150
 
 # --- Chain lightning ----------------------------------------------------------
 lightning_damage = 130              # to each thing the bolt jumps through

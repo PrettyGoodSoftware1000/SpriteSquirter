@@ -23,6 +23,8 @@ func _run() -> void:
 	var game := Game
 	Engine.time_scale = 8.0
 	game.settings.birth_seconds = 5.0
+	# The test's timings were made with a 24-minute day.
+	game.settings.day_minutes = 24.0
 	# Goblins spawn and build as they used to, for the raid checks.
 	game.settings.goblin_rate = 2.0
 	game.settings.goblin_build_speed = 4.0
@@ -1503,6 +1505,10 @@ func _run() -> void:
 	beast.levels.stamina = 0
 	# The tortoise tires as it walks (its mind kept from sending it elsewhere).
 	beast.mind.process_mode = Node.PROCESS_MODE_DISABLED
+	for node in get_tree().get_nodes_in_group("goblins"):
+		node.remove_from_group("goblins")
+		node.queue_free()
+	beast._action = Creature.Action.NONE
 	beast.drop_load()
 	beast.stamina = beast.max_stamina * 0.5
 	var walk_to := beast.global_position
@@ -1533,8 +1539,10 @@ func _run() -> void:
 			break
 		was_walking = walking
 		last_stamina = beast.stamina
-	_check(drained, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s)" % [
-		stamina_then, beast.stamina, top_speed, game.now < beast.snared_until, beast._alert, beast.hiding])
+	_check(drained, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s, action %d, target %s %.1f m)" % [
+		stamina_then, beast.stamina, top_speed, game.now < beast.snared_until, beast._alert, beast.hiding, beast._action, beast.has_target, beast._flat(walk_to, beast.global_position)])
+	game.settings.goblin_rate = goblin_rate_was
+	Balance.values["goblin_bounce_below"] = Balance.DEFAULTS["goblin_bounce_below"]
 	beast.has_target = false
 	beast.mind.process_mode = Node.PROCESS_MODE_INHERIT
 	# Exploring is a long trip.
@@ -1594,8 +1602,6 @@ func _run() -> void:
 	for other: String in ["food", "stone"] + CreatureMind.SPELLS:
 		Balance.values["knowledge_" + other] = Balance.DEFAULTS["knowledge_" + other]
 	Balance.values["wander_weight"] = Balance.DEFAULTS["wander_weight"]
-	game.settings.goblin_rate = goblin_rate_was
-	Balance.values["goblin_bounce_below"] = Balance.DEFAULTS["goblin_bounce_below"]
 	_check(fetched, "the creature fetches a tree for the storehouse (task %s, last action %s, knocked out %s, speed %.1f, %.0f m from the village)" % [
 		mind._task, mind.last_action, beast.knocked_out, beast.speed, beast.global_position.distance_to(village.center)])
 	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT

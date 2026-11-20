@@ -769,7 +769,7 @@ func _run() -> void:
 		home.rotation.y = 1.0 + k
 		home.add_to_group("player_buildings")
 		homes.append(home)
-	_check(BuildingCatalog.housing("treehouse") == 6 and homes[0].has_meta("deck_h"), "Homes are treehouses with a deck")
+	_check(BuildingCatalog.housing("treehouse") == roundi(Balance.num("home_housing")) and homes[0].has_meta("deck_h"), "Homes are treehouses with a deck")
 	for kind: String in ["lookout_treehouse", "twin_treehouse", "great_treehouse"]:
 		var tree_home := BuildingFactory.create(kind, RandomNumberGenerator.new())
 		_check(tree_home.has_meta("deck_h") and BuildingCatalog.role(kind) == "home", "%s is a treehouse Home" % kind)

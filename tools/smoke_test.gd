@@ -426,6 +426,10 @@ func _run() -> void:
 		f.process_mode = Node.PROCESS_MODE_DISABLED
 	game.settings.food_rate = 0.0
 	village.resources.food = 0.0
+	# (A warning may have floated up already, earlier in the test.)
+	village._food_warned_at = -INF
+	for node in get_tree().get_nodes_in_group("food_warnings"):
+		node.remove_from_group("food_warnings")
 	# Food already on its way to the store would reset the hunger clock.
 	for v in village.people():
 		if v.carry_kind == "food":

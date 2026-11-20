@@ -1157,7 +1157,9 @@ func _run() -> void:
 			break
 	var fey_archers := get_tree().get_nodes_in_group("fey_archers")
 	_check(fey_archers.size() == 1 and (fey_archers[0] as Villager).fey_archer and not (fey_archers[0] as Node).is_in_group("archers"),
-		"a winged villager trains as a Fey Archer (%d)" % fey_archers.size())
+		"a winged villager trains as a Fey Archer (%d; wanted %d, training %s, guards %d, kid job '%s' pin '%s' state %d works %s, free %d)" % [
+			fey_archers.size(), village.wanted.fey_archer, village.training_progress("fey_archer"), village._training_buildings("fey_archer").size(),
+			kid.job, kid.pin, kid.state, kid.can_work(), village.free_workers()])
 	Balance.values["fey_archer_training_seconds"] = Balance.DEFAULTS["fey_archer_training_seconds"]
 	village.set_wanted("fey_archer", 0)
 	if is_instance_valid(shoved):

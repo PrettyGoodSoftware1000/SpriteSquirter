@@ -876,7 +876,12 @@ func _run() -> void:
 	for old in get_tree().get_nodes_in_group("goblin_sites"):
 		old.remove_from_group("goblin_sites")
 		old.queue_free()
-	var goblin_site := play.raids.start_building()
+	# (A few tries: each picks spots at random, and the caves may be crowded.)
+	var goblin_site: ConstructionSite = null
+	for k in 8:
+		goblin_site = play.raids.start_building()
+		if goblin_site != null:
+			break
 	_check(goblin_site != null and goblin_site.goblin and goblin_site.is_in_group("goblin_sites"), "the goblins mark out a building near their cave")
 	_check(play.raids.start_building() == null, "and start no other until it is finished")
 	if goblin_site:

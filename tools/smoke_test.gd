@@ -1150,8 +1150,11 @@ func _run() -> void:
 	# Fey Archers: as many as there are winged villagers, once archers can be trained.
 	_check(village.max_count("fey_archer") == village.fey_adults(), "Fey Archers: as many as there are winged villagers (%d)" % village.max_count("fey_archer"))
 	Balance.values["fey_archer_training_seconds"] = 2.0
+	# (Free of whatever it was carrying, so it goes straight to training.)
+	kid.carry = 0.0
+	kid.clear_job()
 	village.set_wanted("fey_archer", 1)
-	for k in 30:
+	for k in 60:
 		await _wait(1.0)
 		if village.count("fey_archer") >= 1:
 			break

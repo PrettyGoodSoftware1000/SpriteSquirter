@@ -1574,7 +1574,7 @@ func _run() -> void:
 		var spot_for := beast.global_position.lerp(village.center, 0.5) + Vector3(6, 0, 6)
 		sapling.global_position = Vector3(spot_for.x, game.terrain.get_height(spot_for.x, spot_for.z), spot_for.z)
 	var fetched := false
-	for k in 30:
+	for k in 60:
 		await _wait(5.0)
 		if mind.last_action.begins_with("lumber"):
 			fetched = true

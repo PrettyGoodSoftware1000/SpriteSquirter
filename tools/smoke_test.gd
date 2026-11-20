@@ -1578,6 +1578,13 @@ func _run() -> void:
 		game.world_root.add_child(sapling)
 		var spot_for := beast.global_position.lerp(village.center, 0.5) + Vector3(6, 0, 6)
 		sapling.global_position = Vector3(spot_for.x, game.terrain.get_height(spot_for.x, spot_for.z), spot_for.z)
+	# (No goblins about to fight, so it is not kept from its task.)
+	var goblin_rate_was: float = game.settings.goblin_rate
+	game.settings.goblin_rate = 0.0
+	Balance.values["goblin_bounce_below"] = 0.0
+	for node in get_tree().get_nodes_in_group("goblins"):
+		node.remove_from_group("goblins")
+		node.queue_free()
 	var fetched := false
 	for k in 60:
 		await _wait(5.0)
@@ -1587,6 +1594,8 @@ func _run() -> void:
 	for other: String in ["food", "stone"] + CreatureMind.SPELLS:
 		Balance.values["knowledge_" + other] = Balance.DEFAULTS["knowledge_" + other]
 	Balance.values["wander_weight"] = Balance.DEFAULTS["wander_weight"]
+	game.settings.goblin_rate = goblin_rate_was
+	Balance.values["goblin_bounce_below"] = Balance.DEFAULTS["goblin_bounce_below"]
 	_check(fetched, "the creature fetches a tree for the storehouse (task %s, last action %s, knocked out %s, speed %.1f, %.0f m from the village)" % [
 		mind._task, mind.last_action, beast.knocked_out, beast.speed, beast.global_position.distance_to(village.center)])
 	play.day_cycle.process_mode = Node.PROCESS_MODE_INHERIT

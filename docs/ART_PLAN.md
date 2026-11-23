@@ -107,9 +107,20 @@ Plan:
    watches and back to spit fire. Running is not used (it never runs).
 4. Idle, stomp, punch, fireball spit, hit and death: from Mixamo (same
    skeleton), or animated in Blender by the owner or Claude. Until then
-   they are code-made (0.36): a punch aims the arm at the foe, a stomp
+   they are code-made (0.36): a stomp
    lifts the thigh high and slams it down, and dead it topples onto its
    face.
+   - ✅ (0.37) Claw slash, made in Blender by Claude (Nov 2026), in place
+     of the punch: `assets/creature/balrog_claw_slash.blend` is the source
+     (actions `ClawSlash_R` and its mirror `ClawSlash_L`, 30 frames at 24
+     fps = 1.25 s; the claw lands at frame 14, about the game's
+     `STRIKE_LANDS` of 0.6 s, and a timeline marker shows it), and
+     `balrog_claw_slash.glb` is what the game plays (`balrog.gd`, one claw
+     and then the other). A wind-up with the claw raised above the head
+     and a pause at the top, a fast diagonal slash across the body, a heavy
+     follow-through and a slow recovery; the feet stay planted. Rebuild
+     both with `tools/balrog_claw_slash.py` (its key poses are a table at
+     the top). Preview: `docs/balrog_claw_slash_preview.gif`.
 5. ✅ (0.36) No separate eyes or jaw any more. Its wings are in the mesh
    and cannot flap (no wing bones); ask the owner if they should.
 6. ✅ (0.36) Looked at in the game, smoke test run, pushed.

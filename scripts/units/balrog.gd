@@ -31,7 +31,7 @@ extends Creature
 ## come where the clip puts its feet down, and standing still it settles
 ## into the model's own crouched stance. Code adds the rest on top: it
 ## breathes, leans into its stride, turns its head to what it watches,
-## tips it back to spit fire, punches, lifts a leg high to stomp, and
+## tips it back to spit fire, lifts a leg high to stomp, and
 ## falls on its face when it dies.
 
 signal died
@@ -71,6 +71,11 @@ const TOES: Array[String] = ["mixamorig_RightToeBase", "mixamorig_LeftToeBase"]
 const DEATH_SECONDS := 9.0
 ## While raiding it goes for anyone this close.
 const RAID_SIGHT := 45.0
+## Its claw slashes at the other giant: one clip for each claw, right
+## first, as ARMS. Made by tools/balrog_claw_slash.py (the source is
+## balrog_claw_slash.blend); the claw lands about STRIKE_LANDS in.
+const SLASH_MODEL := "res://assets/creature/balrog_claw_slash.glb"
+const SLASH_CLIPS: Array[String] = ["ClawSlash_R", "ClawSlash_L"]
 
 var cave: Node3D
 ## Marching on the village with the goblins.
@@ -101,9 +106,14 @@ var _walk_w := 0.0
 ## Each arm's aim while it fights, and how much of it shows.
 var _arm_aim: Array[Vector3] = [Vector3.DOWN, Vector3.DOWN]
 var _arm_w: Array[float] = [0.0, 0.0]
-## Leaning into a punch, the head thrown back (to spit fire), and falling
-## down dead (0..1).
-var _lunge := 0.0
+## The claw slashes (right claw, then left), made in Blender
+## (tools/balrog_claw_slash.py), their tracks as for the walk, which one is
+## playing and how far in (seconds; below 0 when none is).
+var _slashes: Array[Animation] = []
+var _slash_tracks: Array = []
+var _slash_k := 0
+var _slash_t := -1.0
+## The head thrown back (to spit fire), and falling down dead (0..1).
 var _rear := 0.0
 var _fall := 0.0
 
@@ -216,11 +226,15 @@ func _build() -> void:
 	var player := _model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 	_walk = player.get_animation("Walking")
 	player.queue_free()
-	for track in _walk.get_track_count():
-		var path := _walk.track_get_path(track)
-		var bone := _skel.find_bone(String(path.get_concatenated_subnames()))
-		if bone >= 0:
-			_tracks.append([track, bone, _walk.track_get_type(track)])
+	_tracks = _clip_tracks(_walk)
+	# The claw slashes come in a file of their own (the same skeleton).
+	var slashes := (load(SLASH_MODEL) as PackedScene).instantiate()
+	var slash_player := slashes.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	for clip in SLASH_CLIPS:
+		var anim := slash_player.get_animation(clip)
+		_slashes.append(anim)
+		_slash_tracks.append(_clip_tracks(anim))
+	slashes.free()
 
 	var skin := ShaderMaterial.new()
 	skin.shader = Art.shader("giant")
@@ -233,6 +247,31 @@ func _build() -> void:
 		mi.material_override = skin
 		# (Skeleton units are centimetres.)
 		mi.extra_cull_margin = 60.0
+
+
+## [track, bone, track type] for each of `anim`'s tracks that moves a bone.
+func _clip_tracks(anim: Animation) -> Array[Array]:
+	var out: Array[Array] = []
+	for track in anim.get_track_count():
+		var path := anim.track_get_path(track)
+		var bone := _skel.find_bone(String(path.get_concatenated_subnames()))
+		if bone >= 0:
+			out.append([track, bone, anim.track_get_type(track)])
+	return out
+
+
+## Poses the bones from `anim` at `time`, by `weight` over the pose they have.
+func _mix_clip(anim: Animation, tracks: Array, time: float, weight: float) -> void:
+	for entry in tracks:
+		var track: int = entry[0]
+		var bone: int = entry[1]
+		match entry[2]:
+			Animation.TYPE_ROTATION_3D:
+				var now := _skel.get_bone_pose_rotation(bone)
+				_skel.set_bone_pose_rotation(bone, now.slerp(anim.rotation_track_interpolate(track, time), weight))
+			Animation.TYPE_POSITION_3D:
+				var at := _skel.get_bone_pose_position(bone)
+				_skel.set_bone_pose_position(bone, at.lerp(anim.position_track_interpolate(track, time), weight))
 
 
 func head_position() -> Vector3:
@@ -297,18 +336,25 @@ func _update_body(delta: float) -> void:
 				var rest_at := _skel.get_bone_rest(bone).origin
 				_skel.set_bone_pose_position(bone, rest_at.lerp(_walk.position_track_interpolate(track, time), _walk_w))
 
-	# Breathing, a lean into the stride (and into a punch), rearing up to stomp.
+	# A claw slash, over the walk or stance (it starts and ends in the
+	# stance; easing in and out hides the walk it may cut into).
+	if _slash_t >= 0.0:
+		var slash := _slashes[_slash_k]
+		_slash_t += delta
+		if _slash_t >= slash.length or knocked_out:
+			_slash_t = -1.0
+		else:
+			var w := minf(1.0, _slash_t / 0.08) * minf(1.0, (slash.length - _slash_t) / 0.15)
+			_mix_clip(slash, _slash_tracks[_slash_k], _slash_t, w)
+
+	# Breathing, a lean into the stride, rearing up to stomp.
 	var breath := sin(_time * 1.4)
 	var stomp := 0.0
 	if _stomp_leg >= 0:
 		var t := _step_t[_stomp_leg]
 		var drop := smoothstep(0.78, 1.0, t)
 		stomp = smoothstep(0.0, 0.5, t) * (1.0 - drop * drop)
-	var lunge_want := 0.0
-	if _action == Action.STRIKE:
-		lunge_want = 1.0 if _action_t >= STRIKE_LANDS - 0.15 else -0.4
-	_lunge = lerpf(_lunge, lunge_want, blend)
-	_lean = lerpf(_lean, pace * 0.12 + _lunge * 0.18 - stomp * 0.2 + (0.08 if _alert else 0.0), blend)
+	_lean = lerpf(_lean, pace * 0.12 - stomp * 0.2 + (0.08 if _alert else 0.0), blend)
 	_turn(SPINE, Vector3.RIGHT, _lean + breath * 0.015)
 	_skel.set_bone_pose_scale(_bone[CHEST], Vector3.ONE * (1.0 + breath * 0.01))
 
@@ -321,7 +367,7 @@ func _update_body(delta: float) -> void:
 	_turn(HEAD, Vector3.UP, _look_yaw * 0.55)
 	_turn(HEAD, Vector3.RIGHT, _rear - _lean * 0.5)
 
-	# Arms: the clip's swing, or aimed while it fights (see _update_strike()).
+	# Arms: the clips' swing, or aimed while it throws (a slash is all clip).
 	for k in 2:
 		var aim: Variant = _arm_one[k]
 		_arm_w[k] = lerpf(_arm_w[k], 1.0 if aim != null else 0.0, 1.0 - exp(-12.0 * delta))
@@ -525,6 +571,19 @@ func _update_attacks(delta: float) -> void:
 		_start_strike()
 	else:
 		_start_stomp(global_position + to.normalized() * minf(to.length(), STOMP_STRIDE * size))
+
+
+## A claw slash instead of a punch: one claw and then the other.
+func _start_strike() -> void:
+	super._start_strike()
+	_slash_k = _punch_hand
+	_slash_t = 0.0
+
+
+## The hit and its timing are a punch's; the arms are the clip's.
+func _update_strike(delta: float) -> void:
+	super._update_strike(delta)
+	_arm_one = [null, null]
 
 
 ## Spits a fireball at the best knot of enemies in sight, if it is big

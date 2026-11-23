@@ -724,7 +724,13 @@ python3 tools/bake_creature.py raven 0.09
 ```
 
 The balrog is not baked any more: it is the owner's Meshy model (see
-[docs/ART_PLAN.md](docs/ART_PLAN.md)).
+[docs/ART_PLAN.md](docs/ART_PLAN.md)). Its claw slashes are made in Blender
+by a script, which writes `assets/creature/balrog_claw_slash.blend` (to
+look at and edit) and `balrog_claw_slash.glb` (what the game plays):
+
+```bash
+blender -b --factory-startup --python tools/balrog_claw_slash.py
+```
 
 ### Making a build other people can play
 

@@ -459,7 +459,8 @@ In the game, press **Esc** and **Show controls** for this list.
 | Mouse wheel | Zoom |
 | Middle mouse drag | Rotate and tilt camera |
 | Space | Jump the camera to the tortoise |
-| Click / right click | Walk the tortoise to that spot |
+| Click | Walk the creature to that spot (it still fights anything in reach) |
+| Right-click | **Attack move**: the creature heads there, goes after enemies within its aggressiveness range on the way (casting at them as it likes), and once it is fighting one in reach it stays to fight instead of finishing the walk. (Right-click still puts a spell away or closes a menu or tool first) |
 | 1–9, 0 or the numpad (or a spell's square) | Take the spell in that place on the spell bar's first row in hand; the same key again puts it away (Bless and Condemn: casts it) |
 | Ctrl / Shift + 1–9, 0 | The spell bar's second and third rows (add them with its +) |
 | Drag a spell | Move it to another place on the spell bar |

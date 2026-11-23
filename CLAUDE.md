@@ -73,3 +73,12 @@
   Fetch `main` and merge it into the branch before pushing, keep the
   owner's values, and make the smoke test read numbers from
   `balancing.txt` rather than expect particular ones.
+
+## Art and animation
+
+- `docs/ART_PLAN.md` has the owner's goals for the giants (creatures and
+  the balrog), villagers and goblins, and the plan for the new Meshy models
+  and their animation. Read it before any modelling or animation work, and
+  update it as steps are done.
+- Art and animation are done in desktop sessions on the owner's computer
+  (Blender with the Blender MCP, Godot 4.7, Git installed there).

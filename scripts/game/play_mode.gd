@@ -288,7 +288,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE or mode == Mode.RULER:
 				_set_mode(Mode.COMMAND)
 			elif _cursor_hit != null and not _choosing:
-				_command_move(_cursor_hit)
+				# Right-click: an attack move.
+				_command_attack_move(_cursor_hit)
 
 
 func _on_key(key: InputEventKey) -> void:
@@ -646,6 +647,15 @@ func _command_move(pos: Vector3) -> void:
 		return
 	creature.move_to(pos)
 	Game.effects.spawn_marker(pos)
+
+
+## Right-click: the creature goes there, fighting whatever it meets on the
+## way (see Creature.attack_move()).
+func _command_attack_move(pos: Vector3) -> void:
+	if creature == null or not Game.terrain.is_inside(pos.x, pos.z):
+		return
+	creature.attack_move(pos)
+	Game.effects.spawn_marker(pos, Color(1.0, 0.35, 0.25, 0.9))
 
 
 # --- Spells -------------------------------------------------------------------

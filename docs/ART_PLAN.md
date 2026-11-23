@@ -1,0 +1,119 @@
+# Art plan: giants, villagers and animation
+
+The owner's goals for the game's models and animation, and where the work
+stands. Read this before any modelling, rigging or animation work, and keep
+it up to date as steps are done.
+
+## Words
+
+- **Giants**: the player's creatures (tortoise, squirrel, raven) and the
+  goblins' balrog, together.
+- **Mesh**: the surface of a model (points, edges, faces).
+- **UVs**: where each point of a mesh takes its colour from on a flat
+  texture image.
+- **Rig / skeleton**: bones inside a mesh; moving a bone moves the part of
+  the mesh weighted to it.
+- **Humanoid rig**: the standard two-legs, two-arms, spine, neck and head
+  skeleton (Mixamo's bone names: `mixamorig:Hips`, `Spine`, `LeftUpLeg`,
+  `LeftArm` ...). Animations made for one humanoid rig can be moved onto any
+  other ("retargeting"), and Mixamo has a free library of them. Meshy's
+  automatic rigging makes this kind of rig.
+
+## Goals (from the owner)
+
+1. **Better models for all the giants**, made in Meshy by the owner (and
+   with Claude through the Meshy MCP), brought into the game.
+2. **Better villagers and enemies later**: cleaned up, less clipping. Meshy
+   models, or a mix of the owner and Claude making variations of villagers
+   and goblins once the basic look is set.
+3. **Animation for the giants**, a lot of it over time. It starts basic.
+   Claude keeps animating, and the owner may animate by hand in Blender too,
+   so the editable source of every animation stays in the repo.
+   - Each giant must **move differently**, so it feels like its own animal.
+   - They must **feel like giants**: heavy. Mass means slow starts and
+     stops, weight shifting onto each foot before the next step, a pause at
+     the top of a stomp, the ground shaking and dust at footfalls, follow-
+     through after a strike (arms and tail keep swinging), slow turns.
+4. **Trees**: their variety is good; no changes planned beyond the height
+   variation added in 0.33 (up to 3 times as tall).
+5. **Buildings** stay much as they are (built in code). Keep: the trees on
+   buildings change colour with the colour palette, and rope bridges must
+   keep working between treehouses.
+
+## How the work is done
+
+- **Desktop sessions** (Claude Code on the owner's computer) for art and
+  animation: Blender with the Blender MCP add-on, Godot 4.7 and Git are
+  installed there. Claude can build, rig and animate in the owner's open
+  Blender while the owner watches, and run the game on the real graphics
+  card to look at the result.
+- **Cloud sessions** are fine for gameplay code.
+- `main` is the single source for both. The usual rules in `CLAUDE.md` hold
+  (version +0.01 per update, push the branch and `main`, keep the owner's
+  `balancing.txt`).
+- **Keep the sources**: each giant's `.blend` file goes in the repo next to
+  its exported `.glb`, so either of us can change it later. Set up Git LFS
+  for `.blend`, `.glb` and big `.png` files before many are added.
+
+## How the giants work now
+
+- Code: `scripts/units/creature.gd` (body, walking, attacks, the face),
+  `creature_mind.gd` (choices), `balrog.gd`, `tools/bake_creature.py` (makes
+  the current `.glb` models from blobs).
+- The models are `assets/creature/{creature,squirrel,raven,balrog}.glb`,
+  each with the same bone names: `pelvis`, `spine`, `chest`, `neck`, `head`,
+  `jaw`, `thigh_l/r`, `shin_l/r`, `foot_l/r`, `arm_upper_l/r`, `tail1` ...
+  (the raven and balrog have wing bones too).
+- **All their movement is done in code** (`_update_legs()`, `_update_body()`,
+  foot placement on the ground), not with animation clips. The shader
+  (`shaders/creature.gdshader`) colours them with vertex colours and a
+  triplanar texture, cel lighting and an ink outline; it uses no UVs.
+- A new model with its own texture and animation clips needs: a shader that
+  shows its UV texture in the game's cel style (with burn, tint, hit flash
+  and glow), playing its clips (AnimationPlayer / AnimationTree, matched to
+  its speed), and the code's touches on top (head turning to targets,
+  leaning, footstep effects and stomp damage timed to the steps).
+
+## The new balrog (owner's Meshy model)
+
+Files the owner made in Meshy (Nov 2026): `BalrogRigged.glb`, the one to use
+(not yet in the repo), and `BalrogModel.glb`, the bare mesh (not needed).
+
+- 12,765 triangles, 1.86 m tall, one 2048x2048 colour texture (UV mapped),
+  exported at 1/100 scale (armature scale 0.01), from Blender 4.5.
+- Humanoid rig, 24 Mixamo-named bones; no fingers, jaw, tail or wing bones.
+- Animations in it: **Walking** (1.03 s loop) and **Running** (0.63 s loop).
+  No idle, attack, hit or death yet.
+
+Plan (not started):
+1. Add it as the new balrog model (keep the old one until the new one
+   works); fix the scale; check it faces +Z; size it to the balrog's full
+   size.
+2. A textured-giant shader: its UV texture with the game's cel lighting and
+   outline, burn, tint and hit flash, and its lava cracks glowing.
+3. Play its walk and run, sped to match how fast it moves; code adds head
+   turning, lean, footstep fires and stomp damage on the steps.
+4. Idle, stomp, punch, fireball spit, hit and death: from Mixamo (same
+   skeleton), or animated in Blender by the owner or Claude. Until then it
+   uses simple code-made strikes.
+5. Drop the old model's separate eyes and jaw. Ask the owner whether it
+   keeps wings (the old balrog had two little ones; the new model has no
+   wing bones).
+6. Look at it in the game, run the smoke test, push.
+
+## The other giants
+
+The owner will make new Meshy models for the tortoise, squirrel and raven.
+They are not humanoid (four legs, or wings for arms), so Meshy's automatic
+humanoid rig will not fit them well and Mixamo's animations will not either;
+they will need rigs made in Blender (by the owner, or Claude through the
+Blender MCP) and their own animations. Each should move in its own way:
+
+- **Tortoise**: slow, deliberate, legs planted wide, body rocking side to
+  side, a long pause before each step, head out low.
+- **Squirrel**: quick and twitchy between bursts of stillness; runs on all
+  fours; tail always moving.
+- **Raven**: hops and struts on the ground, head bobbing; heavy wingbeats to
+  take off; glides.
+- **Balrog**: a heavy two-legged stride, shoulders rolling, fists and tail
+  swinging, the ground smoking where it treads.

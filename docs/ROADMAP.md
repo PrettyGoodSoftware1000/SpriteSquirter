@@ -213,6 +213,10 @@ stage.
 ## Version 0.33: Taller trees ✅
 - Trees vary more in height: most about as before, about 1 in 5 over twice as tall, the tallest 3 times (a little wider too); bushes unchanged
 
+## Version 0.34: Attack move ✅
+- Right-click is an attack move for the creature: it goes after enemies on the way and stays to fight
+- docs/ART_PLAN.md: the plan for new giant models and animation
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

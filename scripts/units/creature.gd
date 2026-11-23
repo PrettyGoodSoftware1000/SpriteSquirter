@@ -228,6 +228,11 @@ var _released := 0
 var _scan_timer := 0.0
 ## Walking somewhere by its own choice (to reach raiders).
 var _auto := false
+## An attack move (right-click): on the way to `_attack_goal` it goes after
+## any enemy within its aggressiveness range, and once it is fighting one
+## in reach it forgets the rest of the way.
+var attack_moving := false
+var _attack_goal := Vector3.ZERO
 ## Standing still and turning to face goblins before attacking.
 var _turning := false
 var _crouch := 0.0
@@ -640,6 +645,7 @@ func place(pos: Vector3, facing: float) -> void:
 
 ## The player sends the creature somewhere. It will stay around there.
 func move_to(pos: Vector3) -> void:
+	attack_moving = false
 	target = pos
 	has_target = true
 	_auto = false
@@ -650,9 +656,20 @@ func move_to(pos: Vector3) -> void:
 		_hurry()
 
 
+## The player's attack move (right-click): off to `pos`, fighting on the
+## way. Enemies within its aggressiveness range are gone after first (and
+## it casts at them as its mind likes, as always); once it is in a fight
+## within reach it stays there and does not finish the walk.
+func attack_move(pos: Vector3) -> void:
+	move_to(pos)
+	attack_moving = true
+	_attack_goal = pos
+
+
 ## The creature goes somewhere of its own accord. (Chasing enemies and the
 ## player's orders come first.)
 func auto_move(pos: Vector3) -> void:
+	attack_moving = false
 	target = pos
 	has_target = true
 	_auto = true
@@ -1156,11 +1173,28 @@ func _update_attacks(delta: float) -> void:
 			hunt_pos = rival.global_position
 	_alert = focus != null or hunting
 	_jaw_want = 0.16 + 0.14 * float(_spec.nervous) if _alert else 0.0
+	if attack_moving:
+		if focus != null:
+			# In a fight: the rest of the way is forgotten.
+			attack_moving = false
+			has_target = false
+			_auto = false
+		elif not hunting and _flat(_attack_goal, global_position) < 1.5 + 2.0 * size:
+			# There.
+			attack_moving = false
+		elif not hunting and (_auto or not has_target):
+			# The enemy it went after is gone: on to where it was sent.
+			target = _attack_goal
+			has_target = true
+			_auto = false
+			_look_at = target
+			_flight_length = _flat(target, global_position)
 	if focus == null:
 		_turning = false
-		# Nothing in reach: go after raiders, unless the player sent us somewhere.
-		# (A little one stays out of it.)
-		if hunting and size >= 0.35 and (not has_target or _auto) and Game.now >= snared_until:
+		# Nothing in reach: go after raiders, unless the player sent us somewhere
+		# (an attack move goes after them on the way). A little one stays out
+		# of it, unless the player said to attack.
+		if hunting and (size >= 0.35 or attack_moving) and (not has_target or _auto or attack_moving) and Game.now >= snared_until:
 			target = hunt_pos
 			has_target = true
 			_auto = true

@@ -528,8 +528,10 @@ func make_rain(radius: float, height: float) -> CPUParticles3D:
 
 
 ## A ring that shrinks into the ground where a move order was given.
-func spawn_marker(pos: Vector3) -> void:
-	var mat := _glow_material(Color(0.4, 1.0, 0.5, 0.9))
+## A ring that shrinks where the creature was sent: green for a move, red
+## for an attack move.
+func spawn_marker(pos: Vector3, color := Color(0.4, 1.0, 0.5, 0.9)) -> void:
+	var mat := _glow_material(color)
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.8
 	torus.outer_radius = 1.0

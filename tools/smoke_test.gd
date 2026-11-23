@@ -1546,6 +1546,40 @@ func _run() -> void:
 		last_stamina = beast.stamina
 	_check(drained, "the tortoise's stamina drains slowly as it walks (%.1f -> %.1f, speed %.1f, snared %s, alert %s, hiding %s, action %d, target %s %.1f m)" % [
 		stamina_then, beast.stamina, top_speed, game.now < beast.snared_until, beast._alert, beast.hiding, beast._action, beast.has_target, beast._flat(walk_to, beast.global_position)])
+	# Attack move (right-click): it goes after an enemy near its way, and
+	# once it is fighting it does not finish the walk.
+	beast.has_target = false
+	beast.global_position = Vector3(by_village.x, game.terrain.get_height(by_village.x, by_village.z), by_village.z)
+	var goal := beast.global_position
+	var side_spot := beast.global_position
+	for k in 48:
+		var a := TAU * k / 48.0
+		var dir := Vector3(cos(a), 0, sin(a))
+		var g := beast.global_position + dir * 40.0
+		var sp := beast.global_position + dir * 14.0 + Vector3(-dir.z, 0, dir.x) * 12.0
+		var ok := game.terrain.is_inside(g.x, g.z) and game.terrain.is_dry(g.x, g.z) and game.terrain.is_dry(sp.x, sp.z)
+		for st in 11:
+			var q := beast.global_position.lerp(g, st / 10.0)
+			ok = ok and not game.terrain.is_steep(q.x, q.z) and game.terrain.is_dry(q.x, q.z)
+		if ok:
+			goal = g
+			side_spot = sp
+			break
+	var lurker := WorldPopulator.spawn_villager(game.world_root, game.terrain, side_spot, 0.5, true)
+	lurker.global_position = Vector3(side_spot.x, game.terrain.get_height(side_spot.x, side_spot.z), side_spot.z)
+	lurker.process_mode = Node.PROCESS_MODE_DISABLED
+	play._command_attack_move(goal)
+	_check(beast.attack_moving, "a right-click sends the creature on an attack move")
+	var engaged := false
+	for k in 60:
+		await _wait(0.5)
+		if not beast.attack_moving and (not is_instance_valid(lurker) or not lurker.is_alive() or beast.is_fighting()):
+			engaged = true
+			break
+	_check(engaged and beast._flat(goal, beast.global_position) > 8.0,
+		"on an attack move it goes after an enemy on the way and stays to fight (%.0f m short of where it was sent)" % beast._flat(goal, beast.global_position))
+	if is_instance_valid(lurker):
+		lurker.queue_free()
 	game.settings.goblin_rate = 2.0
 	Balance.values["goblin_bounce_below"] = Balance.DEFAULTS["goblin_bounce_below"]
 	beast.has_target = false

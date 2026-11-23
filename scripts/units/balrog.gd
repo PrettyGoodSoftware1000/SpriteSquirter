@@ -17,26 +17,56 @@ extends Creature
 ## without spreading.
 ##
 ## From "balrog_fireball_size" of its full size it spits a fireball every
-## "balrog_fireball_seconds" at whatever group of enemies it can see. It has
-## two little wings and cannot fly. It always walks at "balrog_speed", a
-## little slower than a goblin marches.
+## "balrog_fireball_seconds" at whatever group of enemies it can see. It
+## cannot fly. It always walks at "balrog_speed", a little slower than a
+## goblin marches.
 ##
 ## At no health it dies (it does not get up again), and the village gets
 ## "balrog_bones" bones. GoblinRaids hatches the next one.
+##
+## Its model is the owner's Meshy model (assets/creature/balrog.glb): a
+## painted texture on a humanoid (Mixamo) skeleton, with a Walking clip.
+## It does not use the Creature's own blob-model body: the walk clip plays
+## as fast as it really moves (so its feet do not slide), its footfalls
+## come where the clip puts its feet down, and standing still it settles
+## into the model's own crouched stance. Code adds the rest on top: it
+## breathes, leans into its stride, turns its head to what it watches,
+## tips it back to spit fire, punches, lifts a leg high to stomp, and
+## falls on its face when it dies.
 
 signal died
 signal grew_up
 
 const SPEC := {
 	"name": "Balrog", "model": "res://assets/creature/balrog.glb", "speed": 2.3,
-	"nervous": 0.0,
-	"eye_size": 0.28, "eye_color": Color(0.72, 0.36, 1.0), "eye_glow": 1.8,
-	"lid_color": Color(0.125, 0.075, 0.07), "lid_y": [0.26, 0.16], "lid_tilt": [0.45, 0.62], "pupil": [1.0, 1.0],
-	# (No drawn mouth: the model's jaws hang open on a glowing throat.)
-	"eye": Vector3(0.62, 0.62, 1.1), "frown": [0.22, 0.3],
-	"arm": Vector3(0.3, -1.0, 0.2), "elbow": -0.35,
-	"crack_glow": Color(1.5, 0.36, 0.04),
+	"nervous": 0.0, "arm": Vector3(0.3, -1.0, 0.2),
 }
+## The model is 1.86 m tall; this makes it about as tall as the old one
+## (11 m, full grown).
+const MODEL_SCALE := 6.0
+## Metres the model's feet carry it in one second of the walk clip (at
+## MODEL_SCALE 1): the clip is played this much faster or slower to match
+## how fast it really walks.
+const CLIP_SPEED := 1.43
+## Where in the walk clip (as a share of its length) each foot comes down:
+## leg 0 (the right foot, at -X) and leg 1 (the left).
+const FOOTFALLS: Array[float] = [0.75, 0.28]
+## The skeleton's bones (Mixamo names; Godot turns "mixamorig:" into
+## "mixamorig_" on import). Arms, legs and feet in pairs: right (leg 0,
+## at -X), then left.
+const HIPS := "mixamorig_Hips"
+const SPINE := "mixamorig_Spine"
+const CHEST := "mixamorig_Spine2"
+const NECK := "mixamorig_Neck"
+const HEAD := "mixamorig_Head"
+## A bone at the front of the face, just above the mouth.
+const FACE := "headfront"
+const ARMS: Array[String] = ["mixamorig_RightArm", "mixamorig_LeftArm"]
+const FOREARMS: Array[String] = ["mixamorig_RightForeArm", "mixamorig_LeftForeArm"]
+const HANDS: Array[String] = ["mixamorig_RightHand", "mixamorig_LeftHand"]
+const THIGHS: Array[String] = ["mixamorig_RightUpLeg", "mixamorig_LeftUpLeg"]
+const SHINS: Array[String] = ["mixamorig_RightLeg", "mixamorig_LeftLeg"]
+const TOES: Array[String] = ["mixamorig_RightToeBase", "mixamorig_LeftToeBase"]
 ## How long the body lies there before it crumbles.
 const DEATH_SECONDS := 9.0
 ## While raiding it goes for anyone this close.
@@ -59,6 +89,23 @@ var _dead_for := -1.0
 var _was_grown := false
 var _smoke: CPUParticles3D
 var _sparks: CPUParticles3D
+
+var _model: Node3D
+var _walk: Animation
+## [track, bone, track type] for each track of the walk clip.
+var _tracks: Array[Array] = []
+## How far through the walk clip it is (0..1), and how much of the walk
+## shows (0 = standing in its stance, 1 = striding).
+var _phase := 0.0
+var _walk_w := 0.0
+## Each arm's aim while it fights, and how much of it shows.
+var _arm_aim: Array[Vector3] = [Vector3.DOWN, Vector3.DOWN]
+var _arm_w: Array[float] = [0.0, 0.0]
+## Leaning into a punch, the head thrown back (to spit fire), and falling
+## down dead (0..1).
+var _lunge := 0.0
+var _rear := 0.0
+var _fall := 0.0
 
 
 func _init() -> void:
@@ -152,6 +199,185 @@ func _on_killed() -> void:
 	if is_instance_valid(village) and village.founded:
 		village.give("bones", roundf(Balance.num("balrog_bones") * lerpf(0.3, 1.0, size)))
 	died.emit()
+
+
+# --- The model and its animation ---------------------------------------------
+
+func _build() -> void:
+	_model = (load(_spec.model) as PackedScene).instantiate()
+	_model.name = "Model"
+	_model.scale = Vector3.ONE * MODEL_SCALE
+	add_child(_model)
+	_skel = _model.find_children("*", "Skeleton3D", true, false)[0]
+	for i in _skel.get_bone_count():
+		_bone[_skel.get_bone_name(i)] = i
+	# The clip is read directly (no AnimationPlayer), so the code's touches
+	# always go on after it, in the same frame.
+	var player := _model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	_walk = player.get_animation("Walking")
+	player.queue_free()
+	for track in _walk.get_track_count():
+		var path := _walk.track_get_path(track)
+		var bone := _skel.find_bone(String(path.get_concatenated_subnames()))
+		if bone >= 0:
+			_tracks.append([track, bone, _walk.track_get_type(track)])
+
+	var skin := ShaderMaterial.new()
+	skin.shader = Art.shader("giant")
+	skin.next_pass = Art.outline(1.0)
+	for node in _model.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		var painted := mi.get_active_material(0) as BaseMaterial3D
+		if painted != null:
+			skin.set_shader_parameter("albedo_tex", painted.albedo_texture)
+		mi.material_override = skin
+		# (Skeleton units are centimetres.)
+		mi.extra_cull_margin = 60.0
+
+
+func head_position() -> Vector3:
+	return _skel.global_transform * _skel.get_bone_global_pose(_bone[HEAD]).origin
+
+
+## Just under the front of the face (bone units are centimetres).
+func _mouth_pos() -> Vector3:
+	return _skel.global_transform * (_skel.get_bone_global_pose(_bone[FACE]).origin + Vector3(0.0, -8.0, 0.0))
+
+
+func _hand_pos(k: int) -> Vector3:
+	return _skel.global_transform * _skel.get_bone_global_pose(_bone[HANDS[k]]).origin
+
+
+## Steps come from the walk clip: the clip runs as fast as the balrog
+## walks, and a foot comes down where and when the clip puts it down. A
+## stomp is the one step taken by itself (see _start_stomp()).
+func _update_feet(delta: float) -> void:
+	if _stomp_leg >= 0:
+		var k := _stomp_leg
+		_step_t[k] = minf(1.0, _step_t[k] + delta / STOMP_TIME)
+		if _step_t[k] >= 1.0:
+			_stepping[k] = false
+			_plant[k] = _step_to[k]
+			_on_footfall(_plant[k])
+			_on_stomp(_plant[k])
+		return
+	var striding := speed > 0.15 and not knocked_out
+	_walk_w = lerpf(_walk_w, 1.0 if striding else 0.0, 1.0 - exp(-(5.0 if striding else 3.0) * delta))
+	if _walk_w < 0.02:
+		return
+	var before := _phase
+	# (Coming to a stop, the stride finishes slowly instead of freezing.)
+	var pace := maxf(speed, 0.6 * size * (1.0 - _walk_w))
+	_phase = fposmod(_phase + delta * pace / (CLIP_SPEED * MODEL_SCALE * size) / _walk.length, 1.0)
+	if _walk_w < 0.5:
+		return
+	for k in 2:
+		var at := FOOTFALLS[k]
+		if (before < at and _phase >= at) or (_phase < before and (before < at or _phase >= at)):
+			var toe := _skel.global_transform * _skel.get_bone_global_pose(_bone[TOES[k]]).origin
+			toe.y = Game.terrain.get_height(toe.x, toe.z)
+			_plant[k] = toe
+			_on_footfall(toe)
+
+
+func _update_body(delta: float) -> void:
+	var blend := 1.0 - exp(-10.0 * delta)
+	var pace := clampf(speed / maxf(_top_speed(), 0.1), 0.0, 1.3)
+	# The walk clip, mixed with the model's stance by how much it strides.
+	var time := _phase * _walk.length
+	_skel.reset_bone_poses()
+	for entry in _tracks:
+		var track: int = entry[0]
+		var bone: int = entry[1]
+		match entry[2]:
+			Animation.TYPE_ROTATION_3D:
+				var rest := _skel.get_bone_rest(bone).basis.get_rotation_quaternion()
+				_skel.set_bone_pose_rotation(bone, rest.slerp(_walk.rotation_track_interpolate(track, time), _walk_w))
+			Animation.TYPE_POSITION_3D:
+				var rest_at := _skel.get_bone_rest(bone).origin
+				_skel.set_bone_pose_position(bone, rest_at.lerp(_walk.position_track_interpolate(track, time), _walk_w))
+
+	# Breathing, a lean into the stride (and into a punch), rearing up to stomp.
+	var breath := sin(_time * 1.4)
+	var stomp := 0.0
+	if _stomp_leg >= 0:
+		var t := _step_t[_stomp_leg]
+		var drop := smoothstep(0.78, 1.0, t)
+		stomp = smoothstep(0.0, 0.5, t) * (1.0 - drop * drop)
+	var lunge_want := 0.0
+	if _action == Action.STRIKE:
+		lunge_want = 1.0 if _action_t >= STRIKE_LANDS - 0.15 else -0.4
+	_lunge = lerpf(_lunge, lunge_want, blend)
+	_lean = lerpf(_lean, pace * 0.12 + _lunge * 0.18 - stomp * 0.2 + (0.08 if _alert else 0.0), blend)
+	_turn(SPINE, Vector3.RIGHT, _lean + breath * 0.015)
+	_skel.set_bone_pose_scale(_bone[CHEST], Vector3.ONE * (1.0 + breath * 0.01))
+
+	# Head: towards whatever it watches; back to spit fire (and when hit).
+	var to := _look_at - global_position
+	var want_yaw := clampf(angle_difference(heading, atan2(to.x, to.z)), -0.8, 0.8) if to.length() > 3.0 else 0.0
+	_look_yaw = lerpf(_look_yaw, want_yaw + sin(_time * 0.5) * 0.06, 1.0 - exp(-3.0 * delta))
+	_rear = lerpf(_rear, -0.4 if _cast_timer > 0.0 else 0.0, 1.0 - exp(-8.0 * delta))
+	_turn(NECK, Vector3.UP, _look_yaw * 0.45)
+	_turn(HEAD, Vector3.UP, _look_yaw * 0.55)
+	_turn(HEAD, Vector3.RIGHT, _rear - _lean * 0.5)
+
+	# Arms: the clip's swing, or aimed while it fights (see _update_strike()).
+	for k in 2:
+		var aim: Variant = _arm_one[k]
+		_arm_w[k] = lerpf(_arm_w[k], 1.0 if aim != null else 0.0, 1.0 - exp(-12.0 * delta))
+		if aim != null:
+			var a: Vector3 = aim
+			_arm_aim[k] = _arm_aim[k].lerp(Vector3(_side(k) * a.x, a.y, a.z).normalized(), 1.0 - exp(-14.0 * delta))
+		if _arm_w[k] > 0.01:
+			_aim_bone(ARMS[k], FOREARMS[k], _arm_aim[k], _arm_w[k])
+			_aim_bone(FOREARMS[k], HANDS[k], _arm_aim[k] + Vector3.UP * 0.25, _arm_w[k] * 0.85)
+
+	# Stomp: the thigh comes up high, the knee bends, then it slams down.
+	if _stomp_leg >= 0:
+		_turn(THIGHS[_stomp_leg], Vector3.RIGHT, -1.25 * stomp)
+		_turn(SHINS[_stomp_leg], Vector3.RIGHT, 1.1 * stomp)
+
+	# Dead: it topples forward onto its face.
+	if knocked_out:
+		_fall = minf(1.0, _fall + delta * 0.9)
+	var down := _fall * _fall
+	_model.rotation.x = down * PI * 0.5
+	_model.position.y = down * 0.3 * MODEL_SCALE
+
+
+## Code-made animation has no legs to solve: the clip and _update_body()
+## pose them.
+func _update_legs() -> void:
+	pass
+
+
+## The model's face is painted: no eyes or mouth to draw.
+func _update_face(_delta: float) -> void:
+	pass
+
+
+## Turns `bone_name` by `angle` about `axis` (in the skeleton's space:
+## +Z forward, +Y up), on top of the pose it already has.
+func _turn(bone_name: String, axis: Vector3, angle: float) -> void:
+	if absf(angle) < 0.0001:
+		return
+	var bone: int = _bone[bone_name]
+	var pose := _skel.get_bone_global_pose(bone)
+	pose.basis = Basis(axis, angle) * pose.basis
+	_skel.set_bone_global_pose(bone, pose)
+
+
+## Turns `bone_name` (by `weight`, 0..1) so it points along `dir` (in the
+## skeleton's space), towards the next bone, `child_name`.
+func _aim_bone(bone_name: String, child_name: String, dir: Vector3, weight: float) -> void:
+	var bone: int = _bone[bone_name]
+	var pose := _skel.get_bone_global_pose(bone)
+	var along := _skel.get_bone_global_pose(_bone[child_name]).origin - pose.origin
+	if along.length_squared() < 0.0001 or dir.length_squared() < 0.0001:
+		return
+	var turn := Quaternion.IDENTITY.slerp(Quaternion(along.normalized(), dir.normalized()), weight)
+	pose.basis = Basis(turn) * pose.basis
+	_skel.set_bone_global_pose(bone, pose)
 
 
 # --- Raids ------------------------------------------------------------------------

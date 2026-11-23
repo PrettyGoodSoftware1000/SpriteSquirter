@@ -222,6 +222,11 @@ stage.
 - On an attack move the raven chases giant bats in the air and lands to fight anything on the ground on the way
 - Giants melee giant bats: the raven with its wings in flight, any giant with a blow when a bat comes low enough
 
+## Version 0.36: The new balrog ✅
+- The balrog is the owner's painted Meshy model, cel shaded and inked, its lava cracks and armour glowing
+- It plays its walk clip in step with how fast it walks; its burning footprints come where its feet land
+- Code-made punches, stomps, head turns, a rear back to spit fire and a fall on its face when it dies
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

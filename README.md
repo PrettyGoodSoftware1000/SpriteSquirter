@@ -215,8 +215,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    does. Until it is full grown it only guards its cave, attacking whoever
    comes within 40 m of it. Full grown, it marches with every nightfall
    raid and stamps your buildings down. From half its full size it spits
-   a **fireball** every 20 seconds (half as strong as yours). It has two
-   little wings and cannot fly, and it walks a little slower than a goblin.
+   a **fireball** every 20 seconds (half as strong as yours). It has
+   wings but cannot fly, and it walks a little slower than a goblin.
    Your creature and the balrog fight each other with their fists; your
    archers, wizards and everyone else join in, and fireballs and chain
    lightning hurt it. When it dies the village gets bones, and another
@@ -610,9 +610,12 @@ and start the game again. Words in `{braces}` are filled in by the game.
   tortoise's footsteps squash goblins and strangers but not your own people.
 - **The creatures:** a 12 m gloomy tortoise of about 110,000 triangles,
   an 11 m nervous squirrel of about 65,000, a raven of about 155,000
-  with two-jointed wings, and the goblins' balrog of about 135,000, on the same
-  skeleton. Walking is procedural: feet plant on the terrain with two-bone
-  IK, and the body, arms, head, jaw and tail react.
+  with two-jointed wings, on the same skeleton. Walking is procedural: feet
+  plant on the terrain with two-bone IK, and the body, arms, head, jaw and
+  tail react. The goblins' balrog is a painted Meshy model (about 12,800
+  triangles, one 2048 px texture) on a humanoid skeleton: it plays its
+  walk clip as fast as it really walks, and code adds the rest (head
+  turning, leaning, punches, stomps, its fall). Its lava cracks glow.
 - **Fireball:** thrown from your cursor. It explodes, digs a crater, breaks
   buildings and trees into physics debris (Jolt), and sets fires that
   spread, char buildings and eventually collapse them.
@@ -720,9 +723,8 @@ python3 tools/bake_creature.py squirrel
 python3 tools/bake_creature.py raven 0.09
 ```
 
-```bash
-python3 tools/bake_creature.py balrog 0.09
-```
+The balrog is not baked any more: it is the owner's Meshy model (see
+[docs/ART_PLAN.md](docs/ART_PLAN.md)).
 
 ### Making a build other people can play
 

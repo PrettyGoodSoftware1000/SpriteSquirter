@@ -146,11 +146,13 @@ game yet.
   head and neck chain, arms of 5 (shoulder to hand), legs of 5 (hip to
   toe), **wings of 4 bones each**, a **3-bone tail**, and a 3-bone flap
   hanging at the front. "Show skeleton" draws it.
-- ✅ (0.39) **Walk**, made by Claude with `tools/newer_balrog_walk.py`
+- All its animations are made by Claude with `tools/newer_balrog_anims.py`
   (Blender, run headless). Source: `assets/test/NewerBalrog.blend` (the
-  model and its `Walk` action; its textures are the PNGs next to it, not
-  packed in). The test environment plays `NewerBalrog_walk.glb` (the
-  skeleton and the clip). 1.8 s for two steps, in place, at 0.341 m/s at
+  model and its actions; its textures are the PNGs next to it, not packed
+  in). The test environment plays `NewerBalrog_anims.glb` (the skeleton,
+  the skinned mesh without materials, and the clips), dressed in the
+  model's own material.
+- ✅ (0.39) **Walk** ("Walk one"): 1.8 s for two steps, in place, at 0.341 m/s at
   model size (2.2 m/s at the test environment's 6.5x, near the game
   balrog's 2.3), so the clip plays as fast as it walks and planted hooves
   do not slide.
@@ -167,6 +169,25 @@ game yet.
     and "Play walk in place" plays the walk on the spot (0.40); either way,
     like an elephant, takes about 4 s to reach full speed and as long to
     stop (`MASS_RESPONSE`), its upper body leaning into the change.
+- ✅ (0.41) **Walk two** (`WalkTwo`): from the owner's notes on Walk one.
+  A longer stride (0.48 m at model size, not 0.38) at the same speed, so
+  2.27 s for two steps; the hoof lifts later, lower and more slowly and
+  folds less (the knee and heel bent sharply at once looked rubbery); the
+  shoulders turn against the hips with each step.
+- ✅ (0.41) **Chain fix**: the chain belt round the waist (over the backs
+  of the thighs) was skinned partly to the thighs and tail and stretched
+  with each step. Its 1,134 vertices (found by the metal map, silver not
+  gold, at belt height) now follow the hips (70%) and lower back (30%), so
+  it moves as one piece. The fix is in `NewerBalrog_anims.glb` and the
+  `.blend`, not in the original `NewerBalrog.glb`.
+- ✅ (0.41) **Claw slash** (`ClawSlash`, 2.6 s): the left claw rises
+  high and out with a pause at the top, swipes down and across as the
+  torso twists into it (lands at 0.81 s); its follow-through winds up the
+  right claw, which swipes back the other way (lands at 1.43 s); then a
+  slow settle. Hooves stay planted, the hips drop with each blow, the
+  wings trail the torso's turn and the tail counterbalances. Timeline
+  markers in the `.blend` show where each claw lands. In the test
+  environment it plays over the walk too (only the upper body then).
 
 ## The other giants
 

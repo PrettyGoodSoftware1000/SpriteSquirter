@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c5y47htsfer7r"
-path="res://.godot/imported/NewerBalrog_walk.glb-f9b61b5d78d8bb412c7545ba5072e287.scn"
+uid="uid://dw6bbw5arkhmr"
+path="res://.godot/imported/NewerBalrog_anims.glb-bd7a60a3f0622cb4eb51fe6a3482ea09.scn"
 
 [deps]
 
-source_file="res://assets/test/NewerBalrog_walk.glb"
-dest_files=["res://.godot/imported/NewerBalrog_walk.glb-f9b61b5d78d8bb412c7545ba5072e287.scn"]
+source_file="res://assets/test/NewerBalrog_anims.glb"
+dest_files=["res://.godot/imported/NewerBalrog_anims.glb-bd7a60a3f0622cb4eb51fe6a3482ea09.scn"]
 
 [params]
 

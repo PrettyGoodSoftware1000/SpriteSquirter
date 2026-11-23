@@ -6,20 +6,26 @@ extends Node3D
 ## The camera is the game's (WASD / arrows pan, Q / E turn, wheel zoom,
 ## middle drag to turn and tilt). Esc goes back to the menu.
 ##
-## "Walk" sets it walking round a wide circle with its walk clip
-## (tools/newer_balrog_walk.py). It is heavy: like an elephant it takes a
-## few seconds to get going and to come to a stop, and its body leans
-## into the change of speed.
+## Its animations (tools/newer_balrog_anims.py) come in
+## NewerBalrog_anims.glb with the model's mesh, skinned there with the
+## chain fix; the mesh shown is that one, wearing the model's own material.
+##   "Walk in place" / "Walk around": the walk on the spot, or round a wide
+##   circle ("Walk one" or "Walk two"). It is heavy: like an elephant it
+##   takes a few seconds to get going and to stop, and leans into it.
+##   "Claw slash": the left claw, then the right. While it walks only its
+##   upper body slashes.
 
 const MODEL := "res://assets/test/NewerBalrog.glb"
+const ANIMS := "res://assets/test/NewerBalrog_anims.glb"
 ## The model is 1.7 m tall; this shows it about as big as the game's
 ## full-grown balrog (11 m).
 const MODEL_SCALE := 6.5
-## The walk clip (the skeleton and its "Walk" action), and how fast its
-## hooves carry the model at its own size: the clip plays as fast as the
-## model really walks, so the hooves do not slide.
-const WALK_CLIP := "res://assets/test/NewerBalrog_walk.glb"
+## The walk clips, and how fast their hooves carry the model at its own
+## size (both the same): a clip plays as fast as the model really walks,
+## so the hooves do not slide.
+const WALKS := {"Walk one": "Walk", "Walk two": "WalkTwo"}
 const WALK_CLIP_SPEED := 0.341
+const SLASH_CLIP := "ClawSlash"
 ## Its walking speed (about the game balrog's 2.3 m/s) and the circle it
 ## walks round.
 const WALK_SPEED := WALK_CLIP_SPEED * MODEL_SCALE
@@ -29,6 +35,9 @@ const WALK_RADIUS := 30.0
 const MASS_RESPONSE := 1.3
 ## The bone the upper body leans from, as it speeds up or slows down.
 const LEAN_BONE := "Bone_003"
+## Bones a slash leaves to the walk while it walks (the hips and legs).
+const LEG_BONES: Array[String] = ["Bone_000", "Bone_001", "Bone_012", "Bone_013", "Bone_014", "Bone_015",
+	"Bone_016", "Bone_017", "Bone_018", "Bone_019", "Bone_020", "Bone_021"]
 
 var _model: Node3D
 var _skel: Skeleton3D
@@ -37,9 +46,14 @@ var _key: DirectionalLight3D
 var _env: Environment
 var _info: Label
 var _speed_label: Label
+## Each clip by name, and [track, bone, track type] for each of its tracks.
+var _clips: Dictionary = {}
+var _clip_tracks: Dictionary = {}
 var _walk: Animation
-## [track, bone, track type] for each track of the walk clip.
-var _tracks: Array[Array] = []
+var _tracks: Array = []
+var _slash: Animation
+var _slash_t := -1.0
+var _leg_bone: Dictionary = {}
 ## Walking round the circle, or on the spot (the clip plays, it stays put).
 var _walking := false
 var _in_place := false
@@ -58,32 +72,59 @@ var _walk_w := 0.0
 func _ready() -> void:
 	_build_lighting()
 	_build_floor()
-	_model = (load(MODEL) as PackedScene).instantiate() as Node3D
-	_model.name = "Model"
-	_model.scale = Vector3.ONE * MODEL_SCALE
-	add_child(_model)
-	var skels := _model.find_children("*", "Skeleton3D", true, false)
-	_skel = skels[0] as Skeleton3D if not skels.is_empty() else null
-	_load_walk()
+	_build_model()
 	_build_bone_lines()
 	_build_camera()
 	_build_ui()
 
 
-func _load_walk() -> void:
-	if _skel == null or not ResourceLoader.exists(WALK_CLIP):
+## The animated mesh from ANIMS, dressed in MODEL's material (ANIMS has
+## none, to keep it small). Without ANIMS, the model as it comes.
+func _build_model() -> void:
+	var original := (load(MODEL) as PackedScene).instantiate() as Node3D
+	if not ResourceLoader.exists(ANIMS):
+		_model = original
+	else:
+		_model = (load(ANIMS) as PackedScene).instantiate() as Node3D
+		var skin: Material = null
+		for node in original.find_children("*", "MeshInstance3D", true, false):
+			skin = (node as MeshInstance3D).get_active_material(0)
+			if skin != null:
+				break
+		original.free()
+		for node in _model.find_children("*", "MeshInstance3D", true, false):
+			(node as MeshInstance3D).material_override = skin
+	_model.name = "Model"
+	_model.scale = Vector3.ONE * MODEL_SCALE
+	add_child(_model)
+	var skels := _model.find_children("*", "Skeleton3D", true, false)
+	_skel = skels[0] as Skeleton3D if not skels.is_empty() else null
+	var players := _model.find_children("*", "AnimationPlayer", true, false)
+	if _skel == null or players.is_empty():
 		return
-	var clip := (load(WALK_CLIP) as PackedScene).instantiate()
-	var players := clip.find_children("*", "AnimationPlayer", true, false)
-	if not players.is_empty():
-		_walk = (players[0] as AnimationPlayer).get_animation("Walk")
-	clip.free()
-	if _walk == null:
-		return
-	for track in _walk.get_track_count():
-		var bone := _skel.find_bone(String(_walk.track_get_path(track).get_concatenated_subnames()))
-		if bone >= 0:
-			_tracks.append([track, bone, _walk.track_get_type(track)])
+	var player := players[0] as AnimationPlayer
+	for clip_name in player.get_animation_list():
+		var anim := player.get_animation(clip_name)
+		var tracks := []
+		for track in anim.get_track_count():
+			var bone := _skel.find_bone(String(anim.track_get_path(track).get_concatenated_subnames()))
+			if bone >= 0:
+				tracks.append([track, bone, anim.track_get_type(track)])
+		_clips[String(clip_name)] = anim
+		_clip_tracks[String(clip_name)] = tracks
+	# (The code poses the bones itself, each frame.)
+	player.queue_free()
+	for n in LEG_BONES:
+		_leg_bone[_skel.find_bone(n)] = true
+	_slash = _clips.get(SLASH_CLIP)
+	_choose_walk("Walk two")
+
+
+func _choose_walk(label: String) -> void:
+	var clip: String = WALKS[label]
+	if _clips.has(clip):
+		_walk = _clips[clip]
+		_tracks = _clip_tracks[clip]
 
 
 func _build_lighting() -> void:
@@ -251,6 +292,20 @@ func _build_ui() -> void:
 		if on:
 			in_place.set_pressed_no_signal(false)
 		_walking = on)
+	# Which walk (it can change mid-stride).
+	var which_row := HBoxContainer.new()
+	which_row.add_theme_constant_override("separation", 6)
+	box.add_child(which_row)
+	var which := ButtonGroup.new()
+	for label: String in WALKS:
+		var b := _button(label)
+		b.toggle_mode = true
+		b.button_group = which
+		b.disabled = not _clips.has(WALKS[label])
+		b.button_pressed = label == "Walk two"
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(_choose_walk.bind(label))
+		which_row.add_child(b)
 	var cam_row := HBoxContainer.new()
 	cam_row.add_theme_constant_override("separation", 6)
 	box.add_child(cam_row)
@@ -270,6 +325,11 @@ func _build_ui() -> void:
 	_speed_label = Label.new()
 	_speed_label.modulate = Color(1, 1, 1, 0.8)
 	box.add_child(_speed_label)
+	box.add_child(_heading_label("Attack"))
+	var slash := _button("Claw slash (left, then right)")
+	slash.disabled = _slash == null
+	slash.pressed.connect(func() -> void: _slash_t = 0.0)
+	box.add_child(slash)
 
 	box.add_child(_heading_label("Lighting"))
 	var grid := GridContainer.new()
@@ -309,9 +369,15 @@ func _model_info() -> String:
 			tris += idx.size() / 3 if not idx.is_empty() else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
 	var players := _model.find_children("*", "AnimationPlayer", true, false)
 	var clips := (players[0] as AnimationPlayer).get_animation_list().size() if not players.is_empty() else 0
-	var walk := "\nWalk: %.1f s a cycle (%s)" % [_walk.length, WALK_CLIP.get_file()] if _walk != null else "\nNo walk clip"
-	return "%s\n%d triangles, %d bones, %d animations%s" % [MODEL.get_file(), tris,
-		_skel.get_bone_count() if _skel != null else 0, clips, walk]
+	var lines := ""
+	for label: String in WALKS:
+		var clip: Animation = _clips.get(WALKS[label])
+		if clip != null:
+			lines += "\n%s: %.2f s for two steps" % [label, clip.length]
+	if _slash != null:
+		lines += "\nClaw slash: %.2f s" % _slash.length
+	return "%s (animations: %s)\n%d triangles, %d bones, %d animations%s" % [MODEL.get_file(),
+		ANIMS.get_file(), tris, _skel.get_bone_count() if _skel != null else 0, clips, lines]
 
 
 func _process(delta: float) -> void:
@@ -353,6 +419,7 @@ func _update_walk(delta: float) -> void:
 				Animation.TYPE_POSITION_3D:
 					var at := _skel.get_bone_rest(bone).origin
 					_skel.set_bone_pose_position(bone, at.lerp(_walk.position_track_interpolate(track, time), _walk_w))
+	_update_slash(delta)
 	# The upper body leans into speeding up and back when slowing down.
 	var lean := clampf(_accel * 0.09, -0.1, 0.1)
 	var spine := _skel.find_bone(LEAN_BONE)
@@ -365,6 +432,31 @@ func _update_walk(delta: float) -> void:
 		rig.focus.x = _model.position.x
 		rig.focus.z = _model.position.z
 	_speed_label.text = "Speed %.1f m/s" % _speed
+
+
+## The claw slash, once through, over the walk or the standing pose. It
+## eases in and out; while it walks, the hips and legs keep walking.
+func _update_slash(delta: float) -> void:
+	if _slash == null or _slash_t < 0.0:
+		return
+	_slash_t += delta
+	if _slash_t >= _slash.length:
+		_slash_t = -1.0
+		return
+	var w := minf(1.0, _slash_t / 0.15) * minf(1.0, (_slash.length - _slash_t) / 0.3)
+	for entry in _clip_tracks[SLASH_CLIP]:
+		var track: int = entry[0]
+		var bone: int = entry[1]
+		var bw := w * (1.0 - _walk_w if _leg_bone.has(bone) else 1.0)
+		if bw <= 0.001:
+			continue
+		match entry[2]:
+			Animation.TYPE_ROTATION_3D:
+				var now := _skel.get_bone_pose_rotation(bone)
+				_skel.set_bone_pose_rotation(bone, now.slerp(_slash.rotation_track_interpolate(track, _slash_t), bw))
+			Animation.TYPE_POSITION_3D:
+				var at := _skel.get_bone_pose_position(bone)
+				_skel.set_bone_pose_position(bone, at.lerp(_slash.position_track_interpolate(track, _slash_t), bw))
 
 
 func _unhandled_input(event: InputEvent) -> void:

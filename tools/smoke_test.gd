@@ -1949,7 +1949,7 @@ func _run() -> void:
 	_check(came_down, "on an attack move the raven lands to fight what it passes (%.0f m short of where it was sent)" % raven._flat(raven_goal, raven.global_position))
 	if is_instance_valid(waylaid):
 		waylaid.queue_free()
-	raven.mind.process_mode = Node.PROCESS_MODE_INHERIT
+	# (Its mind stays off, as for the checks before: the balrog's come next.)
 	raven.has_target = false
 	raven.attack_moving = false
 

@@ -125,6 +125,28 @@ Plan:
    and cannot flap (no wing bones); ask the owner if they should.
 6. ✅ (0.36) Looked at in the game, smoke test run, pushed.
 
+## The newer balrog (ArtShift branch, 0.38)
+
+`assets/test/NewerBalrog.glb`, the owner's newer Meshy model (Nov 2026),
+shown on its own by the **Test environment** button on the title menu
+(`scripts/game/test_environment.gd`): its own PBR materials with no cel
+shading or outline, under studio lights (key with shadows, fill, rim) and
+a soft sky, tone mapped (ACES), with the game's camera. It is not in the
+game yet.
+
+- 9,832 triangles, 1.7 m tall, faces +Z. One material with three 4096 x
+  4096 maps: colour, normal, and metal/roughness. They import lossless
+  (no VRAM compression) so it looks as it does on Meshy. No emission map:
+  the lava cracks are painted into the colour map, and nothing in the file
+  makes them glow.
+- No lights or cameras in the file: Meshy's look comes from its viewer's
+  lighting, which the test environment imitates.
+- A new skeleton, 43 bones (`SmartRigArmature`, named `Bone_000` to
+  `Bone_042`, not Mixamo names): a 5-bone spine to the neck, a 3-bone
+  head and neck chain, arms of 5 (shoulder to hand), legs of 5 (hip to
+  toe), **wings of 4 bones each**, a **3-bone tail**, and a 3-bone flap
+  hanging at the front. No animations yet. "Show skeleton" draws it.
+
 ## The other giants
 
 The owner will make new Meshy models for the tortoise, squirrel and raven.

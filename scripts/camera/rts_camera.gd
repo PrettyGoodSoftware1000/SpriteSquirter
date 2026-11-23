@@ -17,6 +17,9 @@ extends Node3D
 @export var bounds := 128.0
 ## Radians per second the view turns by itself (the main menu backdrop).
 var auto_orbit := 0.0
+## Metres above the ground the view looks at (the test environment looks
+## at the middle of a model, not its feet).
+var focus_lift := 0.0
 
 var camera: Camera3D
 var focus := Vector3.ZERO
@@ -47,7 +50,7 @@ func set_zoom(value: float, instant := false) -> void:
 func focus_on(pos: Vector3, instant := false) -> void:
 	focus = Vector3(pos.x, focus.y, pos.z)
 	if instant:
-		focus.y = _ground(pos)
+		focus.y = _ground(pos) + focus_lift
 		_update_camera(0.0)
 
 
@@ -110,7 +113,7 @@ func _process(delta: float) -> void:
 		focus.z = clampf(focus.z, -bounds, bounds)
 
 	distance = lerpf(distance, _target_distance, 1.0 - exp(-10.0 * delta))
-	focus.y = lerpf(focus.y, _ground(focus), 1.0 - exp(-6.0 * delta))
+	focus.y = lerpf(focus.y, _ground(focus) + focus_lift, 1.0 - exp(-6.0 * delta))
 	_shake = move_toward(_shake, 0.0, delta * 2.5)
 	_update_camera(delta)
 

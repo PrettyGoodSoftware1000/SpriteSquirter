@@ -4,6 +4,7 @@ extends Node3D
 ##   "menu"    MainMenu: a random island behind the title menu
 ##   "play"    PlayMode: the game, on a random island or a saved map
 ##   "editor"  EditorMode: the map editor
+##   "test"    TestEnvironment: a new model on its own, no island
 ##
 ## A world comes from a saved map file when session.map_path is set, and
 ## otherwise from Game.world_seed at the size in session.size.
@@ -15,6 +16,14 @@ var camera_rig: RtsCamera
 
 func _ready() -> void:
 	var mode: String = Game.session.mode
+	if mode == "test":
+		# No island: just the model, its lights and the camera.
+		Game.world_root = self
+		Game.terrain = null
+		var test := TestEnvironment.new()
+		test.name = "Controller"
+		add_child(test)
+		return
 	var map := {}
 	if not Game.session.get("map_data", {}).is_empty():
 		map = Game.session.map_data

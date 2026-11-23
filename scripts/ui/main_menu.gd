@@ -1,7 +1,8 @@
 class_name MainMenu
 extends CanvasLayer
 ## The title menu, shown over a slowly turning random island. Start a game
-## on a random island of any size or on a saved map, or open the map editor.
+## on a random island of any size or on a saved map, open the map editor,
+## or look at a new model in the test environment.
 
 var _size := Terrain.DEFAULT_SIZE
 var _maps: Array[Dictionary] = []
@@ -114,6 +115,10 @@ func _ready() -> void:
 		DirAccess.make_dir_recursive_absolute(MapData.DIR)
 		OS.shell_open(ProjectSettings.globalize_path(MapData.DIR)))
 	map_row.add_child(folder)
+
+	var test := _button("Test environment")
+	test.pressed.connect(func() -> void: Game.start("test"))
+	box.add_child(test)
 
 	var quit := _button("Quit")
 	quit.pressed.connect(func() -> void: get_tree().quit())

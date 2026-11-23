@@ -40,8 +40,13 @@ var _speed_label: Label
 var _walk: Animation
 ## [track, bone, track type] for each track of the walk clip.
 var _tracks: Array[Array] = []
+## Walking round the circle, or on the spot (the clip plays, it stays put).
 var _walking := false
+var _in_place := false
 var _follow := true
+## The lighting sliders and their starting values, for "Reset lighting".
+var _light_sliders: Array[HSlider] = []
+var _light_defaults: Array[float] = []
 var _speed := 0.0
 var _accel := 0.0
 var _heading := 0.0
@@ -95,11 +100,16 @@ func _build_lighting() -> void:
 	_env.background_mode = Environment.BG_SKY
 	_env.sky = sky
 	# The sky lights it from every side and shows in its shiny parts.
+	# (Not too much of it, or it flattens the model's shading: washed out.)
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	_env.ambient_light_energy = 1.0
+	_env.ambient_light_energy = 0.5
 	_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	_env.tonemap_exposure = 1.0
+	# A little more contrast and colour; the sliders change these.
+	_env.adjustment_enabled = true
+	_env.adjustment_contrast = 1.12
+	_env.adjustment_saturation = 1.15
 	_env.ssao_enabled = true
 	_env.ssao_radius = 1.5
 	_env.ssao_intensity = 1.6
@@ -109,14 +119,14 @@ func _build_lighting() -> void:
 	# side, and a rim light from behind to pick out the outline.
 	_key = DirectionalLight3D.new()
 	_key.name = "KeyLight"
-	_key.light_energy = 2.2
+	_key.light_energy = 2.6
 	_key.shadow_enabled = true
 	_key.directional_shadow_max_distance = 120.0
 	_key.rotation_degrees = Vector3(-42.0, 35.0, 0.0)
 	add_child(_key)
 	var fill := DirectionalLight3D.new()
 	fill.name = "FillLight"
-	fill.light_energy = 0.55
+	fill.light_energy = 0.4
 	fill.light_color = Color(0.85, 0.9, 1.0)
 	fill.rotation_degrees = Vector3(-20.0, -60.0, 0.0)
 	add_child(fill)
@@ -219,45 +229,66 @@ func _build_ui() -> void:
 	bones.toggle_mode = true
 	bones.toggled.connect(func(on: bool) -> void: _bones.visible = on)
 	box.add_child(bones)
+	box.add_child(_heading_label("Walk"))
 	var walk_row := HBoxContainer.new()
 	walk_row.add_theme_constant_override("separation", 6)
 	box.add_child(walk_row)
-	var walk := _button("Walk")
-	walk.toggle_mode = true
-	walk.disabled = _walk == null
-	walk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	walk.toggled.connect(func(on: bool) -> void: _walking = on)
-	walk_row.add_child(walk)
+	var in_place := _button("Play walk in place")
+	var around := _button("Walk around")
+	for b: Button in [in_place, around]:
+		b.toggle_mode = true
+		b.disabled = _walk == null
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		walk_row.add_child(b)
+	# One or the other: switching between them keeps its momentum.
+	in_place.toggled.connect(func(on: bool) -> void:
+		_in_place = on
+		if on:
+			around.set_pressed_no_signal(false)
+		_walking = on)
+	around.toggled.connect(func(on: bool) -> void:
+		_in_place = false
+		if on:
+			in_place.set_pressed_no_signal(false)
+		_walking = on)
+	var cam_row := HBoxContainer.new()
+	cam_row.add_theme_constant_override("separation", 6)
+	box.add_child(cam_row)
 	var follow := _button("Camera follows")
 	follow.toggle_mode = true
 	follow.button_pressed = true
 	follow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	follow.toggled.connect(func(on: bool) -> void: _follow = on)
-	walk_row.add_child(follow)
+	cam_row.add_child(follow)
 	var home := _button("Back to start")
+	home.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	home.pressed.connect(func() -> void:
-		_speed = 0.0
-		_accel = 0.0
 		_heading = 0.0
 		_model.position = Vector3.ZERO
 		_model.rotation.y = 0.0)
-	box.add_child(home)
+	cam_row.add_child(home)
 	_speed_label = Label.new()
 	_speed_label.modulate = Color(1, 1, 1, 0.8)
 	box.add_child(_speed_label)
-	var sun := HBoxContainer.new()
-	var sun_label := Label.new()
-	sun_label.text = "Key light"
-	sun.add_child(sun_label)
-	var turn := HSlider.new()
-	turn.min_value = -180.0
-	turn.max_value = 180.0
-	turn.value = _key.rotation_degrees.y
-	turn.custom_minimum_size.x = 180
-	turn.focus_mode = Control.FOCUS_NONE
-	turn.value_changed.connect(func(v: float) -> void: _key.rotation_degrees.y = v)
-	sun.add_child(turn)
-	box.add_child(sun)
+
+	box.add_child(_heading_label("Lighting"))
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 8)
+	box.add_child(grid)
+	_slider(grid, "Brightness", 0.3, 2.5, _env.tonemap_exposure, func(v: float) -> void: _env.tonemap_exposure = v)
+	_slider(grid, "Contrast", 0.5, 2.0, _env.adjustment_contrast, func(v: float) -> void: _env.adjustment_contrast = v)
+	_slider(grid, "Colour", 0.0, 2.0, _env.adjustment_saturation, func(v: float) -> void: _env.adjustment_saturation = v)
+	_slider(grid, "Sky light", 0.0, 2.0, _env.ambient_light_energy, func(v: float) -> void: _env.ambient_light_energy = v)
+	_slider(grid, "Key light", 0.0, 6.0, _key.light_energy, func(v: float) -> void: _key.light_energy = v)
+	_slider(grid, "Key direction", -180.0, 180.0, _key.rotation_degrees.y, func(v: float) -> void: _key.rotation_degrees.y = v)
+	_slider(grid, "Key height", 5.0, 85.0, -_key.rotation_degrees.x, func(v: float) -> void: _key.rotation_degrees.x = -v)
+	_slider(grid, "Shadows (SSAO)", 0.0, 4.0, _env.ssao_intensity, func(v: float) -> void: _env.ssao_intensity = v)
+	var reset := _button("Reset lighting")
+	reset.pressed.connect(func() -> void:
+		for i in _light_sliders.size():
+			_light_sliders[i].value = _light_defaults[i])
+	box.add_child(reset)
 	var help := Label.new()
 	help.text = "WASD pan   Q / E turn   wheel zoom   middle drag tilt"
 	help.add_theme_font_size_override("font_size", 13)
@@ -300,10 +331,11 @@ func _update_walk(delta: float) -> void:
 	if not _walking and _speed < 0.02:
 		_speed = 0.0
 		_accel = 0.0
-	# Round the circle.
-	_heading += _speed / WALK_RADIUS * delta
-	_model.rotation.y = _heading
-	_model.position += Vector3(sin(_heading), 0.0, cos(_heading)) * _speed * delta
+	# Round the circle (or on the spot: the clip plays, the body stays).
+	if not _in_place:
+		_heading += _speed / WALK_RADIUS * delta
+		_model.rotation.y = _heading
+		_model.position += Vector3(sin(_heading), 0.0, cos(_heading)) * _speed * delta
 	# The clip runs as fast as it walks; mixed with the standing pose while
 	# it gets going or comes to a stop.
 	_phase = fposmod(_phase + delta * _speed / WALK_SPEED / _walk.length, 1.0)
@@ -343,6 +375,41 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _back() -> void:
 	Game.start("menu", "", Terrain.SIZE)
+
+
+## A row of `grid` (3 columns): a name, a slider that calls `apply`, and
+## the value.
+func _slider(grid: GridContainer, text: String, lo: float, hi: float, value: float, apply: Callable) -> void:
+	var label := Label.new()
+	label.text = text
+	grid.add_child(label)
+	var s := HSlider.new()
+	s.min_value = lo
+	s.max_value = hi
+	s.step = (hi - lo) / 200.0
+	s.custom_minimum_size.x = 200
+	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	s.focus_mode = Control.FOCUS_NONE
+	s.value = value
+	grid.add_child(s)
+	var shown := Label.new()
+	shown.custom_minimum_size.x = 44
+	shown.modulate = Color(1, 1, 1, 0.7)
+	shown.text = "%.2f" % value if hi <= 10.0 else "%d" % roundi(value)
+	grid.add_child(shown)
+	s.value_changed.connect(func(v: float) -> void:
+		apply.call(v)
+		shown.text = "%.2f" % v if hi <= 10.0 else "%d" % roundi(v))
+	_light_sliders.append(s)
+	_light_defaults.append(value)
+
+
+func _heading_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 15)
+	label.modulate = Color(1.0, 0.9, 0.6)
+	return label
 
 
 func _button(text: String) -> Button:

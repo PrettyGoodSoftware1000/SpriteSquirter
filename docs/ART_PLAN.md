@@ -163,7 +163,8 @@ game yet.
     other, arms and tail swing late, the head stays steady with a small
     nod. The wings do not flap: each footfall's jolt makes them dip a
     little and spring back, the tips last.
-  - In the test environment ("Walk") it walks round a wide circle and,
+  - In the test environment "Walk around" walks it round a wide circle
+    and "Play walk in place" plays the walk on the spot (0.40); either way,
     like an elephant, takes about 4 s to reach full speed and as long to
     stop (`MASS_RESPONSE`), its upper body leaning into the change.
 

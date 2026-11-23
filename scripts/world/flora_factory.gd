@@ -6,6 +6,8 @@ extends RefCounted
 ## cheap. Colours come from the nature palette (see Art.nature).
 
 const VARIANTS := 5
+## The tallest a tree grows, as a share of the usual height.
+const TALLEST := 3.0
 
 static var _plants := {}
 static var _rocks: Array[ArrayMesh] = []
@@ -38,6 +40,15 @@ static func create_tree(rng: RandomNumberGenerator) -> Destructible:
 	t.hp = t.max_hp
 	t.flammability = 0.6
 	t.burn_duration = rng.randf_range(8.0, 13.0)
+	# Height: most trees are about the usual size, a few much taller (up to
+	# TALLEST times), and the tall ones a little wider too. (Rolled last, so
+	# the trees saved in maps keep their kind, shape and spot.)
+	if kind != "bush":
+		var tall := 1.0 + (TALLEST - 1.0) * pow(rng.randf(), 3.0)
+		var wide := 1.0 + (tall - 1.0) * 0.35
+		t.scale = Vector3(s * wide, s * tall, s * wide)
+		t.height = data.height * s * tall
+		t.footprint = data.footprint * s * wide
 	if kind != "bush":
 		_add_collider(t, 0.35, data.height * 0.6)
 	return t

@@ -10,7 +10,7 @@ extends Node
 const SMALL := 0.12
 
 var _tree: Destructible
-var _full := 1.0
+var _full_scale := Vector3.ONE
 var _age := 0.0
 var _tick := 0.0
 
@@ -27,8 +27,8 @@ static func plant(pos: Vector3) -> Destructible:
 
 func _ready() -> void:
 	_tree = get_parent() as Destructible
-	_full = _tree.scale.x
-	_tree.scale = Vector3.ONE * _full * SMALL
+	_full_scale = _tree.scale
+	_tree.scale = _full_scale * SMALL
 	# (After the tree's own _ready, which puts it among the trees.)
 	_settle.call_deferred()
 
@@ -56,7 +56,7 @@ func _process(delta: float) -> void:
 		queue_free()
 		return
 	var grown := share()
-	_tree.scale = Vector3.ONE * _full * lerpf(SMALL, 1.0, grown)
+	_tree.scale = _full_scale * lerpf(SMALL, 1.0, grown)
 	if grown >= 1.0:
 		_tree.remove_from_group("saplings")
 		_tree.add_to_group("trees")

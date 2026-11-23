@@ -210,6 +210,9 @@ stage.
 ## Version 0.32: No more black buildings and trees ✅
 - The shader buffer for per-object values (burn, tint) holds 131,072 objects, not 16,384: big or expanded maps with many trees no longer turn some of them black
 
+## Version 0.33: Taller trees ✅
+- Trees vary more in height: most about as before, about 1 in 5 over twice as tall, the tallest 3 times (a little wider too); bushes unchanged
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

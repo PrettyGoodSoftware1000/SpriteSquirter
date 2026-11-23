@@ -612,7 +612,8 @@ func _explore() -> bool:
 func _try_spells() -> bool:
 	if not is_instance_valid(Game.village) or not Game.village.founded:
 		return false
-	if creature.flying or creature.running:
+	# (It casts in the air too: the raven over a fight, on the way somewhere.)
+	if creature.running:
 		return false
 	for spell: String in CASTS:
 		if not learned(spell) or Game.now < _ready_at.get(spell, 0.0) or creature.magicko < Balance.num("creature_cost_" + spell):

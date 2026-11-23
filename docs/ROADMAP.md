@@ -217,6 +217,11 @@ stage.
 - Right-click is an attack move for the creature: it goes after enemies on the way and stays to fight
 - docs/ART_PLAN.md: the plan for new giant models and animation
 
+## Version 0.35: The raven fights from the air ✅
+- Creatures cast spells while flying (on an attack move and on their own)
+- On an attack move the raven chases giant bats in the air and lands to fight anything on the ground on the way
+- Giants melee giant bats: the raven with its wings in flight, any giant with a blow when a bat comes low enough
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

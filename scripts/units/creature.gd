@@ -233,6 +233,12 @@ var _auto := false
 ## in reach it forgets the rest of the way.
 var attack_moving := false
 var _attack_goal := Vector3.ZERO
+## What the next blow with the fists is aimed at: the other giant or a
+## giant bat.
+var _strike_target: Node3D
+## In the air: when it next looks about, and the bat it is chasing.
+var _air_scan := 0.0
+var _air_bat: GiantBat
 ## Standing still and turning to face goblins before attacking.
 var _turning := false
 var _crouch := 0.0
@@ -754,13 +760,23 @@ func _land() -> void:
 func _update_flight(delta: float) -> void:
 	var terrain := Game.terrain
 	var cruise := Balance.num("raven_fly_height") * lerpf(0.4, 1.0, size)
+	_action_cooldown = maxf(0.0, _action_cooldown - delta)
+	_air_scan -= delta
+	if _air_scan <= 0.0 and not knocked_out:
+		_air_scan = 0.3
+		_air_combat()
+	var chasing_bat := is_instance_valid(_air_bat) and _air_bat.is_alive()
+	if chasing_bat:
+		target = Vector3(_air_bat.global_position.x, global_position.y, _air_bat.global_position.z)
+		has_target = true
 	var to := target - global_position
 	to.y = 0.0
 	var dist := to.length()
 	var desired_speed := 0.0
 	# It starts down a little way short of the target (half way, on a short hop).
 	# (Out of stamina, it comes down wherever it is and walks the rest.)
-	var landing := knocked_out or _tired or not has_target or dist < maxf(minf(cruise * 1.3, _flight_length * 0.5), 3.0)
+	# Chasing a bat, it stays up.
+	var landing := knocked_out or _tired or (not chasing_bat and (not has_target or dist < maxf(minf(cruise * 1.3, _flight_length * 0.5), 3.0)))
 	if has_target and not knocked_out:
 		if dist < 0.8:
 			has_target = false
@@ -787,6 +803,9 @@ func _update_flight(delta: float) -> void:
 			var q := p + fwd * speed * k * 0.7
 			ahead = maxf(ahead, terrain.get_height(q.x, q.z))
 		want_alt = cruise + ahead - ground
+		if chasing_bat:
+			# Up or down to the bat's height.
+			want_alt = clampf(_air_bat.global_position.y - ground - 1.0, 1.5, cruise * 1.6)
 	_alt = lerpf(_alt, want_alt, 1.0 - exp(-(4.0 if knocked_out else 1.8) * delta))
 	_alt = move_toward(_alt, want_alt, cruise * 0.25 * delta)
 	_ground_y = lerpf(_ground_y, ground, 1.0 - exp(-8.0 * delta))
@@ -794,6 +813,96 @@ func _update_flight(delta: float) -> void:
 	global_position = p
 	if landing and _alt < 0.12 * size + 0.03:
 		_land()
+
+
+## Looking about in the air: it buffets any giant bat within reach with its
+## wings, and on an attack move it goes after bats in the air and comes
+## down to fight anything on the ground on the way.
+func _air_combat() -> void:
+	if hostile:
+		return
+	var close := _nearest_bat(REACH * size + 3.0)
+	if close != null and _action_cooldown <= 0.0:
+		_hit_bat(close)
+		_action_cooldown = 1.0
+	if not attack_moving:
+		_air_bat = null
+		return
+	var aggro := Balance.num("creature_aggro_range")
+	_air_bat = _nearest_bat(aggro)
+	if _air_bat != null:
+		_auto = true
+		return
+	var foe := _nearest_ground_enemy(aggro)
+	if foe != null:
+		# Down to it (it lands short of the target, on the way in).
+		target = foe.global_position
+		has_target = true
+		_auto = true
+		_flight_length = maxf(_flight_length, _flat(foe.global_position, global_position))
+		_look_at = target
+	elif _auto:
+		target = _attack_goal
+		has_target = true
+		_auto = false
+		_look_at = target
+
+
+## The live giant bat nearest to it within `within` metres (in 3D), or null.
+func _nearest_bat(within: float) -> GiantBat:
+	var best: GiantBat = null
+	var best_d := within
+	for node in get_tree().get_nodes_in_group("bats"):
+		var bat := node as GiantBat
+		if bat == null or not bat.is_alive():
+			continue
+		var d := bat.global_position.distance_to(global_position + Vector3.UP * 2.0 * size)
+		if d < best_d:
+			best_d = d
+			best = bat
+	return best
+
+
+## A giant bat low and near enough to be hit from where it stands, or null.
+func _bat_in_reach() -> GiantBat:
+	for node in get_tree().get_nodes_in_group("bats"):
+		var bat := node as GiantBat
+		if bat != null and bat.is_alive() and _can_reach_bat(bat):
+			return bat
+	return null
+
+
+func _can_reach_bat(bat: GiantBat) -> bool:
+	if flying:
+		return bat.global_position.distance_to(global_position) < REACH * size + 3.0
+	var up := head_position().y - global_position.y
+	return _flat(bat.global_position, global_position) < REACH * size + 1.5 \
+		and bat.global_position.y - global_position.y < up + 2.5 * size + 1.0
+
+
+func _hit_bat(bat: GiantBat) -> void:
+	bat.take_hit(Balance.num("creature_strike_damage") * lerpf(0.3, 1.0, size), self)
+	Game.effects.spawn_dust(bat.global_position, 1.2 + size)
+	Game.shake(0.3 * size, bat.global_position)
+
+
+## The nearest enemy on the ground within `within` metres: a goblin, an
+## ogre, or the other giant. Null if none.
+func _nearest_ground_enemy(within: float) -> Node3D:
+	var best: Node3D = null
+	var best_d := within
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g.state == Villager.State.HELD or g.charmed() or not g.is_alive():
+			continue
+		var d := _flat(g.global_position, global_position)
+		if d < best_d:
+			best_d = d
+			best = g
+	var rival := _rival()
+	if rival != null and rival != self and not rival.is_flying() and _flat(rival.global_position, global_position) < best_d:
+		best = rival
+	return best
 
 
 func is_auto() -> bool:
@@ -1171,6 +1280,18 @@ func _update_attacks(delta: float) -> void:
 			# (Or when it is near enough to be hitting us already.)
 			hunting = true
 			hunt_pos = rival.global_position
+	# A giant bat low enough to reach is swatted too.
+	if focus == null and not hostile:
+		focus = _bat_in_reach()
+	# On an attack move, a flyer takes to the air after bats it cannot reach.
+	if attack_moving and focus == null and not hunting and haste() == "fly" and Game.now >= snared_until:
+		var high := _nearest_bat(Balance.num("creature_aggro_range"))
+		if high != null:
+			target = Vector3(high.global_position.x, global_position.y, high.global_position.z)
+			has_target = true
+			_auto = true
+			_hurry()
+			return
 	_alert = focus != null or hunting
 	_jaw_want = 0.16 + 0.14 * float(_spec.nervous) if _alert else 0.0
 	if attack_moving:
@@ -1215,7 +1336,8 @@ func _update_attacks(delta: float) -> void:
 	var facing := absf(angle_difference(heading, atan2(to.x, to.z))) < 0.55
 	if not facing or _action_cooldown > 0.0 or _stepping[0] or _stepping[1] or speed > 0.6:
 		return
-	if focus == rival:
+	if focus == rival or focus is GiantBat:
+		_strike_target = focus
 		_start_strike()
 		return
 	var point := global_position + to.normalized() * minf(to.length(), STOMP_STRIDE * size)
@@ -1289,7 +1411,12 @@ func _update_strike(delta: float) -> void:
 		_crouch = 0.3
 	if not _struck and _action_t >= STRIKE_LANDS:
 		_struck = true
-		var rival := _rival()
+		var bat := _strike_target as GiantBat
+		if bat != null:
+			if is_instance_valid(bat) and bat.is_alive() and _can_reach_bat(bat):
+				_hit_bat(bat)
+			_strike_target = null
+		var rival := _rival() if bat == null else null
 		if rival != null and not rival.is_flying() and _flat(rival.global_position, global_position) - 2.0 * rival.size < REACH * size + 2.5:
 			rival.take_hit(Balance.num("creature_strike_damage") * lerpf(0.3, 1.0, size), self)
 			var at := rival.global_position.lerp(global_position, 0.3)

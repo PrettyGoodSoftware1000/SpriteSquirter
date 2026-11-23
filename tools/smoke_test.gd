@@ -1436,8 +1436,12 @@ func _run() -> void:
 	beast.magicko = 0.0
 	_check(not mind._try_spells(), "the creature cannot cast without magicko")
 	beast.magicko = beast.max_magicko
-	_check(mind._try_spells() and mind.last_action == "rain" and mind.last_facts.get("target", "") == "crops" and is_equal_approx(beast.magicko, beast.max_magicko - Balance.num("creature_cost_rain")),
-		"it casts rain on the crops, and that costs it magicko (%d left)" % roundi(beast.magicko))
+	# (In the air: a flyer casts on the wing too.)
+	beast.flying = true
+	var cast_flying := mind._try_spells()
+	beast.flying = false
+	_check(cast_flying and mind.last_action == "rain" and mind.last_facts.get("target", "") == "crops" and is_equal_approx(beast.magicko, beast.max_magicko - Balance.num("creature_cost_rain")),
+		"it casts rain on the crops, even while flying, and that costs it magicko (%d left)" % roundi(beast.magicko))
 	mind.behavior["rain_fire"] = Balance.num("affinity_start")
 	mind.behavior["rain_crops"] = Balance.num("affinity_start")
 	Balance.values["spell_hold_weight"] = Balance.DEFAULTS["spell_hold_weight"]
@@ -1898,6 +1902,56 @@ func _run() -> void:
 			break
 		await _wait(1.0)
 	raven.stamina = raven.max_stamina
+	# It swats giant bats: in the air with its wings, on the ground with a blow.
+	play.raids.raiding = true
+	var swatted := play.raids.launch_bat()
+	if swatted:
+		swatted.set_process(false)
+		raven.flying = true
+		swatted.global_position = raven.global_position + Vector3(2.0, 1.0, 0.0)
+		raven._action_cooldown = 0.0
+		raven._air_combat()
+		raven.flying = false
+		_check(not swatted.is_alive(), "the raven knocks a giant bat out of the air")
+		if is_instance_valid(swatted):
+			swatted.queue_free()
+	var low_bat := play.raids.launch_bat()
+	if low_bat:
+		low_bat.set_process(false)
+		low_bat.global_position = raven.global_position + Vector3(2.0, 1.5, 0.0)
+		_check(raven._bat_in_reach() == low_bat, "a bat low enough is in reach of a giant on the ground")
+		low_bat.queue_free()
+	play.raids.raiding = false
+	# On an attack move it comes down to fight what it passes on the way.
+	var raven_goal := raven.global_position
+	var raven_foe_at := raven.global_position
+	for k in 48:
+		var a := TAU * k / 48.0
+		var dir := Vector3(cos(a), 0, sin(a))
+		var g := raven.global_position + dir * 90.0
+		var fp := raven.global_position + dir * 45.0 + Vector3(-dir.z, 0, dir.x) * 15.0
+		if game.terrain.is_inside(g.x, g.z) and game.terrain.is_dry(g.x, g.z) and game.terrain.is_inside(fp.x, fp.z) and game.terrain.is_dry(fp.x, fp.z) \
+				and not game.terrain.is_steep(fp.x, fp.z):
+			raven_goal = g
+			raven_foe_at = fp
+			break
+	var waylaid := WorldPopulator.spawn_villager(game.world_root, game.terrain, raven_foe_at, 0.5, true)
+	waylaid.global_position = Vector3(raven_foe_at.x, game.terrain.get_height(raven_foe_at.x, raven_foe_at.z), raven_foe_at.z)
+	waylaid.process_mode = Node.PROCESS_MODE_DISABLED
+	raven.mind.process_mode = Node.PROCESS_MODE_DISABLED
+	raven.attack_move(raven_goal)
+	var came_down := false
+	for k in 60:
+		await _wait(0.5)
+		if not raven.flying and (not is_instance_valid(waylaid) or not waylaid.is_alive() or raven.is_fighting()) and raven._flat(raven_goal, raven.global_position) > 20.0:
+			came_down = true
+			break
+	_check(came_down, "on an attack move the raven lands to fight what it passes (%.0f m short of where it was sent)" % raven._flat(raven_goal, raven.global_position))
+	if is_instance_valid(waylaid):
+		waylaid.queue_free()
+	raven.mind.process_mode = Node.PROCESS_MODE_INHERIT
+	raven.has_target = false
+	raven.attack_moving = false
 
 	# The balrog hatches small, guards its cave and grows.
 	game.settings.creature_grow_minutes = 30.0

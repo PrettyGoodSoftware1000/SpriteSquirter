@@ -145,7 +145,27 @@ game yet.
   `Bone_042`, not Mixamo names): a 5-bone spine to the neck, a 3-bone
   head and neck chain, arms of 5 (shoulder to hand), legs of 5 (hip to
   toe), **wings of 4 bones each**, a **3-bone tail**, and a 3-bone flap
-  hanging at the front. No animations yet. "Show skeleton" draws it.
+  hanging at the front. "Show skeleton" draws it.
+- ✅ (0.39) **Walk**, made by Claude with `tools/newer_balrog_walk.py`
+  (Blender, run headless). Source: `assets/test/NewerBalrog.blend` (the
+  model and its `Walk` action; its textures are the PNGs next to it, not
+  packed in). The test environment plays `NewerBalrog_walk.glb` (the
+  skeleton and the clip). 1.8 s for two steps, in place, at 0.341 m/s at
+  model size (2.2 m/s at the test environment's 6.5x, near the game
+  balrog's 2.3), so the clip plays as fast as it walks and planted hooves
+  do not slide.
+  - Horse-like hind legs: the hoof lands flat and takes the weight, stays
+    planted, the heel rolls up over the front of the hoof, the hoof curls
+    toe-down and swings forward, flattens, and lands again (62% of the
+    cycle on the ground: a heavy walk).
+  - Mass: the body sinks just after each hoof lands, sways late over the
+    standing leg, the free hip drops, hips and shoulders turn against each
+    other, arms and tail swing late, the head stays steady with a small
+    nod. The wings do not flap: each footfall's jolt makes them dip a
+    little and spring back, the tips last.
+  - In the test environment ("Walk") it walks round a wide circle and,
+    like an elephant, takes about 4 s to reach full speed and as long to
+    stop (`MASS_RESPONSE`), its upper body leaning into the change.
 
 ## The other giants
 

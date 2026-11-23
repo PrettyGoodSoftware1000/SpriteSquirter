@@ -5,11 +5,30 @@ extends Node3D
 ## maps), no cel shading or outline, under studio lights and a soft sky.
 ## The camera is the game's (WASD / arrows pan, Q / E turn, wheel zoom,
 ## middle drag to turn and tilt). Esc goes back to the menu.
+##
+## "Walk" sets it walking round a wide circle with its walk clip
+## (tools/newer_balrog_walk.py). It is heavy: like an elephant it takes a
+## few seconds to get going and to come to a stop, and its body leans
+## into the change of speed.
 
 const MODEL := "res://assets/test/NewerBalrog.glb"
 ## The model is 1.7 m tall; this shows it about as big as the game's
 ## full-grown balrog (11 m).
 const MODEL_SCALE := 6.5
+## The walk clip (the skeleton and its "Walk" action), and how fast its
+## hooves carry the model at its own size: the clip plays as fast as the
+## model really walks, so the hooves do not slide.
+const WALK_CLIP := "res://assets/test/NewerBalrog_walk.glb"
+const WALK_CLIP_SPEED := 0.341
+## Its walking speed (about the game balrog's 2.3 m/s) and the circle it
+## walks round.
+const WALK_SPEED := WALK_CLIP_SPEED * MODEL_SCALE
+const WALK_RADIUS := 30.0
+## Mass: how quickly its speed follows what it wants (per second; lower is
+## heavier). The speed eases in and out, so it never jerks into motion.
+const MASS_RESPONSE := 1.3
+## The bone the upper body leans from, as it speeds up or slows down.
+const LEAN_BONE := "Bone_003"
 
 var _model: Node3D
 var _skel: Skeleton3D
@@ -17,6 +36,18 @@ var _bones: MeshInstance3D
 var _key: DirectionalLight3D
 var _env: Environment
 var _info: Label
+var _speed_label: Label
+var _walk: Animation
+## [track, bone, track type] for each track of the walk clip.
+var _tracks: Array[Array] = []
+var _walking := false
+var _follow := true
+var _speed := 0.0
+var _accel := 0.0
+var _heading := 0.0
+## How far through the walk clip it is (0..1), and how much of it shows.
+var _phase := 0.0
+var _walk_w := 0.0
 
 
 func _ready() -> void:
@@ -28,9 +59,26 @@ func _ready() -> void:
 	add_child(_model)
 	var skels := _model.find_children("*", "Skeleton3D", true, false)
 	_skel = skels[0] as Skeleton3D if not skels.is_empty() else null
+	_load_walk()
 	_build_bone_lines()
 	_build_camera()
 	_build_ui()
+
+
+func _load_walk() -> void:
+	if _skel == null or not ResourceLoader.exists(WALK_CLIP):
+		return
+	var clip := (load(WALK_CLIP) as PackedScene).instantiate()
+	var players := clip.find_children("*", "AnimationPlayer", true, false)
+	if not players.is_empty():
+		_walk = (players[0] as AnimationPlayer).get_animation("Walk")
+	clip.free()
+	if _walk == null:
+		return
+	for track in _walk.get_track_count():
+		var bone := _skel.find_bone(String(_walk.track_get_path(track).get_concatenated_subnames()))
+		if bone >= 0:
+			_tracks.append([track, bone, _walk.track_get_type(track)])
 
 
 func _build_lighting() -> void:
@@ -171,6 +219,32 @@ func _build_ui() -> void:
 	bones.toggle_mode = true
 	bones.toggled.connect(func(on: bool) -> void: _bones.visible = on)
 	box.add_child(bones)
+	var walk_row := HBoxContainer.new()
+	walk_row.add_theme_constant_override("separation", 6)
+	box.add_child(walk_row)
+	var walk := _button("Walk")
+	walk.toggle_mode = true
+	walk.disabled = _walk == null
+	walk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	walk.toggled.connect(func(on: bool) -> void: _walking = on)
+	walk_row.add_child(walk)
+	var follow := _button("Camera follows")
+	follow.toggle_mode = true
+	follow.button_pressed = true
+	follow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	follow.toggled.connect(func(on: bool) -> void: _follow = on)
+	walk_row.add_child(follow)
+	var home := _button("Back to start")
+	home.pressed.connect(func() -> void:
+		_speed = 0.0
+		_accel = 0.0
+		_heading = 0.0
+		_model.position = Vector3.ZERO
+		_model.rotation.y = 0.0)
+	box.add_child(home)
+	_speed_label = Label.new()
+	_speed_label.modulate = Color(1, 1, 1, 0.8)
+	box.add_child(_speed_label)
 	var sun := HBoxContainer.new()
 	var sun_label := Label.new()
 	sun_label.text = "Key light"
@@ -204,13 +278,61 @@ func _model_info() -> String:
 			tris += idx.size() / 3 if not idx.is_empty() else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
 	var players := _model.find_children("*", "AnimationPlayer", true, false)
 	var clips := (players[0] as AnimationPlayer).get_animation_list().size() if not players.is_empty() else 0
-	return "%s\n%d triangles, %d bones, %d animations" % [MODEL.get_file(), tris,
-		_skel.get_bone_count() if _skel != null else 0, clips]
+	var walk := "\nWalk: %.1f s a cycle (%s)" % [_walk.length, WALK_CLIP.get_file()] if _walk != null else "\nNo walk clip"
+	return "%s\n%d triangles, %d bones, %d animations%s" % [MODEL.get_file(), tris,
+		_skel.get_bone_count() if _skel != null else 0, clips, walk]
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_update_walk(delta)
 	if _bones.visible:
 		_draw_bones()
+
+
+## Speed with mass: a critically damped spring, so speeding up and slowing
+## down both start gently, build, and ease off (seconds, not a moment).
+func _update_walk(delta: float) -> void:
+	if _walk == null:
+		return
+	var want := WALK_SPEED if _walking else 0.0
+	_accel += ((want - _speed) * MASS_RESPONSE * MASS_RESPONSE - 2.0 * MASS_RESPONSE * _accel) * delta
+	_speed = maxf(0.0, _speed + _accel * delta)
+	if not _walking and _speed < 0.02:
+		_speed = 0.0
+		_accel = 0.0
+	# Round the circle.
+	_heading += _speed / WALK_RADIUS * delta
+	_model.rotation.y = _heading
+	_model.position += Vector3(sin(_heading), 0.0, cos(_heading)) * _speed * delta
+	# The clip runs as fast as it walks; mixed with the standing pose while
+	# it gets going or comes to a stop.
+	_phase = fposmod(_phase + delta * _speed / WALK_SPEED / _walk.length, 1.0)
+	_walk_w = lerpf(_walk_w, clampf(_speed / (0.35 * WALK_SPEED), 0.0, 1.0), 1.0 - exp(-4.0 * delta))
+	_skel.reset_bone_poses()
+	if _walk_w > 0.001:
+		var time := _phase * _walk.length
+		for entry in _tracks:
+			var track: int = entry[0]
+			var bone: int = entry[1]
+			match entry[2]:
+				Animation.TYPE_ROTATION_3D:
+					var rest := _skel.get_bone_rest(bone).basis.get_rotation_quaternion()
+					_skel.set_bone_pose_rotation(bone, rest.slerp(_walk.rotation_track_interpolate(track, time), _walk_w))
+				Animation.TYPE_POSITION_3D:
+					var at := _skel.get_bone_rest(bone).origin
+					_skel.set_bone_pose_position(bone, at.lerp(_walk.position_track_interpolate(track, time), _walk_w))
+	# The upper body leans into speeding up and back when slowing down.
+	var lean := clampf(_accel * 0.09, -0.1, 0.1)
+	var spine := _skel.find_bone(LEAN_BONE)
+	if spine >= 0 and absf(lean) > 0.0001:
+		var pose := _skel.get_bone_global_pose(spine)
+		pose.basis = Basis(Vector3.RIGHT, lean) * pose.basis
+		_skel.set_bone_global_pose(spine, pose)
+	if _follow and _speed > 0.0:
+		var rig := Game.camera_rig
+		rig.focus.x = _model.position.x
+		rig.focus.z = _model.position.z
+	_speed_label.text = "Speed %.1f m/s" % _speed
 
 
 func _unhandled_input(event: InputEvent) -> void:

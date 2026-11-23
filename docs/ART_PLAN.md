@@ -59,11 +59,11 @@ it up to date as steps are done.
 
 - Code: `scripts/units/creature.gd` (body, walking, attacks, the face),
   `creature_mind.gd` (choices), `balrog.gd`, `tools/bake_creature.py` (makes
-  the current `.glb` models from blobs).
-- The models are `assets/creature/{creature,squirrel,raven,balrog}.glb`,
+  the tortoise, squirrel and raven `.glb` models from blobs).
+- The player's creatures are `assets/creature/{creature,squirrel,raven}.glb`,
   each with the same bone names: `pelvis`, `spine`, `chest`, `neck`, `head`,
   `jaw`, `thigh_l/r`, `shin_l/r`, `foot_l/r`, `arm_upper_l/r`, `tail1` ...
-  (the raven and balrog have wing bones too).
+  (the raven has wing bones too). The balrog is the Meshy model now (below).
 - **All their movement is done in code** (`_update_legs()`, `_update_body()`,
   foot placement on the ground), not with animation clips. The shader
   (`shaders/creature.gdshader`) colours them with vertex colours and a
@@ -76,30 +76,43 @@ it up to date as steps are done.
 
 ## The new balrog (owner's Meshy model)
 
-Files the owner made in Meshy (Nov 2026): `BalrogRigged.glb`, the one to use
-(not yet in the repo), and `BalrogModel.glb`, the bare mesh (not needed).
+Files the owner made in Meshy (Nov 2026): `BalrogRigged.glb`, now
+`assets/creature/balrog.glb` in the game (its texture is extracted on
+import as `balrog_Image_0.png`), and `BalrogModel.glb`, the bare mesh (not
+needed). The old blob balrog is gone from the game; `bake_creature.py
+balrog` still makes it, as `balrog_blob.glb`.
 
 - 12,765 triangles, 1.86 m tall, one 2048x2048 colour texture (UV mapped),
   exported at 1/100 scale (armature scale 0.01), from Blender 4.5.
-- Humanoid rig, 24 Mixamo-named bones; no fingers, jaw, tail or wing bones.
+- Humanoid rig, 24 Mixamo-named bones (Godot names them `mixamorig_Hips`
+  ...), plus `headfront` at the front of the face; no fingers, jaw, tail or
+  wing bones (its wings and tail are part of the mesh and do not move).
+- Faces +Z. Its rest pose is a wide, crouched fighting stance, which the
+  game uses as its standing pose.
 - Animations in it: **Walking** (1.03 s loop) and **Running** (0.63 s loop).
   No idle, attack, hit or death yet.
 
-Plan (not started):
-1. Add it as the new balrog model (keep the old one until the new one
-   works); fix the scale; check it faces +Z; size it to the balrog's full
-   size.
-2. A textured-giant shader: its UV texture with the game's cel lighting and
-   outline, burn, tint and hit flash, and its lava cracks glowing.
-3. Play its walk and run, sped to match how fast it moves; code adds head
-   turning, lean, footstep fires and stomp damage on the steps.
+Plan:
+1. ✅ (0.36) In the game as the balrog, scaled 6 times (`MODEL_SCALE` in
+   `balrog.gd`) to about 11 m full grown, like the old one.
+2. ✅ (0.36) `shaders/giant.gdshader`: its texture with the game's cel
+   lighting and ink outline; bright, strongly coloured texels (the lava
+   cracks, mouth, purple armour and eyes) glow and flicker. Not yet: burn,
+   tint or a hit flash (the other giants have none either).
+3. ✅ (0.36) The Walking clip plays as fast as the balrog really walks
+   (`CLIP_SPEED`: the clip's feet carry the 1.86 m model 1.43 m a second),
+   blended into the rest stance as it stops, and its footfalls (fire, dust,
+   shaking, trampling) come when the clip's feet come down (`FOOTFALLS`).
+   Code adds breathing, a lean into the stride, head turning to what it
+   watches and back to spit fire. Running is not used (it never runs).
 4. Idle, stomp, punch, fireball spit, hit and death: from Mixamo (same
-   skeleton), or animated in Blender by the owner or Claude. Until then it
-   uses simple code-made strikes.
-5. Drop the old model's separate eyes and jaw. Ask the owner whether it
-   keeps wings (the old balrog had two little ones; the new model has no
-   wing bones).
-6. Look at it in the game, run the smoke test, push.
+   skeleton), or animated in Blender by the owner or Claude. Until then
+   they are code-made (0.36): a punch aims the arm at the foe, a stomp
+   lifts the thigh high and slams it down, and dead it topples onto its
+   face.
+5. ✅ (0.36) No separate eyes or jaw any more. Its wings are in the mesh
+   and cannot flap (no wing bones); ask the owner if they should.
+6. ✅ (0.36) Looked at in the game, smoke test run, pushed.
 
 ## The other giants
 

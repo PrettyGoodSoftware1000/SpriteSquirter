@@ -80,7 +80,9 @@ def fix_chains():
     verts = set()
     for p in m.polygons:
         c = mesh_obj.matrix_world @ p.center
-        if not (0.62 < c.z < 0.9 and abs(c.x) < 0.45):
+        # (The back half only: the chains over the backs of the thighs. The
+        # straps down the front of the hips keep Meshy's weights.)
+        if not (0.62 < c.z < 0.9 and abs(c.x) < 0.45 and c.y > -0.12):
             continue
         uvs = [uv[li].uv for li in p.loop_indices]
         pts = uvs + [sum(uvs, Vector((0, 0))) / len(uvs)]
@@ -106,6 +108,121 @@ def fix_chains():
 
 
 fix_chains()
+
+
+# --- The shoulder fix ---------------------------------------------------------------
+# The shoulders (and their armour) were skinned partly to the wing bones as
+# well as the chest, collarbone and upper arm, so whenever a wing moved on
+# its own it dragged the shoulder with it and the skin there stretched (up
+# to 5x in the claw slash). Shoulder and arm vertices now leave the wings
+# alone: their wing share goes to the collarbone.
+def fix_shoulders():
+    m = mesh_obj.data
+    vg = mesh_obj.vertex_groups
+    names = {g.index: g.name for g in vg}
+    sides = {
+        "L": (("Bone_033", "Bone_034", "Bone_032"), ("Bone_038", "Bone_037", "Bone_036", "Bone_035"), "Bone_034"),
+        "R": (("Bone_028", "Bone_029", "Bone_027"), ("Bone_042", "Bone_041", "Bone_040", "Bone_039"), "Bone_029"),
+    }
+    moved = 0
+    for v in m.vertices:
+        w = {names[g.group]: g.weight for g in v.groups}
+        for arm_bones, wing_bones, collar in sides.values():
+            arm_w = sum(w.get(b, 0.0) for b in arm_bones)
+            wing_w = sum(w.get(b, 0.0) for b in wing_bones)
+            # (Only where the arm outweighs the wing well: the wing's own
+            # skin near the shoulder must keep following the wing.)
+            if arm_w >= 0.25 and 0.0 < wing_w < 0.5 * arm_w:
+                for b in wing_bones:
+                    if b in w:
+                        vg[b].remove([v.index])
+                vg[collar].add([v.index], w.get(collar, 0.0) + wing_w, 'REPLACE')
+                moved += 1
+            # ...and the wing's skin leaves the arm alone: its arm share goes
+            # to the wing's root.
+            elif wing_w >= 0.5 and 0.0 < arm_w:
+                for b in arm_bones:
+                    if b in w:
+                        vg[b].remove([v.index])
+                vg[wing_bones[0]].add([v.index], w.get(wing_bones[0], 0.0) + arm_w, 'REPLACE')
+                moved += 1
+    print("SHOULDER fix: %d vertices now follow the arm or the wing, not both" % moved)
+
+
+fix_shoulders()
+
+
+# --- Smoother shoulders -------------------------------------------------------------
+# Next to each other, some shoulder points followed the upper arm fully and
+# others the chest fully, so a big swing of the arm (a claw swipe) tore the
+# skin between them. Each shoulder point's weights are averaged with its
+# neighbours' a few times (by distance, across the mesh's separate pieces),
+# so the skin blends from chest to arm and stretches evenly, far less.
+def smooth_shoulders(radius=0.04, rounds=4, amount=0.6):
+    from mathutils import kdtree
+    m = mesh_obj.data
+    vg = mesh_obj.vertex_groups
+    names = {g.index: g.name for g in vg}
+    shoulder = {"Bone_033", "Bone_034", "Bone_028", "Bone_029"}
+    region = [v.index for v in m.vertices
+              if (mesh_obj.matrix_world @ v.co).z > 0.85
+              and sum(g.weight for g in v.groups if names[g.group] in shoulder) > 0.05]
+    pos = [mesh_obj.matrix_world @ m.vertices[i].co for i in range(len(m.vertices))]
+    tree = kdtree.KDTree(len(pos))
+    for i, p in enumerate(pos):
+        tree.insert(p, i)
+    tree.balance()
+    weights = [{names[g.group]: g.weight for g in v.groups} for v in m.vertices]
+    near = {i: [j for (_, j, _) in tree.find_range(pos[i], radius)] for i in region}
+    for _ in range(rounds):
+        new = {}
+        for i in region:
+            avg = {}
+            for j in near[i]:
+                for b, w in weights[j].items():
+                    avg[b] = avg.get(b, 0.0) + w / len(near[i])
+            mix = {b: (1 - amount) * weights[i].get(b, 0.0) + amount * avg.get(b, 0.0)
+                   for b in set(avg) | set(weights[i])}
+            top = sorted(mix.items(), key=lambda kv: -kv[1])[:4]     # glTF: 4 per point
+            total = sum(w for _, w in top) or 1.0
+            new[i] = {b: w / total for b, w in top if w > 0.005}
+        for i, w in new.items():
+            weights[i] = w
+    for i in region:
+        for g in list(m.vertices[i].groups):
+            vg[g.group].remove([i])
+        for b, w in weights[i].items():
+            vg[b].add([i], w, 'REPLACE')
+    print("SMOOTH: %d shoulder vertices blended" % len(region))
+
+
+smooth_shoulders()
+
+
+# --- Arm webbing ---------------------------------------------------------------------
+# A few triangles join the inner arm straight to the torso (the model was
+# made with its arms near its sides): one corner follows the arm and
+# another the body, so any swing of the arm tears them. They sit hidden in
+# the armpits and are removed.
+def remove_webbing():
+    import bmesh
+    names = {g.index: g.name for g in mesh_obj.vertex_groups}
+    arms = [{"Bone_033", "Bone_032", "Bone_031", "Bone_030"}, {"Bone_028", "Bone_027", "Bone_026", "Bone_025"}]
+    m = mesh_obj.data
+    def arm_w(i, bones):
+        return sum(g.weight for g in m.vertices[i].groups if names[g.group] in bones)
+    doomed = [p.index for p in m.polygons
+              if any(max(arm_w(i, b) for i in p.vertices) - min(arm_w(i, b) for i in p.vertices) > 0.45 for b in arms)]
+    bm = bmesh.new()
+    bm.from_mesh(m)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[i] for i in doomed], context='FACES')
+    bm.to_mesh(m)
+    bm.free()
+    print("WEBBING: %d triangles removed" % len(doomed))
+
+
+remove_webbing()
 
 # The textures: use the PNGs Godot extracted next to the .glb instead of
 # packing 55 MB of them into the .blend.
@@ -147,14 +264,24 @@ def rotate_world(n, q):
     upd()
 
 
-def aim(n, child, target, weight=1.0):
-    """Swings bone n (shortest turn) so bone `child`'s head moves to target."""
+def aim(n, child, target, weight=1.0, max_angle=None):
+    """Swings bone n (shortest turn) so bone `child`'s head moves to target,
+    turning it at most `max_angle` (radians) from its rest pose."""
     h = hw(n)
     a, b = hw(child) - h, target - h
     if a.length < 1e-6 or b.length < 1e-6:
         return
     q = a.normalized().rotation_difference(b.normalized())
-    rotate_world(n, Quaternion().slerp(q, weight))
+    q = Quaternion().slerp(q, weight)
+    if max_angle is not None:
+        pb = PB[n]
+        rest = (MW @ (pb.parent.matrix if pb.parent else Matrix()) @ (pb.parent.bone.matrix_local.inverted() if pb.parent else Matrix()) @ pb.bone.matrix_local).to_quaternion()
+        now = (MW @ pb.matrix).to_quaternion()
+        after = q @ now
+        off = after @ rest.inverted()
+        if off.angle > max_angle:
+            q = Quaternion(off.axis, max_angle) @ rest @ now.inverted()
+    rotate_world(n, q)
 
 
 def qx(a): return Quaternion((1, 0, 0), a)
@@ -213,8 +340,10 @@ def reset():
     upd()
 
 
-def two_bone(upper, lower, end, target, pole, weight=1.0):
-    """Puts the end bone's head at target, the middle joint bent toward pole."""
+def two_bone(upper, lower, end, target, pole, weight=1.0, max_reach=0.999, min_reach=0.0):
+    """Puts the end bone's head at target, the middle joint bent toward pole.
+    It reaches at most `max_reach` of the limb's length (a limb snapped
+    fully straight stretches the skin round its joints)."""
     if weight <= 1e-4:
         return
     s = hw(upper)
@@ -223,7 +352,8 @@ def two_bone(upper, lower, end, target, pole, weight=1.0):
     target = hw(end).lerp(target, weight)
     d = target - s
     worst_reach[0] = max(worst_reach[0], d.length / (l1 + l2))
-    dist = min(d.length, (l1 + l2) * 0.999)
+    # (Not too close either: folding the middle joint far crushes the skin.)
+    dist = max(min(d.length, (l1 + l2) * max_reach), (l1 + l2) * min_reach)
     dn = d.normalized()
     cos_a = max(-1.0, min(1.0, (l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist)))
     p = pole - dn * pole.dot(dn)
@@ -366,21 +496,24 @@ def pose_walk(W, t):
 # Each claw: hand target (None = hanging as at rest), elbow pole, claw
 # direction (where the hand points), and how much of it shows.
 _ = None
+# (0.43: kept in front of the body and below the horns, the twist and the
+# head's hold eased: the first version wrung the neck, swung the arm across
+# the chest and locked it straight, which stretched the shoulders up to 5x.)
 SLASH = [
-    # t    twist  lean   tip   drop   L hand                 L elbow        L claw            Lw   R hand                  R elbow         R claw             Rw
-    (0.00,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3), _,               0.0, _,                      (-1, 0.2, -0.3), _,                0.0),
-    (0.45,  0.34, -0.06, -0.07, 0.01, (0.56, 0.12, 1.47),    (1, 0.3, 0.1),  (0.3, 0.5, 0.8), 1.0, (-0.42, -0.34, 0.9),    (-1, 0.2, -0.5), (0.2, -0.8, -0.3), 0.6),
-    (0.62,  0.38, -0.07, -0.08, 0.01, (0.58, 0.15, 1.52),    (1, 0.3, 0.1),  (0.3, 0.4, 0.9), 1.0, (-0.42, -0.36, 0.92),   (-1, 0.2, -0.5), (0.2, -0.8, -0.3), 0.6),
-    (0.73,  0.10, 0.14,  -0.02, 0.03, (0.52, -0.46, 1.22),   (1, 0.0, 0.5),  (-0.2, -0.8, 0.3), 1.0, (-0.5, -0.1, 0.92),   (-1, 0.3, -0.3), _,                0.5),
-    (0.81, -0.30, 0.28,  0.04, 0.06,  (-0.08, -0.66, 0.96),  (0.6, 0.0, 0.8), (-0.7, -0.6, -0.2), 1.0, (-0.6, 0.05, 1.05), (-1, 0.4, -0.1), (-0.2, 0.4, 0.6), 0.8),
-    (0.96, -0.48, 0.30,  0.07, 0.05,  (-0.40, -0.56, 0.76),  (0.3, 0.3, 1.0), (-0.5, -0.2, -0.8), 1.0, (-0.6, 0.12, 1.36), (-1, 0.4, 0.0), (-0.3, 0.5, 0.8), 1.0),
-    (1.14, -0.42, -0.02, 0.07, 0.01,  (0.40, -0.34, 0.92),   (1, 0.2, -0.5), (-0.2, -0.8, -0.3), 0.6, (-0.58, 0.15, 1.52), (-1, 0.3, 0.1), (-0.3, 0.4, 0.9), 1.0),
-    (1.24, -0.44, -0.03, 0.07, 0.01,  (0.42, -0.36, 0.92),   (1, 0.2, -0.5), (-0.2, -0.8, -0.3), 0.6, (-0.59, 0.16, 1.54), (-1, 0.3, 0.1), (-0.3, 0.4, 0.9), 1.0),
-    (1.35, -0.10, 0.14,  0.02, 0.03,  (0.5, -0.1, 0.92),     (1, 0.3, -0.3), _,               0.5, (-0.52, -0.46, 1.22),   (-1, 0.0, 0.5), (0.2, -0.8, 0.3), 1.0),
-    (1.43,  0.32, 0.30, -0.04, 0.06,  (0.55, 0.05, 1.0),     (1, 0.4, -0.2), _,               0.5, (0.06, -0.66, 0.96),    (-0.6, 0.0, 0.8), (0.7, -0.6, -0.2), 1.0),
-    (1.60,  0.50, 0.32, -0.07, 0.05,  (0.5, 0.0, 0.9),       (1, 0.4, -0.2), _,               0.4, (0.40, -0.56, 0.76),    (-0.3, 0.3, 1.0), (0.5, -0.2, -0.8), 1.0),
-    (2.05,  0.16, 0.12, -0.02, 0.02,  _,                     (1, 0.2, -0.3), _,               0.0, (0.15, -0.38, 0.80),    (-0.6, 0.3, 0.3), (0.2, -0.2, -1.0), 0.6),
-    (2.60,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3), _,               0.0, _,                      (-1, 0.2, -0.3), _,                0.0),
+    # t    twist  lean   tip   drop   L hand                 L elbow          L claw              Lw   R hand                 R elbow           R claw              Rw
+    (0.00,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3),  _,                  0.0, _,                     (-1, 0.2, -0.3),  _,                  0.0),
+    (0.45,  0.24, -0.04, -0.05, 0.01, (0.52, 0.06, 1.36),    (1, 0.2, -0.3),  (0.3, 0.4, 0.85),   1.0, (-0.40, -0.32, 0.92), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
+    (0.62,  0.27, -0.05, -0.06, 0.01, (0.54, 0.08, 1.40),    (1, 0.2, -0.3),  (0.3, 0.3, 0.9),    1.0, (-0.40, -0.33, 0.93), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
+    (0.73,  0.08, 0.12,  -0.02, 0.03, (0.50, -0.44, 1.20),   (1, 0.0, 0.3),   (-0.2, -0.8, 0.3),  1.0, (-0.48, -0.12, 0.94), (-1, 0.3, -0.3),  _,                  0.5),
+    (0.81, -0.20, 0.24,  0.03, 0.05,  (0.12, -0.64, 0.98),   (0.8, 0.0, 0.5), (-0.7, -0.6, -0.2), 1.0, (-0.55, 0.0, 1.05),   (-1, 0.3, -0.2),  (-0.2, 0.4, 0.6),   0.8),
+    (0.96, -0.30, 0.26,  0.05, 0.05,  (-0.12, -0.58, 0.82),  (0.6, 0.2, 0.8), (-0.5, -0.3, -0.8), 1.0, (-0.54, 0.05, 1.30),  (-1, 0.2, -0.2),  (-0.3, 0.4, 0.85),  1.0),
+    (1.14, -0.27, -0.02, 0.05, 0.01,  (0.40, -0.32, 0.92),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.54, 0.08, 1.40),  (-1, 0.2, -0.3),  (-0.3, 0.3, 0.9),   1.0),
+    (1.24, -0.28, -0.03, 0.06, 0.01,  (0.40, -0.33, 0.93),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.55, 0.09, 1.41),  (-1, 0.2, -0.3),  (-0.3, 0.3, 0.9),   1.0),
+    (1.35, -0.08, 0.12,  0.02, 0.03,  (0.48, -0.12, 0.94),   (1, 0.3, -0.3),  _,                  0.5, (-0.50, -0.44, 1.20), (-1, 0.0, 0.3),   (0.2, -0.8, 0.3),   1.0),
+    (1.43,  0.20, 0.24, -0.03, 0.05,  (0.55, 0.0, 1.05),     (1, 0.3, -0.2),  _,                  0.4, (-0.12, -0.64, 0.98), (-0.8, 0.0, 0.5), (0.7, -0.6, -0.2),  1.0),
+    (1.60,  0.30, 0.26, -0.05, 0.05,  (0.5, 0.0, 0.95),      (1, 0.3, -0.2),  _,                  0.3, (0.12, -0.58, 0.82),  (-0.6, 0.2, 0.8), (0.5, -0.3, -0.8),  1.0),
+    (2.05,  0.10, 0.10, -0.02, 0.02,  _,                     (1, 0.2, -0.3),  _,                  0.0, (-0.25, -0.40, 0.84), (-0.8, 0.3, 0.2), (0.2, -0.3, -1.0),  0.5),
+    (2.60,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3),  _,                  0.0, _,                     (-1, 0.2, -0.3),  _,                  0.0),
 ]
 SLASH_LEN = SLASH[-1][0]
 SLASH_HITS = (0.81, 1.43)   # when each claw lands (seconds)
@@ -453,24 +586,28 @@ def pose_slash(t):
         target, pole, claw, w = p[side]
         a = ARMS[side]
         sgn = 1 if side == "L" else -1
-        lift = max(0.0, (target.z - 1.0) / 0.5) * w
-        rotate_world(a[0], qy(-sgn * 0.25 * lift))           # the collarbone lifts with a raised arm
-        two_bone(a[1], a[2], a[3], target, pole, w)
+        # The collarbone takes a share of each reach (the shoulder comes
+        # forward and up with the arm), so the shoulder joint turns less.
+        aim(a[0], a[1], hw(a[1]).lerp(target, 0.35), 0.35 * w, max_angle=0.35)
+        # The elbow stays between 85% and 95% of the arm's length: never
+        # locked straight, never folded tight (both tear the skin).
+        two_bone(a[1], a[2], a[3], target, pole, w, max_reach=0.95, min_reach=0.85)
         if claw is not None and w > 1e-3:
             h = hw(a[3])
             reach = (hw(a[4]) - h).length
-            aim(a[3], a[4], h + claw.normalized() * reach, w)
+            aim(a[3], a[4], h + claw.normalized() * reach, w, max_angle=0.7)
     # Wings trail the torso's turn and swing back past it; the tail
     # counterbalances, later still. No flapping.
     turning = p["twist"] - late["twist"]
     for side, sgn in (("R", -1), ("L", 1)):
         for k, n in enumerate(WINGS[side]):
-            rotate_world(n, qz(-turning * (0.5 + 0.25 * k)) @ qy(sgn * 0.6 * (p["drop"] - 0.02) * (1 + k * 0.4)))
+            # (Barely at the root, which the shoulders sit against.)
+            rotate_world(n, qz(-turning * (0.08, 0.3, 0.4, 0.5)[k]) @ qy(sgn * 0.6 * (p["drop"] - 0.02) * (0.3, 1.0, 1.4, 1.8)[k]))
     for k, n in enumerate(TAIL):
         rotate_world(n, qz(-later["twist"] * (0.25 + 0.12 * k)))
     for k, n in enumerate(FLAP):
         rotate_world(n, qx(-0.4 * p["drop"] * (1 + k)))
-    steady_head(0.6, 0.15 * p["lean"])
+    steady_head(0.35, 0.1 * p["lean"])
 
 
 # --- Bake -------------------------------------------------------------------------

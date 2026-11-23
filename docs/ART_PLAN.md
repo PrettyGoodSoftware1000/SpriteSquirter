@@ -189,6 +189,25 @@ game yet.
   markers in the `.blend` show where each claw lands. In the test
   environment it plays over the walk too (only the upper body then).
 
+- ✅ (0.42) **Slash clean-up** (the owner: the left claw slash stretched
+  the mesh), done live in the owner's Blender, measured by comparing every
+  edge's length with its rest length (past 2x counts as torn):
+  - Motion: arms never lock straight or fold tight (the hand stays at 85
+    to 95% of the arm's length), wrists bend at most 40 degrees, the
+    collarbone takes a share of each reach, the claw stays in front of the
+    body and below the horns, a smaller torso twist and a looser hold on
+    the head (it wrung the neck), the wing roots barely turn.
+  - Skin: shoulder and arm points follow the arm or the wing, not both;
+    shoulder weights smoothed so the skin blends from chest to arm; 99
+    triangles that joined the inner arm to the torso (Meshy made it with
+    its arms at its sides) removed, hidden in the armpits; the chain fix
+    kept to the back (the front straps tore against the thighs).
+  - Result: torn edges down by half at both shoulders and by about three
+    quarters at the hips in the slash, and by half at the hips in Walk
+    two. Some stretch is left where the upper arm swings ~90 degrees at the
+    shoulder: linear skinning (what Godot uses) cannot hold that fully; a
+    shoulder helper bone or corrective shapes would be the next step.
+
 ## The other giants
 
 The owner will make new Meshy models for the tortoise, squirrel and raven.

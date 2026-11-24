@@ -1604,12 +1604,19 @@ func _run() -> void:
 	_check(beast.mind.marching_on_stores() == raider_near, "goblins marching within 200 m of a Storehouse are seen")
 	Balance.values["defensive_weight"] = 1000.0
 	beast.mind._defend_timer = 0.0
+	# (Not in a fight just now: the last check's goblin is gone.)
+	beast._alert = false
+	beast._cancel_action()
+	beast.fleeing_until = 0.0
 	_check(beast.mind._consider_defending() and beast.attack_moving, "the creature sets off to attack them")
 	Balance.values["defensive_weight"] = Balance.DEFAULTS["defensive_weight"]
 	beast.attack_moving = false
 	beast.has_target = false
 	raider_near.queue_free()
 	# Creature buffs, researched at the Shrines.
+	# (The dev menu's "every spell" earlier taught them all: start again.)
+	village.buffs_known.clear()
+	village.buff_jobs.clear()
 	_check(village.buff_research_cost().get("animus", 0) == roundi(Balance.num("buff_research_first")), "the first buff costs 5 animus to research")
 	village.give("animus", 100.0)
 	_check(village.start_buff_research("growth") == "" and village.buff_research_cost().get("animus", 0) == roundi(Balance.num("buff_research_first") + Balance.num("buff_research_step")),

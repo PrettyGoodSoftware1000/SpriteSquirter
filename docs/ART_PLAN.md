@@ -249,6 +249,16 @@ game yet.
   mesh's pieces are joined near the tip and the closed holes filled, 3
   polygons, with the horn's texture).
 
+- ✅ (0.47) **In the game** (ArtShift only): the goblins' balrog is now the
+  newer model. `balrog.gd` loads `NewerBalrog_anims.glb` (the re-skinned
+  mesh and clips) dressed in `NewerBalrog.glb`'s own PBR material (no cel
+  shading, no ink outline), scaled 6.5 times (11 m full grown), walks with
+  WalkTwo (`CLIP_SPEED` 0.341, hooves landing at 0.01 and 0.51 of the
+  cycle), and strikes with ClawSlash, each claw a blow as it lands (0.81
+  and 1.43 s). Bones are mapped to Meshy's rig (`HIPS` Bone_000 ...). The
+  stomp, fireball rear and death fall are still code-made on top. Smoke
+  test passes.
+
 ## The other giants
 
 The owner will make new Meshy models for the tortoise, squirrel and raven.

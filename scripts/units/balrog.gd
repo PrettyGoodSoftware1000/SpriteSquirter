@@ -24,58 +24,64 @@ extends Creature
 ## At no health it dies (it does not get up again), and the village gets
 ## "balrog_bones" bones. GoblinRaids hatches the next one.
 ##
-## Its model is the owner's Meshy model (assets/creature/balrog.glb): a
-## painted texture on a humanoid (Mixamo) skeleton, with a Walking clip.
-## It does not use the Creature's own blob-model body: the walk clip plays
-## as fast as it really moves (so its feet do not slide), its footfalls
-## come where the clip puts its feet down, and standing still it settles
-## into the model's own crouched stance. Code adds the rest on top: it
-## breathes, leans into its stride, turns its head to what it watches,
-## tips it back to spit fire, lifts a leg high to stomp, and
-## falls on its face when it dies.
+## Its model (ArtShift, 0.47) is the owner's newer Meshy balrog: its mesh
+## and clips come from assets/test/NewerBalrog_anims.glb (made by
+## tools/newer_balrog_anims.py), dressed in the model's own PBR material
+## from NewerBalrog.glb (colour, normal and metal/roughness maps; no cel
+## shading or ink outline). Its skeleton is Meshy's 43-bone rig (wings,
+## tail, horse-like legs). It walks with the WalkTwo clip, played as fast
+## as it really moves (so its hooves do not slide), its footfalls come where
+## the clip puts its hooves down, and standing still it settles into the
+## model's own stance. It strikes with the ClawSlash clip: the left claw,
+## then the right, each a blow. Code adds the rest on top: it breathes,
+## leans into its stride, turns its head to what it watches, tips it back
+## to spit fire, lifts a leg high to stomp, and falls on its face when it
+## dies.
 
 signal died
 signal grew_up
 
 const SPEC := {
-	"name": "Balrog", "model": "res://assets/creature/balrog.glb", "speed": 2.3,
+	"name": "Balrog", "model": "res://assets/test/NewerBalrog_anims.glb", "speed": 2.3,
 	"nervous": 0.0, "arm": Vector3(0.3, -1.0, 0.2),
 }
-## The model is 1.86 m tall; this makes it about as tall as the old one
+## Its material: the model itself (NewerBalrog_anims.glb has no material).
+const MATERIAL_MODEL := "res://assets/test/NewerBalrog.glb"
+## The model is 1.7 m tall; this makes it about as tall as the old one
 ## (11 m, full grown).
-const MODEL_SCALE := 6.0
+const MODEL_SCALE := 6.5
 ## Metres the model's feet carry it in one second of the walk clip (at
 ## MODEL_SCALE 1): the clip is played this much faster or slower to match
 ## how fast it really walks.
-const CLIP_SPEED := 1.43
-## Where in the walk clip (as a share of its length) each foot comes down:
-## leg 0 (the right foot, at -X) and leg 1 (the left).
-const FOOTFALLS: Array[float] = [0.75, 0.28]
-## The skeleton's bones (Mixamo names; Godot turns "mixamorig:" into
-## "mixamorig_" on import). Arms, legs and feet in pairs: right (leg 0,
-## at -X), then left.
-const HIPS := "mixamorig_Hips"
-const SPINE := "mixamorig_Spine"
-const CHEST := "mixamorig_Spine2"
-const NECK := "mixamorig_Neck"
-const HEAD := "mixamorig_Head"
-## A bone at the front of the face, just above the mouth.
-const FACE := "headfront"
-const ARMS: Array[String] = ["mixamorig_RightArm", "mixamorig_LeftArm"]
-const FOREARMS: Array[String] = ["mixamorig_RightForeArm", "mixamorig_LeftForeArm"]
-const HANDS: Array[String] = ["mixamorig_RightHand", "mixamorig_LeftHand"]
-const THIGHS: Array[String] = ["mixamorig_RightUpLeg", "mixamorig_LeftUpLeg"]
-const SHINS: Array[String] = ["mixamorig_RightLeg", "mixamorig_LeftLeg"]
-const TOES: Array[String] = ["mixamorig_RightToeBase", "mixamorig_LeftToeBase"]
+const CLIP_SPEED := 0.341
+## The walk clip, and where in it (as a share of its length) each hoof
+## comes down: leg 0 (the right, at -X) and leg 1 (the left).
+const WALK_CLIP := "WalkTwo"
+const FOOTFALLS: Array[float] = [0.01, 0.51]
+## The skeleton's bones (Meshy's rig: Bone_000 to Bone_042). Arms, legs and
+## feet in pairs: right (at -X), then left.
+const HIPS := "Bone_000"
+const SPINE := "Bone_003"
+const CHEST := "Bone_010"
+const NECK := "Bone_024"
+const HEAD := "Bone_023"
+## The front of the face, by the mouth.
+const FACE := "Bone_022"
+const ARMS: Array[String] = ["Bone_028", "Bone_033"]
+const FOREARMS: Array[String] = ["Bone_027", "Bone_032"]
+const HANDS: Array[String] = ["Bone_026", "Bone_031"]
+const THIGHS: Array[String] = ["Bone_016", "Bone_021"]
+const SHINS: Array[String] = ["Bone_015", "Bone_020"]
+## The hooves' tips.
+const TOES: Array[String] = ["Bone_012", "Bone_017"]
 ## How long the body lies there before it crumbles.
 const DEATH_SECONDS := 9.0
 ## While raiding it goes for anyone this close.
 const RAID_SIGHT := 45.0
-## Its claw slashes at the other giant: one clip for each claw, right
-## first, as ARMS. Made by tools/balrog_claw_slash.py (the source is
-## balrog_claw_slash.blend); the claw lands about STRIKE_LANDS in.
-const SLASH_MODEL := "res://assets/creature/balrog_claw_slash.glb"
-const SLASH_CLIPS: Array[String] = ["ClawSlash_R", "ClawSlash_L"]
+## Its strike: the claw slash, the left claw and then the right, and when
+## each lands (seconds into the clip): each is a blow.
+const SLASH_CLIP := "ClawSlash"
+const SLASH_HITS: Array[float] = [0.81, 1.43]
 
 var cave: Node3D
 ## Marching on the village with the goblins.
@@ -106,13 +112,12 @@ var _walk_w := 0.0
 ## Each arm's aim while it fights, and how much of it shows.
 var _arm_aim: Array[Vector3] = [Vector3.DOWN, Vector3.DOWN]
 var _arm_w: Array[float] = [0.0, 0.0]
-## The claw slashes (right claw, then left), made in Blender
-## (tools/balrog_claw_slash.py), their tracks as for the walk, which one is
-## playing and how far in (seconds; below 0 when none is).
-var _slashes: Array[Animation] = []
+## The claw slash and its tracks (as for the walk), how far in it is
+## (seconds; below 0 when it is not playing), and how many blows have landed.
+var _slash: Animation
 var _slash_tracks: Array = []
-var _slash_k := 0
 var _slash_t := -1.0
+var _blows := 0
 ## The head thrown back (to spit fire), and falling down dead (0..1).
 var _rear := 0.0
 var _fall := 0.0
@@ -224,29 +229,25 @@ func _build() -> void:
 	# The clip is read directly (no AnimationPlayer), so the code's touches
 	# always go on after it, in the same frame.
 	var player := _model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
-	_walk = player.get_animation("Walking")
+	_walk = player.get_animation(WALK_CLIP)
+	_slash = player.get_animation(SLASH_CLIP)
 	player.queue_free()
 	_tracks = _clip_tracks(_walk)
-	# The claw slashes come in a file of their own (the same skeleton).
-	var slashes := (load(SLASH_MODEL) as PackedScene).instantiate()
-	var slash_player := slashes.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
-	for clip in SLASH_CLIPS:
-		var anim := slash_player.get_animation(clip)
-		_slashes.append(anim)
-		_slash_tracks.append(_clip_tracks(anim))
-	slashes.free()
+	_slash_tracks = _clip_tracks(_slash)
 
-	var skin := ShaderMaterial.new()
-	skin.shader = Art.shader("giant")
-	skin.next_pass = Art.outline(1.0)
+	# The model's own material, as Meshy made it: no cel shading, no outline.
+	var original := (load(MATERIAL_MODEL) as PackedScene).instantiate()
+	var skin: Material = null
+	for node in original.find_children("*", "MeshInstance3D", true, false):
+		skin = (node as MeshInstance3D).get_active_material(0)
+		if skin != null:
+			break
+	original.free()
 	for node in _model.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
-		var painted := mi.get_active_material(0) as BaseMaterial3D
-		if painted != null:
-			skin.set_shader_parameter("albedo_tex", painted.albedo_texture)
 		mi.material_override = skin
-		# (Skeleton units are centimetres.)
-		mi.extra_cull_margin = 60.0
+		# (Skeleton units are metres; the model is scaled up.)
+		mi.extra_cull_margin = 1.0
 
 
 ## [track, bone, track type] for each of `anim`'s tracks that moves a bone.
@@ -278,9 +279,9 @@ func head_position() -> Vector3:
 	return _skel.global_transform * _skel.get_bone_global_pose(_bone[HEAD]).origin
 
 
-## Just under the front of the face (bone units are centimetres).
+## Just under the front of the face (bone units are metres).
 func _mouth_pos() -> Vector3:
-	return _skel.global_transform * (_skel.get_bone_global_pose(_bone[FACE]).origin + Vector3(0.0, -8.0, 0.0))
+	return _skel.global_transform * (_skel.get_bone_global_pose(_bone[FACE]).origin + Vector3(0.0, -0.03, 0.0))
 
 
 func _hand_pos(k: int) -> Vector3:
@@ -339,13 +340,12 @@ func _update_body(delta: float) -> void:
 	# A claw slash, over the walk or stance (it starts and ends in the
 	# stance; easing in and out hides the walk it may cut into).
 	if _slash_t >= 0.0:
-		var slash := _slashes[_slash_k]
 		_slash_t += delta
-		if _slash_t >= slash.length or knocked_out:
+		if _slash_t >= _slash.length or knocked_out:
 			_slash_t = -1.0
 		else:
-			var w := minf(1.0, _slash_t / 0.08) * minf(1.0, (slash.length - _slash_t) / 0.15)
-			_mix_clip(slash, _slash_tracks[_slash_k], _slash_t, w)
+			var w := minf(1.0, _slash_t / 0.08) * minf(1.0, (_slash.length - _slash_t) / 0.15)
+			_mix_clip(_slash, _slash_tracks, _slash_t, w)
 
 	# Breathing, a lean into the stride, rearing up to stomp.
 	var breath := sin(_time * 1.4)
@@ -573,17 +573,31 @@ func _update_attacks(delta: float) -> void:
 		_start_stomp(global_position + to.normalized() * minf(to.length(), STOMP_STRIDE * size))
 
 
-## A claw slash instead of a punch: one claw and then the other.
+## A claw slash instead of a punch: the left claw and then the right.
 func _start_strike() -> void:
-	super._start_strike()
-	_slash_k = _punch_hand
+	_action = Action.STRIKE
+	_action_t = 0.0
+	_blows = 0
+	_jaw_want = 0.45
 	_slash_t = 0.0
 
 
-## The hit and its timing are a punch's; the arms are the clip's.
+## Each claw is a blow as it lands (the arms are the clip's).
 func _update_strike(delta: float) -> void:
-	super._update_strike(delta)
+	_action_t += delta
 	_arm_one = [null, null]
+	if _blows < SLASH_HITS.size() and _action_t >= SLASH_HITS[_blows]:
+		_blows += 1
+		var rival := _rival()
+		if rival != null and not rival.is_flying() and _flat(rival.global_position, global_position) - 2.0 * rival.size < REACH * size + 2.5:
+			rival.take_hit(Balance.num("creature_strike_damage") * lerpf(0.3, 1.0, size), self)
+			var at := rival.global_position.lerp(global_position, 0.3)
+			Game.effects.spawn_dust(at + Vector3.UP * 3.0 * rival.size, 2.5 * size)
+			Game.shake(0.7 * size, at)
+	if _action_t >= _slash.length - 0.3:
+		_action = Action.NONE
+		_action_cooldown = 0.5
+		_jaw_want = 0.0
 
 
 ## Spits a fireball at the best knot of enemies in sight, if it is big

@@ -111,9 +111,9 @@ static func _draw(id: String) -> Image:
 		"growth":
 			# A creature's shape growing outwards: two fainter, bigger copies
 			# behind a bright yellow one.
-			for step: Array in [[1.55, Color(1.0, 0.85, 0.2, 0.35)], [1.27, Color(1.0, 0.88, 0.25, 0.6)], [1.0, Color(1.0, 0.92, 0.3)]]:
+			for step: Array in [[1.36, Color(1.0, 0.85, 0.2, 0.35)], [1.17, Color(1.0, 0.88, 0.25, 0.6)], [0.9, Color(1.0, 0.92, 0.3)]]:
 				var k: float = step[0]
-				_shape(img, func(p: Vector2) -> float: return _beast((p - Vector2(24, 26)) / k + Vector2(24, 26)) * k, step[1], k == 1.0)
+				_shape(img, func(p: Vector2) -> float: return _beast((p - Vector2(25, 26)) / k + Vector2(25, 26)) * k, step[1], k < 1.0)
 		"aura":
 			# A creature in a ring of flames.
 			for k in 7:

@@ -1642,7 +1642,10 @@ func _run() -> void:
 	singed.process_mode = Node.PROCESS_MODE_DISABLED
 	var singed_hp := singed.hp
 	_check(play.cast_buff("aura") == "" and beast.buff_on("aura"), "Flaming Aura is cast for 1 animus")
-	await _wait(2.2)
+	# (Kept beside the creature, wherever it walks.)
+	for k in 6:
+		singed.global_position = beast.global_position + Vector3(4, 0, 0)
+		await _wait(0.4)
 	_check(singed.hp <= singed_hp - Balance.num("aura_damage") * 1.5, "enemies close by take fire damage every second (%d lost)" % roundi(singed_hp - singed.hp))
 	beast._buffs.clear()
 	singed.queue_free()

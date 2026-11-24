@@ -21,6 +21,7 @@ archer_post_range = 200%        # archers up on a treehouse or a rope bridge sho
                                 # nothing that fights hand to hand can reach them there, but they fall with their post
 
 wizard_health = 45              # a wizard's health
+wizard_magicko = 150            # magicko a wizard makes a minute (5 every 2 seconds; a villager makes 30, the Magicko rate slider)
 wizard_firebolt_damage = 70
 wizard_firebolt_seconds = 1   # time between firebolts
 
@@ -126,6 +127,8 @@ start_magicko = 100
 food_warning_seconds = 45           # "Out of food" floats up over the Storehouse no oftener than this
 crop_grow_seconds = 200             # how long sown wheat takes to ripen by itself (rain makes it faster)
 rain_crop_growth = 350%             # wet wheat grows this much as fast (it was 300%: rain is 25% more effective now)
+crop_tend_bonus = 25%                # each farmer working a growing field (nothing to sow or reap) makes it grow this much faster
+crop_tend_most = 100%                # but no more than this in all
 
 # --- Storage ------------------------------------------------------------------
 # What the village can keep. Lumber, stone, food and bones over the limit
@@ -170,6 +173,20 @@ spell_cooldown_condemn   = 2
 spell_cooldown_gnomes    = 30
 spell_cooldown_charm     = 30
 spell_cooldown_fey       = 300
+
+# --- Creature buffs (researched at the Shrine, cast from the buff bar) --------
+buff_research_first = 5             # animus the first buff costs to research
+buff_research_step = 5              # and each one after costs this much more
+buff_research_seconds = 480         # each takes this long to research (8 minutes)
+buff_cost_growth = 1                # Creature Growth: animus to cast
+buff_seconds_growth = 120           # how long it lasts
+buff_cooldown_growth = 60           # seconds after it wears off before it can be cast again
+growth_buff_speed = 100%            # how much faster the creature grows while it is on
+buff_cost_aura = 1                  # Flaming Aura: animus to cast
+buff_seconds_aura = 30              # how long it lasts
+buff_cooldown_aura = 0              # seconds after it wears off before it can be cast again
+aura_radius = 10                    # metres round the creature it burns
+aura_damage = 5                     # fire damage a second to every enemy that close
 
 # --- Spells researched at the Wizardry tower ---------------------------------
 # Click a Wizardry tower (the Moon tower) to research spells, one at a time.
@@ -431,17 +448,28 @@ bonus_knowledge = 100%
 #   only speeds up learning new abilities: it does not change its
 #   affinities, how Bless and Condemn work, or how likely it is to do
 #   anything.
+# defensive_personality: how readily it goes to attack goblins (or the
+#   balrog) marching on the village once they come within defend_range
+#   metres of a Storehouse (it multiplies defensive_weight). With k =
+#   defensive_weight x this, it sets off k/(1+k) of the times it checks
+#   (every 5 seconds): at 300% weight and 100%: 75%; at 160%: 83%; at 0%:
+#   never. It stays out of it when you have sent it somewhere.
+defensive_weight = 300%
+defend_range = 200                  # metres from a Storehouse
+tortoise_defensive_personality = 160%       # guards the town
 tortoise_flee_personality = 100%
 tortoise_mischief_personality = 100%
 tortoise_spellcaster_personality = 80%
 tortoise_observant_personality = 150%        # watchful
 tortoise_knowledgeSeeker_personality = 150%  # curious
+squirrel_defensive_personality = 90%
 squirrel_flee_personality = 150%             # a nervous creature
 squirrel_mischief_personality = 100%
 squirrel_spellcaster_personality = 100%
 squirrel_observant_personality = 100%
 squirrel_knowledgeSeeker_personality = 100%
 squirrel_forestSeeder_personality = 100%     # how keen it is on forest seeding (only the squirrel does it)
+raven_defensive_personality = 80%
 raven_flee_personality = 100%
 raven_mischief_personality = 100%
 raven_spellcaster_personality = 200%         # a natural spellcaster

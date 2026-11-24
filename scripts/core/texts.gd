@@ -30,6 +30,8 @@ const DEFAULTS := {
 	"out_of_food": "Out of food! No births, and people will starve",
 	"starving": "Starving!",
 	"villager_stuck": "Villager stuck!",
+	"creature_defends": "To the defence of the village!",
+	"buff_researched": "The Shrine has found a new creature buff: {buff}.",
 	"fey_birthing": "The fey are about: children come twice as fast, and every one is born a girl with wings.",
 	"creature_died": "The {creature} has died! Bring it back to life at a Shrine for {animus} animus.",
 	"creature_resurrected": "The {creature} lives again!",

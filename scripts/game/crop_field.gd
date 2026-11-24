@@ -47,6 +47,8 @@ var _spots := PackedVector3Array()
 var _turns := PackedFloat32Array()
 var _shown_scale := -1.0
 var _wet := 0.0
+## Farmer-seconds of tending since the wheat last grew.
+var _tended := 0.0
 ## Shown over the field while the mouse is on it (show_progress()).
 var _label: Label3D
 
@@ -217,6 +219,15 @@ func show_progress(shown: bool) -> void:
 			_label.text = progress_text()
 
 
+## A farmer working the growing wheat for `seconds`: each hand on it adds
+## Balance "crop_tend_bonus" of its usual growing speed, up to
+## "crop_tend_most" in all.
+func tend(seconds: float) -> void:
+	if stage != Stage.GROWING:
+		return
+	_tended += seconds
+
+
 ## Rain: the field stays wet, and grows faster, for `seconds`. Magic rain
 ## sprouts a field being sown at once, and seedlings in the reaped part of
 ## ripe wheat.
@@ -262,7 +273,11 @@ func _process(delta: float) -> void:
 	_wet = maxf(0.0, _wet - delta)
 	if stage != Stage.GROWING:
 		return
-	progress += delta * maxf(0.0, Game.settings.crop_growth_rate) / maxf(1.0, Balance.num("crop_grow_seconds")) * (Balance.num("rain_crop_growth") if _wet > 0.0 else 1.0)
+	# Farmers working it hurry it on: each one adds crop_tend_bonus.
+	var hands := _tended / maxf(delta, 0.0001)
+	_tended = 0.0
+	var tending := minf(hands * Balance.num("crop_tend_bonus"), Balance.num("crop_tend_most"))
+	progress += delta * maxf(0.0, Game.settings.crop_growth_rate) / maxf(1.0, Balance.num("crop_grow_seconds")) * (Balance.num("rain_crop_growth") if _wet > 0.0 else 1.0) * (1.0 + tending)
 	if progress >= 1.0:
 		stage = Stage.RIPE
 		progress = 0.0

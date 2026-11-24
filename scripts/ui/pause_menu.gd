@@ -25,6 +25,7 @@ var CONTROLS := [
 	["Bless / Condemn", "Shows what your creature last did; press the key again (or click) to bless or condemn it"],
 	["B or Backspace (or the hammer)", "Build menu"],
 	["Click the %s" % BuildingCatalog.role_name("wizard"), "Research spells"],
+	["Click the %s" % BuildingCatalog.role_name("shrine"), "Research creature buffs"],
 	["Click the %s" % BuildingCatalog.role_name("necro"), "The Blood Sacrifice upgrade"],
 	["Click the %s (or U)" % BuildingCatalog.role_name("smith"), "Research"],
 	["R / Shift+R, T", "Turn a building's outline, try another look"],

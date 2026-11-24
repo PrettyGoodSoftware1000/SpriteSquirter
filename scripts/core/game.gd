@@ -14,7 +14,7 @@ const DEFAULT_SETTINGS := {
 	"stone_rate": 4.0, # per worker per minute
 	"food_rate": 6.0, # per worker per minute
 	"birth_seconds": 30.0, # time between new villagers
-	"magicko_rate": 1.0, # per grown-up villager per minute
+	"magicko_rate": 30.0, # per grown-up villager per minute (1 every 2 seconds)
 	"goblin_rate": 0.0, # Goblin Spawn Rate: goblins per starting cave per minute, before its buildings add more
 	"creature_food": 20.0, # food a full-grown creature eats per minute
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size

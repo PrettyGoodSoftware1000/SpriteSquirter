@@ -70,7 +70,7 @@ const WARRIORS_PER_GUARD := 4
 const ARCHERS_PER_GUARD := 2
 const WIZARDS_PER_ROCKS := 2
 ## Magicko each wizard makes per minute.
-const WIZARD_MAGICKO := 5.0
+## Magicko a wizard makes a minute (5 every 2 seconds): Balance "wizard_magicko".
 ## Food eaten per minute.
 const FOOD_PER_VILLAGER := 1.0
 const FOOD_PER_WARRIOR := 3.0
@@ -100,6 +100,7 @@ signal research_done(id: String)
 signal villager_stuck(v: Villager)
 ## A spell has been researched at a Wizardry tower (see SpellBook).
 signal spell_researched(id: String)
+signal buff_researched(id: String)
 ## Kinky Fey Stuff: the villager and the pixie have gone in, and the fey
 ## are about (births twice as fast).
 signal fey_birthing
@@ -129,7 +130,7 @@ var researched := {}
 ## {"id": ..., "t": seconds done}, as many at once as there are buildings
 ## of that kind.
 var research_jobs := {"smith": [], "wizard": [], "necro": []}
-## Spells researched at the Shrine: id -> true.
+## Spells researched at the Wizardry tower: id -> true.
 var spells_known := {}
 ## The spell bar: each slot's spell id, or "" (0-9 the first row, cast with
 ## the number keys; 10-19 the second, with Ctrl; 20-29 the third, with
@@ -139,6 +140,11 @@ var spell_slots: Array[String] = []
 ## The spells being researched at the Wizardry towers: a list of
 ## {"id": ..., "t": seconds done}, one for each tower at most.
 var spell_jobs: Array = []
+## Creature buffs researched at the Shrines (BuffBook): id -> true, and the
+## ones being researched (they share the Shrines with the spells: one
+## thing for each Shrine at a time).
+var buffs_known := {}
+var buff_jobs: Array = []
 ## True once Wheelbarrows are researched: loads three times as big.
 var barrows := false
 ## How many villagers the player has set to each job (Villager.pin): the
@@ -623,8 +629,10 @@ func spell_research_progress(id: String) -> float:
 	return 0.0
 
 
-## Research goes on at the Wizardry towers, one spell for each that stands.
+## Research goes on at the Wizardry towers (one spell for each that
+## stands) and at the Shrines (one buff for each).
 func _update_spell_research(delta: float) -> void:
+	_update_buff_research(delta)
 	var slots := research_slots("wizard")
 	for job: Dictionary in spell_jobs.duplicate():
 		if slots <= 0:
@@ -637,6 +645,73 @@ func _update_spell_research(delta: float) -> void:
 		spell_jobs.erase(job)
 		_learn_spell(id)
 		spell_researched.emit(id)
+
+
+## Buff research goes on at the Shrines, one buff for each that stands.
+func _update_buff_research(delta: float) -> void:
+	var slots := shrines().size()
+	for job: Dictionary in buff_jobs.duplicate():
+		if slots <= 0:
+			break
+		slots -= 1
+		job.t += delta
+		var id: String = job.id
+		if job.t < Balance.num("buff_research_seconds"):
+			continue
+		buff_jobs.erase(job)
+		buffs_known[id] = true
+		buff_researched.emit(id)
+
+
+# --- Creature buffs (BuffBook), researched at the Shrines --------------------------
+
+func knows_buff(id: String) -> bool:
+	return buffs_known.has(id)
+
+
+## Starts researching buff `id` at a Shrine. Returns why it can't, or "" if
+## it began.
+func start_buff_research(id: String) -> String:
+	if BuffBook.find(id).is_empty():
+		return "There is no such buff."
+	if knows_buff(id):
+		return "You know that buff already."
+	if not buff_job(id).is_empty():
+		return "That buff is being researched."
+	if shrines().is_empty():
+		return "Buffs are researched at the %s: build one first." % BuildingCatalog.role_name("shrine")
+	if buff_jobs.size() >= shrines().size():
+		return "Every %s is busy: build another to research more at once." % BuildingCatalog.role_name("shrine")
+	var cost := buff_research_cost()
+	var short := shortfall(cost)
+	if short != "":
+		return "Need %s more." % short
+	spend(cost)
+	buff_jobs.append({"id": id, "t": 0.0, "buff": true})
+	return ""
+
+
+func buff_job(id: String) -> Dictionary:
+	for job: Dictionary in buff_jobs:
+		if job.id == id:
+			return job
+	return {}
+
+
+## What the next buff costs to research: Balance "buff_research_first"
+## animus, and "buff_research_step" more for each one researched (or
+## being researched).
+func buff_research_cost() -> Dictionary:
+	return BuffBook.research_cost(buffs_known.size() + buff_jobs.size())
+
+
+func buff_research_progress(id: String) -> float:
+	if knows_buff(id):
+		return 1.0
+	var job := buff_job(id)
+	if not job.is_empty():
+		return clampf(job.t / maxf(0.01, Balance.num("buff_research_seconds")), 0.0, 1.0)
+	return 0.0
 
 
 func _learn_spell(id: String) -> void:
@@ -774,6 +849,9 @@ func learn_all_spells() -> void:
 	for spell in SpellBook.SPELLS:
 		_learn_spell(spell.id)
 	spell_jobs.clear()
+	for buff in BuffBook.BUFFS:
+		buffs_known[buff.id] = true
+	buff_jobs.clear()
 
 
 ## Food the creature eats per minute: its full appetite once grown, in
@@ -805,6 +883,31 @@ func set_wanted(role: String, value: int) -> void:
 		top = mini(top, wanted[role] + free_now)
 	wanted[role] = clampi(value, 0, maxi(top, 0))
 	_army_timer = 0.0
+
+
+## What building `b` is doing, for the label over it when the mouse is on
+## it: what is being researched at its kind of building (Blacksmith,
+## Wizardry tower, Shrine), and who it is training, each with how far
+## along. "" if nothing.
+func status_of(b: Destructible) -> String:
+	var role := BuildingCatalog.role(b.get_meta("kind", ""))
+	var parts: PackedStringArray = []
+	if research_jobs.has(role):
+		for job: Dictionary in research_jobs[role]:
+			parts.append("Researching %s: %d%%" % [Research.find(job.id).name, floori(research_progress(job.id) * 100.0)])
+	if role == "wizard":
+		for job: Dictionary in spell_jobs:
+			parts.append("Researching %s: %d%%" % [SpellBook.find(job.id).name, floori(spell_research_progress(job.id) * 100.0)])
+	if role == "shrine":
+		for job: Dictionary in buff_jobs:
+			parts.append("Researching %s: %d%%" % [BuffBook.find(job.id).name, floori(buff_research_progress(job.id) * 100.0)])
+	if _training.has(b):
+		var entry: Dictionary = _training[b]
+		var what: String = String(entry.role).replace("_", " ")
+		parts.append("Training a %s: %d%%" % [what, floori(clampf(entry.t / maxf(train_seconds(entry.role), 0.01), 0.0, 1.0) * 100.0)])
+	if parts.is_empty() and (research_jobs.has(role) or role == "shrine"):
+		parts.append("Researching nothing")
+	return "\n".join(parts)
 
 
 ## Progress (0..1) of each recruit now training for `role`.
@@ -1074,7 +1177,7 @@ func _process(delta: float) -> void:
 	var boost := blood_boost() if blood_active() else 1.0
 	# (The fey make twice as much: Balance "fey_magicko" times as much.)
 	var fey_extra := fey_adults() * (Balance.num("fey_magicko") - 1.0)
-	give("magicko", ((grown + fey_extra) * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
+	give("magicko", ((grown + fey_extra) * Game.settings.magicko_rate + wizards() * Balance.num("wizard_magicko")) / 60.0 * delta * boost)
 	# Animus: Balance "animus_per_minute" to begin with, and more for every
 	# Shrine the village has built (not the ones its site came with).
 	give("animus", (Balance.num("animus_per_minute") + built_shrines() * Balance.num("animus_per_shrine")) / 60.0 * delta)
@@ -1240,6 +1343,13 @@ func work(v: Villager, delta: float) -> void:
 				v.clear_job()
 		"food":
 			v.gather("food", food_rate() / 60.0 * delta * tool_bonus("food") * Balance.num("farmer_speed"))
+		"tend":
+			# Working the growing wheat (weeding, watering) hurries it on.
+			var tended := v.job_target as CropField
+			if tended == null or tended.needs_work():
+				v.clear_job()
+			else:
+				tended.tend(delta * Balance.num("farmer_speed"))
 		"farm":
 			var field := v.job_target as CropField
 			# (Only farmers sow.)
@@ -1333,9 +1443,18 @@ func _assign_jobs() -> void:
 			farmers[v.job_target] = farmers.get(v.job_target, 0) + 1
 			per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
 			farming += 1
+		elif v.job == "tend" and is_instance_valid(v.job_target):
+			per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
+			farming += 1
+	var fields_want_hands := false
+	for node in get_tree().get_nodes_in_group("fields"):
+		fields_want_hands = fields_want_hands or (node as CropField).needs_work()
 	# The villagers the player set to a job keep to it.
 	for v in workers:
-		if v.job == "build" or v.job == "plant" or v.job == "tryst" or not counts.has(v.pin) or v.job == v.pin or (v.pin == "food" and v.job == "farm"):
+		# (A farmer working the growing wheat keeps at it until a field
+		# wants sowing or reaping: harvesting comes first.)
+		if v.job == "build" or v.job == "plant" or v.job == "tryst" or not counts.has(v.pin) or v.job == v.pin or (v.pin == "food" and v.job == "farm") \
+				or (v.pin == "food" and v.job == "tend" and not fields_want_hands):
 			continue
 		var was := v.job
 		if _give_job(v, v.pin, per_target):
@@ -1530,7 +1649,9 @@ func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
 					best_score = score
 					best = field
 			if best == null:
-				return false
+				# Nothing to sow or reap: a farmer works the growing fields
+				# instead, which hurries them on (CropField.tend()).
+				return v.pin == "food" and _tend_field(v, per_target)
 			v.assign_job("farm", best.work_spot(), best)
 			per_target[best] = per_target.get(best, 0) + 1
 			return true
@@ -1546,6 +1667,25 @@ func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
 			per_target[target] = per_target.get(target, 0) + 1
 			return true
 	return false
+
+
+## Sends farmer `v` to work the growing field with the fewest hands on it.
+func _tend_field(v: Villager, per_target: Dictionary) -> bool:
+	var best: CropField = null
+	var fewest := 1 << 30
+	for node in get_tree().get_nodes_in_group("fields"):
+		var field := node as CropField
+		if field == null or field.stage != CropField.Stage.GROWING:
+			continue
+		var on: int = per_target.get(field, 0)
+		if on < fewest:
+			fewest = on
+			best = field
+	if best == null:
+		return false
+	v.assign_job("tend", best.work_spot(), best)
+	per_target[best] = fewest + 1
+	return true
 
 
 func _nearest_free(from: Vector3, group: String, per_target: Dictionary) -> Node3D:

@@ -40,7 +40,8 @@ func _ready() -> void:
 	atmosphere = Atmosphere.new()
 	atmosphere.name = "Atmosphere"
 	add_child(atmosphere)
-	atmosphere.set_mood(Game.mood_index, 0.0)
+	# The map editor is always at noon (the first mood, "Meadow day").
+	atmosphere.set_mood(0 if Game.session.get("mode", "") == "editor" else Game.mood_index, 0.0)
 
 	var effects := Effects.new()
 	effects.name = "Effects"

@@ -227,6 +227,14 @@ stage.
 - It plays its walk clip in step with how fast it walks; its burning footprints come where its feet land
 - Code-made punches, stomps, head turns, a rear back to spit fire and a fall on its face when it dies
 
+## Version 0.38: Creature buffs, defence, tending fields ✅
+- A villager makes 1 magicko every 2 seconds, a wizard 5
+- defensive_personality: goblins marching within 200 m of a Storehouse draw the creature out to attack (the tortoise most)
+- Creature buffs researched at the Shrines (5 animus, then 5 more each, 8 minutes): Creature Growth and Flaming Aura, cast from a buff bar over the health bar
+- The map editor is always at noon; half the Singing rocks' faces frown
+- Farmers with nothing to sow or reap work the growing fields, which grow faster
+- The mouse over a building shows what it is researching or training
+
 ## Milestone 1: Feel and polish
 - [ ] Sound: footsteps, explosions, crackling fire, villager screams
   (free CC0 packs from Kenney / freesound.org)

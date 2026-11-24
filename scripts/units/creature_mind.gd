@@ -49,6 +49,9 @@ const JUDGE_SECONDS := 30.0
 const FLEE_CHECK_SECONDS := 5.0
 const KNOW_COLOR := Color(0.6, 0.85, 1.0)
 
+## How often (seconds) it thinks about going to defend the village.
+const DEFEND_CHECK_SECONDS := 5.0
+var _defend_timer := 0.0
 var creature: Creature
 var knowledge := {}
 var behavior := {}
@@ -455,6 +458,8 @@ func _process(delta: float) -> void:
 				return
 	if _try_spells():
 		return
+	if _consider_defending():
+		return
 	if creature.is_fighting() or not _task.is_empty():
 		return
 	if creature.has_target and not creature.is_auto():
@@ -462,6 +467,69 @@ func _process(delta: float) -> void:
 	_idle_timer -= 1.0
 	if _idle_timer <= 0.0 and not creature.has_target:
 		_choose_idle()
+
+
+## Defending the village: when goblins (or the balrog) marching on it come
+## within Balance "defend_range" metres of one of its Storehouses, the
+## creature is likely to go and attack them (an attack move at the
+## nearest), unless it is fighting already, running away, or doing what
+## the player told it. How likely, each DEFEND_CHECK_SECONDS: Balance
+## "defensive_weight" times its defensive personality (and its affinity
+## for "defend", once Actions.csv has a Defend column for Bless and Condemn
+## to train): k makes it k / (1 + k). True if it set off.
+func _consider_defending() -> bool:
+	_defend_timer -= 1.0
+	if _defend_timer > 0.0:
+		return false
+	_defend_timer = DEFEND_CHECK_SECONDS
+	if creature.attack_moving or creature.is_fighting() or creature.is_fleeing() or creature.hostile:
+		return false
+	if creature.has_target and not creature.is_auto():
+		return false
+	var raider := marching_on_stores()
+	if raider == null:
+		return false
+	var facts := {"battle": true}
+	var k := Balance.num("defensive_weight") * personality("defensive") * weight("defend", facts)
+	if randf() >= k / (1.0 + k):
+		return false
+	_drop_task()
+	creature.attack_move(raider.global_position)
+	did("defend", facts, Texts.line("creature_defends"))
+	return true
+
+
+## The nearest enemy marching on the village that has come within Balance
+## "defend_range" metres of one of its Storehouses, or null.
+func marching_on_stores() -> Node3D:
+	var stores: Array[Vector3] = []
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if b != null and not b.destroyed and BuildingCatalog.role(b.get_meta("kind", "")) == "store":
+			stores.append(b.global_position)
+	if stores.is_empty():
+		return null
+	var reach := Balance.num("defend_range")
+	var best: Node3D = null
+	var best_d := INF
+	var marchers: Array[Node3D] = []
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g != null and g.raiding and g.is_alive() and not g.charmed():
+			marchers.append(g)
+	for node in get_tree().get_nodes_in_group("balrogs"):
+		var b := node as Creature
+		if b != creature and b.is_threat():
+			marchers.append(b)
+	for m in marchers:
+		for at in stores:
+			if Vector2(m.global_position.x - at.x, m.global_position.z - at.z).length() < reach:
+				var d := m.global_position.distance_to(creature.global_position)
+				if d < best_d:
+					best_d = d
+					best = m
+				break
+	return best
 
 
 ## Left to itself: come home if it has strayed; otherwise pick at random,

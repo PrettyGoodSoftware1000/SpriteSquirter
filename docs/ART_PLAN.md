@@ -241,6 +241,13 @@ game yet.
   of the two hanging strands are removed (`remove_horn_chains()`); the
   links wrapped round the horns, the chains on the shoulder armour, and the
   top two polygons on each side (horn, the owner checked) stay.
+- ✅ (0.46) **Horn chain stubs and the left horn's hole**: the short stubs
+  left hanging just under each horn tip go too (37 polygons,
+  `remove_horn_stubs()`; the owner checked which, and the top two on each
+  side, a spike on the armour and two polygons by the horn stay). The hole
+  this left under the left horn is patched (`patch_left_horn()`: the
+  mesh's pieces are joined near the tip and the closed holes filled, 3
+  polygons, with the horn's texture).
 
 ## The other giants
 

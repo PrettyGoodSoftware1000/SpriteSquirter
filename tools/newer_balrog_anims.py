@@ -177,7 +177,83 @@ def remove_horn_chains():
     print("HORN CHAINS: %d polygons removed" % len(hanging))
 
 
+# Then the short stubs left hanging just under each horn tip (within 3 cm of
+# the horn, so the first pass kept them): silver pieces hanging up to 8 cm
+# below the horn's underside. The top two on each side are horn, and pieces
+# not in a clump of at least 5 (a spike on the armour, two by a hole in the
+# horn, loose bits near the neck) stay: the owner checked.
+def remove_horn_stubs():
+    import bmesh
+    from collections import defaultdict
+    m = mesh_obj.data
+    mr, w, h = pixels("texture_0_metallic_roughness")
+    col, _, _ = pixels("texture_0")
+    uv = m.uv_layers.active.data
+
+    def sample(p):
+        uvs = [uv[li].uv for li in p.loop_indices]
+        pts = uvs + [sum(uvs, Vector((0, 0))) / len(uvs)]
+        px = [(min(h - 1, int(u[1] * h)), min(w - 1, int(u[0] * w))) for u in pts]
+        met = np.mean([mr[y, x, 2] for y, x in px])
+        rgb = np.mean([col[y, x, :3] for y, x in px], axis=0)
+        sat = np.mean([(lambda c: (c.max() - c.min()) / max(c.max(), 1e-3))(col[y, x, :3]) for y, x in px])
+        return met, sat, rgb
+
+    def is_horn(met, rgb):
+        r, g, b = rgb
+        t = (r - b) / max(r, 1e-3)
+        return met < 0.35 and r > 0.3 and r >= g >= b and 0.12 < t < 0.55
+    near = [p for p in m.polygons if 1.0 < p.center.z < 1.5 and 0.2 < abs(p.center.x) < 0.6 and -0.5 < p.center.y < 0.0]
+    info = {p.index: sample(p) for p in near}
+    hv = np.array([tuple(m.vertices[v].co) for p in near if is_horn(info[p.index][0], info[p.index][2]) for v in p.vertices])
+    stub = []
+    for p in near:
+        met, sat, rgb = info[p.index]
+        if not (met > 0.3 and sat < 0.4) or is_horn(met, rgb):
+            continue
+        c = np.array(tuple(p.center))
+        under = hv[np.hypot(hv[:, 0] - c[0], hv[:, 1] - c[1]) < 0.03]
+        if len(under) and under[:, 2].min() - 0.08 < c[2] < under[:, 2].min() - 0.004 and c[2] > 1.12:
+            stub.append(p.index)
+    for side in (1, -1):
+        mine = sorted((f for f in stub if m.polygons[f].center.x * side > 0), key=lambda f: -m.polygons[f].center.z)
+        for f in mine[:2]:
+            stub.remove(f)
+
+    def spot(v):
+        return tuple(round(c / 2e-3) for c in m.vertices[v].co)
+    by_spot = defaultdict(set)
+    for f in stub:
+        for v in m.polygons[f].vertices:
+            by_spot[spot(v)].add(f)
+    parent = {f: f for f in stub}
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    for f in stub:
+        for v in m.polygons[f].vertices:
+            for g in by_spot[spot(v)]:
+                ra, rb = find(f), find(g)
+                if ra != rb:
+                    parent[ra] = rb
+    clumps = defaultdict(list)
+    for f in stub:
+        clumps[find(f)].append(f)
+    doomed = sorted(f for g in clumps.values() if len(g) >= 5 for f in g)
+    bm = bmesh.new()
+    bm.from_mesh(m)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[i] for i in doomed], context='FACES')
+    bm.to_mesh(m)
+    bm.free()
+    print("HORN STUBS: %d polygons removed" % len(doomed))
+
+
 remove_horn_chains()
+remove_horn_stubs()
 
 
 # --- The chain fix ------------------------------------------------------------------
@@ -378,6 +454,38 @@ def weld():
 
 
 weld()
+
+
+# --- Patching the left horn -----------------------------------------------------------
+# Clipping the chains left a hole in the underside of the left horn (the
+# owner saw it). Near the horn's tip the mesh's separate pieces are joined
+# where their edges lie on each other (after the weld they have the same
+# weights), which shows the real outline of any hole, and every closed hole
+# there is filled. The new polygons take the texture coordinates of the
+# surface beside them.
+def patch_left_horn(center=Vector((0.42, -0.27, 1.23)), radius=0.08):
+    import bmesh
+    m = mesh_obj.data
+    bm = bmesh.new()
+    bm.from_mesh(m)
+    uvl = bm.loops.layers.uv.active
+    near = [v for v in bm.verts if (v.co - center).length < radius]
+    bmesh.ops.remove_doubles(bm, verts=near, dist=1e-4)
+    edges = [e for e in bm.edges if e.is_boundary and all((v.co - center).length < radius for v in e.verts)]
+    filled = bmesh.ops.holes_fill(bm, edges=edges, sides=12)["faces"]
+    for f in filled:
+        for loop in f.loops:
+            beside = [l for l in loop.vert.link_loops if l.face not in filled]
+            if beside:
+                loop[uvl].uv = beside[0][uvl].uv.copy()
+        f.material_index = 0
+    bmesh.ops.recalc_face_normals(bm, faces=filled)
+    bm.to_mesh(m)
+    bm.free()
+    print("HORN PATCH: %d polygons fill the hole" % len(filled))
+
+
+patch_left_horn()
 
 # The textures: use the PNGs Godot extracted next to the .glb instead of
 # packing 55 MB of them into the .blend.

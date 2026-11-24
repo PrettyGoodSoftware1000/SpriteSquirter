@@ -15,9 +15,10 @@ creature.glb), build_squirrel(), build_raven() or build_balrog() below and run:
     python3 tools/bake_creature.py raven
     python3 tools/bake_creature.py balrog
 
-(The game's balrog is now the owner's Meshy model, assets/creature/balrog.glb,
-so the old sculpted balrog is written to balrog_blob.glb instead, and the
-game does not use it.)
+(The game's balrog and raven are now the owner's Meshy models,
+assets/creature/balrog.glb and raven.glb (see tools/raven_rig.py), so the
+old sculpted balrog and raven are written to balrog_blob.glb and
+raven_blob.glb instead, and the game does not use them.)
 
 A second argument sets the cell size in metres (default 0.08; smaller is
 finer and bigger).
@@ -37,7 +38,7 @@ from skimage import measure
 SPECIES = sys.argv[1] if len(sys.argv) > 1 else "tortoise"
 if SPECIES not in ("tortoise", "squirrel", "raven", "balrog"):
     sys.exit("usage: bake_creature.py [tortoise|squirrel|raven|balrog] [cell size]")
-OUT_NAME = {"tortoise": "creature.glb", "balrog": "balrog_blob.glb"}.get(SPECIES, SPECIES + ".glb")
+OUT_NAME = {"tortoise": "creature.glb", "balrog": "balrog_blob.glb", "raven": "raven_blob.glb"}.get(SPECIES, SPECIES + ".glb")
 OUT = Path(__file__).resolve().parent.parent / "assets" / "creature" / OUT_NAME
 CELL = float(sys.argv[2]) if len(sys.argv) > 2 else 0.08
 

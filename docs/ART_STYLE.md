@@ -27,9 +27,10 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
   from above.
 - **The giant bat:** dark fur, torn purple-grey wings, armour and bone
   spikes strapped to its back, a pig's snout and fangs.
-- **The raven:** stands like a man. Shaggy blue-black feathers in three
-  tones, a heavy hooked beak, blank glowing eyes, grey scaly hands and
-  feet with dark claws, a fan of tail feathers and two great wings.
+- **The raven** (the owner's Meshy model): stands like a man. Glossy
+  blue-black feathers, a heavy beak, glowing purple eyes, grey scaly
+  three-fingered hands and bird's feet with dark claws, a fan of tail
+  feathers and two great wings spread wide.
 - **The balrog:** as broad as it is tall. Dark cracked hide with glowing
   lines between the scales, ridged ram's horns, glowing purple eyes that
   trail fire, a glowing scar on the chest, iron armour with purple
@@ -58,7 +59,8 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 | Shapes | `scripts/core/mesh_builder.gd` | Lathes, bevelled boxes, tubes, blobs, curved sheets. |
 | Buildings | `scripts/world/building_factory.gd` | One function per building design. |
 | Island | `scripts/world/terrain.gd` | Outline, underside, rivers and waterfalls. |
-| Creatures | `tools/bake_creature.py` → `assets/creature/creature.glb` (tortoise), `squirrel.glb`, `raven.glb`, `balrog.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
+| Creatures | `tools/bake_creature.py` → `assets/creature/creature.glb` (tortoise), `squirrel.glb` | Sculpted from blended soft shapes, auto-painted and auto-skinned. |
+| Raven, balrog | The owner's Meshy models: `assets/creature/raven.glb` (rigged by `tools/raven_rig.py`), `balrog.glb` and `assets/test/NewerBalrog*.glb` | Their own painted textures; see `docs/ART_PLAN.md`. |
 | Textures | `tools/bake/patterns.gdshader` → `assets/textures/` | Procedural patterns baked to PNG. |
 
 ## Swapping in hand-made or AI-made art later

@@ -16,7 +16,10 @@ extends Node3D
 ## may make it run from a fight (run_from_battle()).
 ##
 ## Each model (assets/creature/*.glb) is a single skinned mesh on a
-## skeleton, sculpted by tools/bake_creature.py. All animation is procedural:
+## skeleton, sculpted by tools/bake_creature.py (the tortoise and the
+## squirrel) or made by the owner in Meshy and rigged by tools/raven_rig.py
+## (the raven, which wears its own painted texture and has finger bones
+## that curl round what it holds). All animation is procedural:
 ## each foot stays planted until the body has moved far enough away, then it
 ## steps to a predicted landing spot, and a two-bone IK solve bends the
 ## thigh and shin to connect hip and ankle. Spine, arms, head, jaw and tail
@@ -90,15 +93,19 @@ const SPECIES := {
 	"raven": {
 		"name": "Raven", "model": "res://assets/creature/raven.glb", "speed": 3.6,
 		"nervous": 0.25, "flies": true,
-		# Blank pale eyes, and a beak in place of a drawn mouth.
-		"eye": Vector3(0.63, 0.62, 1.18), "eye_size": 0.3, "eye_color": Color(0.9, 0.93, 0.96), "blank_eyes": true,
-		"lid_color": Color(0.105, 0.12, 0.21), "lid_y": [0.34, 0.2], "lid_tilt": [0.2, 0.55], "pupil": [1.0, 1.0],
-		"jaw_rest": -0.1,
-		"arm": Vector3(0.3, -1.0, 0.12), "elbow": -0.25,
-		# The wing's flat side faces this way (on the right; mirrored on
-		# the left). To fly, the wing swings out by `wing_open` and the
-		# long feathers at its tip by `tip_open`.
-		"wing_normal": Vector3(0.5, 0.0, 0.866), "wing_open": 0.32, "tip_open": 0.4,
+		# The owner's Meshy model: its own texture (no cel shading or
+		# outline), its eyes painted on (no drawn face), and a closed beak
+		# (no jaw). Its ankle is where its rig puts it (a bird's leg: the
+		# "foot" bone is the long bone above the toes).
+		"own_skin": true, "painted_face": true, "ankle_from_rig": true,
+		# Under the beak, in the head bone's space.
+		"mouth_at": Vector3(0.0, -1.0, 1.1),
+		# The arms hang as the model was made; the hands have fingers.
+		"arm": Vector3(-0.2, -0.98, -0.1), "elbow": 0.0, "fingers": true,
+		# The wings are spread at rest, flat side forwards. To fly they
+		# swing out and down by `wing_open` within their plane, and the
+		# long feathers hanging from their outer edge out by `tip_open`.
+		"wing_normal": Vector3(0.0, 0.0, 1.0), "wing_open": 0.3, "tip_open": 0.5,
 	},
 }
 
@@ -126,6 +133,10 @@ const STRIKE_TIME := 1.1
 const STRIKE_LANDS := 0.6
 ## The raven never bothers to fly anywhere nearer than this.
 const SHORT_HOP := 8.0
+## The fingers (the raven's): how far each of a finger's three joints
+## bends with a full grip (radians), and how fast the grip changes.
+const FINGER_CURL := [0.45, 0.6, 0.5]
+const GRIP_SPEED := 4.0
 ## Arms held out in front, for carrying a tree or a boulder.
 const CARRY_POSE := Vector3(0.25, 0.15, 1.0)
 ## Arms reaching for the ground in front, for running on all fours.
@@ -256,6 +267,13 @@ var _jaw_want := 0.0
 var _arm_poses: Array[Vector3] = [Vector3(0.3, -1.0, 0.12), Vector3(0.3, -1.0, 0.12)]
 var _arm_want := Vector3(0.3, -1.0, 0.12)
 var _arm_one: Array = [null, null]
+## Fingers: [bone indices of the three joints, the axis they curl about,
+## and a little offset so they do not all twitch together] for each.
+var _fingers: Array = []
+## -1 spread wide .. 0 relaxed .. 1 clenched round something.
+var _grip := 0.0
+## Height of the ankle joint above the sole (see ANKLE_HEIGHT).
+var _ankle := ANKLE_HEIGHT
 ## The fist the next punch is thrown with: they take turns.
 var _punch_hand := 0
 ## The hand that throws (the other stays down).
@@ -1765,7 +1783,8 @@ func _hand_pos(k: int) -> Vector3:
 
 
 func _mouth_pos() -> Vector3:
-	return _skel.global_transform * (_skel.get_bone_global_pose(_bone["head"]) * Vector3(0.0, -0.3, 1.5))
+	var at: Vector3 = _spec.get("mouth_at", Vector3(0.0, -0.3, 1.5))
+	return _skel.global_transform * (_skel.get_bone_global_pose(_bone["head"]) * at)
 
 
 func _flat(a: Vector3, b: Vector3) -> float:
@@ -1838,9 +1857,12 @@ func _update_body(delta: float) -> void:
 	_skel.set_bone_pose_scale(_bone["arm_upper_r"], pulled)
 	_skel.set_bone_pose_rotation(_bone["head"], Quaternion.from_euler(Vector3(nod * 0.5, _look_yaw * 0.5 + _twitch, _sway * 0.5)))
 	_jaw = lerpf(_jaw, maxf(0.4 if casting else 0.03 + 0.02 * breath, _jaw_want), 1.0 - exp(-14.0 * delta))
-	_skel.set_bone_pose_rotation(_bone["jaw"], Quaternion(Vector3.RIGHT, _jaw + float(_spec.get("jaw_rest", 0.0))))
+	if _bone.has("jaw"):
+		_skel.set_bone_pose_rotation(_bone["jaw"], Quaternion(Vector3.RIGHT, _jaw + float(_spec.get("jaw_rest", 0.0))))
 	if _bone.has("wing_l"):
 		_update_wings(delta, aloft)
+	if not _fingers.is_empty():
+		_update_fingers(delta)
 
 	# Arms hang from the bind pose and swing against the legs.
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
@@ -1878,6 +1900,25 @@ func _update_body(delta: float) -> void:
 		var wave := sin(_time * 1.9 * (1.0 + 2.0 * nervous) - i * 0.8) * (0.07 + 0.03 * i) * (1.0 + 1.5 * nervous) - _sway * 1.2
 		var lift := 0.06 - _lean * 0.5 + sin(_time * 1.3 - i * 0.6) * 0.03 + swing * 0.03
 		_skel.set_bone_pose_rotation(_bone["tail%d" % (i + 1)], Quaternion.from_euler(Vector3(lift, wave, 0.0)))
+
+
+## Fingers: clenched round what the hands hold, spread to strike or stomp,
+## and otherwise loose, flexing a little now and then.
+func _update_fingers(delta: float) -> void:
+	var want := 0.15
+	if _action == Action.GRAB and _held.size() > _released:
+		want = 1.0
+	elif is_instance_valid(carrying):
+		want = 0.8
+	elif _action == Action.STRIKE or _action == Action.STOMP or _alert:
+		want = -0.6 if _action == Action.STRIKE else -0.3
+	elif knocked_out:
+		want = 0.5
+	_grip = move_toward(_grip, want, delta * GRIP_SPEED)
+	for f: Array in _fingers:
+		var flex := _grip + 0.06 * sin(_time * 0.9 + float(f[2]))
+		for j in 3:
+			_skel.set_bone_pose_rotation(f[0][j], Quaternion(f[1], flex * FINGER_CURL[j]))
 
 
 ## Wings: the raven's hang half open at rest and beat when it flies; the
@@ -1918,7 +1959,7 @@ func _update_legs() -> void:
 		var side := "l" if k == 0 else "r"
 		var hip: Vector3 = pelvis * (_rest["thigh_" + side] - _rest["pelvis"])
 		var sole := _foot_pos(k)
-		var ankle: Vector3 = to_skel * (sole + Vector3.UP * ANKLE_HEIGHT * size)
+		var ankle: Vector3 = to_skel * (sole + Vector3.UP * _ankle * size)
 		var small := lerpf(1.0, 0.1, smoothstep(0.0, 1.0, _shell))
 		if small < 1.0:
 			# Drawn up into the shell.
@@ -1987,7 +2028,43 @@ func _build() -> void:
 	_foot_spread = absf(_rest["foot_r"].x)
 	_thigh_length = _rest["thigh_r"].distance_to(_rest["shin_r"])
 	_shin_length = _rest["shin_r"].distance_to(_rest["foot_r"])
+	if _spec.get("ankle_from_rig", false):
+		_ankle = _rest["foot_r"].y
+	if _spec.get("fingers", false):
+		_find_fingers()
 
+	if _spec.get("own_skin", false):
+		# The model's own material, as Meshy made it: no cel shading, no outline.
+		for node in model.find_children("*", "MeshInstance3D", true, false):
+			(node as MeshInstance3D).extra_cull_margin = 6.0
+	else:
+		_dress(model)
+	if _spec.get("painted_face", false):
+		_update_face(0.0)
+		return
+	_build_face()
+
+
+## The rig's fingers (thumb, index, middle, ring on each hand; bones
+## <finger>1_l .. <finger>3_l, from the knuckle out), each with the axis
+## it curls about: the one it already bends round at rest.
+func _find_fingers() -> void:
+	for side in ["l", "r"]:
+		for finger in ["thumb", "index", "middle", "ring"]:
+			var names := ["%s1_%s" % [finger, side], "%s2_%s" % [finger, side], "%s3_%s" % [finger, side]]
+			if not (_bone.has(names[0]) and _bone.has(names[1]) and _bone.has(names[2])):
+				continue
+			var a: Vector3 = _rest[names[1]] - _rest[names[0]]
+			var b: Vector3 = _rest[names[2]] - _rest[names[1]]
+			var axis := a.cross(b)
+			if axis.length() < 1e-4:
+				axis = a.cross(Vector3.FORWARD)
+			_fingers.append([[_bone[names[0]], _bone[names[1]], _bone[names[2]]], axis.normalized(), float(_fingers.size()) * 1.7])
+
+
+## The game's own look: the creature shader (cel lighting, hide texture)
+## with an ink outline.
+func _dress(model: Node3D) -> void:
 	var hide := ShaderMaterial.new()
 	hide.shader = Art.shader("creature")
 	hide.set_shader_parameter("detail_tex", Art.tex("hide_detail"))
@@ -1999,8 +2076,10 @@ func _build() -> void:
 		mi.material_override = hide
 		mi.extra_cull_margin = 6.0
 
-	# The face, attached to the head bone: eyeballs, pupils and lids that
-	# move on their own, and the mouth.
+
+## The face, attached to the head bone: eyeballs, pupils and lids that
+## move on their own, and the mouth.
+func _build_face() -> void:
 	var attach := BoneAttachment3D.new()
 	_skel.add_child(attach)
 	attach.bone_name = "head"
@@ -2089,6 +2168,9 @@ func _face_part(parent: Node3D, mesh: Mesh, material: Material) -> MeshInstance3
 
 func _update_face(delta: float) -> void:
 	_anger = move_toward(_anger, 1.0 if _alert else 0.0, delta * 3.0)
+	if _lids.is_empty():
+		# A face painted on the model.
+		return
 	var nervous: float = _spec.nervous
 	var e: float = _spec.eye_size / 0.34
 	# The eyes dart from place to place, faster when there is danger (and

@@ -66,11 +66,13 @@ it up to date as steps are done.
 
 - Code: `scripts/units/creature.gd` (body, walking, attacks, the face),
   `creature_mind.gd` (choices), `balrog.gd`, `tools/bake_creature.py` (makes
-  the tortoise, squirrel and raven `.glb` models from blobs).
+  the tortoise and squirrel `.glb` models from blobs; the old blob raven now
+  goes to `raven_blob.glb`, unused), `tools/raven_rig.py` (the raven).
 - The player's creatures are `assets/creature/{creature,squirrel,raven}.glb`,
   each with the same bone names: `pelvis`, `spine`, `chest`, `neck`, `head`,
   `jaw`, `thigh_l/r`, `shin_l/r`, `foot_l/r`, `arm_upper_l/r`, `tail1` ...
-  (the raven has wing bones too). The balrog is the Meshy model now (below).
+  (the raven has wing and finger bones too, and no jaw). The raven and the
+  balrog are Meshy models now (below).
 - **All their movement is done in code** (`_update_legs()`, `_update_body()`,
   foot placement on the ground), not with animation clips. The shader
   (`shaders/creature.gdshader`) colours them with vertex colours and a
@@ -265,6 +267,56 @@ game yet.
   and 1.43 s). Bones are mapped to Meshy's rig (`HIPS` Bone_000 ...). The
   stomp, fireball rear and death fall are still code-made on top. Smoke
   test passes.
+
+## The new raven (owner's Meshy model, 0.51)
+
+`assets/creature/RavenMeshyRig.glb`, the owner's Meshy model and rig (Nov
+2026), kept as it came (Godot skips importing it). `tools/raven_rig.py`
+(Blender, run headless) rigs it for the game and writes:
+
+- `assets/creature/raven.blend`: the rig to look at, edit and animate, at
+  the model's size (1.7 m tall, faces -Y), bones lying along the limbs,
+  each finger bone's X axis the one it curls about.
+- `assets/creature/raven.glb`: what the game loads, 8 times as big (13.6 m,
+  like the old raven), every bone pointing up with no roll (what the game's
+  procedural animation expects), with the model's texture (extracted on
+  import as `raven_Image_0.png`, lossless).
+
+The model: 15,858 triangles, one 2048 x 2048 colour texture, purple
+glowing eyes painted on, a closed beak, wings spread at rest, three clawed
+fingers and a thumb on each hand, bird legs (thigh, drumstick, long bone
+above the toes, three toes forward and one back).
+
+- ✅ (0.51) **Finger bones**: Meshy gave each hand one bone for all three
+  fingers and a thumb bone hung from the upper arm. Each hand now has
+  `thumb`, `index`, `middle` and `ring` (front to back), three bones each
+  (`index1_l` at the knuckle, `index2_l`, `index3_l` the claw). They are
+  found from the mesh: each claw tip is followed back along the finger to
+  where it joins the palm, the bones run down its middle, and its skin is
+  weighted along them with soft joints (the ring finger's hooked claw ends
+  in two points; both are its). Curling every joint by 0.6 radians closes
+  the hand into a fist with 3 stretched points out of 800.
+- ✅ (0.51) **Symmetry**: Meshy's rig was lopsided. The -X wing had one
+  chain of bones where the +X has two, so its long feathers were bound to
+  the shoulder, the arm and the fingers. The +X side is mirrored onto the
+  -X side, bones and skin weights both (the mesh is symmetric to about a
+  millimetre, 3 cm at worst).
+- ✅ (0.51) **Wings**: a `wing_l/r` bone (no skin of its own) at the
+  shoulder carries both wing chains (`wing_inner1..3`, `wing_outer1`,
+  `wingtip`, `wing_outer3`), so the wings beat without swinging the arms,
+  which hang from the same joint. The thighs hang from the pelvis (Meshy
+  hung them from the middle of the spine).
+- ✅ (0.51) **In the game**: the raven wears its own texture (no cel
+  shading or outline, like the balrog), with no drawn face or jaw. The
+  game's code animates it like the others: legs by IK (its "foot" is the
+  long bone above the toes, so its ankle is that bone's joint, 2.3 m up),
+  arms hanging as modelled, wings beating about the body in flight and
+  spreading out and down, the hanging outer feathers swinging out. The
+  fingers clench round what it holds or carries, spread when it strikes
+  or stomps or is alert, and otherwise flex a little.
+- Not yet: the toes are Meshy's (one bone chain for the three front toes);
+  a jaw for the beak; the raven's own walk, hop and wingbeat clips (see
+  below).
 
 ## The other giants
 

@@ -640,7 +640,7 @@ project.godot              Engine settings (Forward+, Jolt physics, autoload "Ga
 scenes/main.tscn           The only scene; everything else is built in code
 shaders/                   Cel shading (toon.gdshaderinc), outlines, terrain, grass, water, sky...
 assets/textures/           Baked textures (made by tools/bake_textures.gd)
-assets/creature/           The creature models (made by tools/bake_creature.py)
+assets/creature/           The creature models (tools/bake_creature.py; the raven: tools/raven_rig.py)
 tools/                     Scripts that generate the assets above, and the smoke test
 scripts/
   main.gd                  Builds the world for the session, then starts its controller
@@ -721,12 +721,18 @@ python3 tools/bake_creature.py tortoise
 python3 tools/bake_creature.py squirrel
 ```
 
+The raven and the balrog are not baked any more: they are the owner's
+Meshy models (see [docs/ART_PLAN.md](docs/ART_PLAN.md)). The raven is rigged
+for the game in Blender by a script (finger bones, the -X side mirrored
+from the +X, the game's bone names), which reads
+`assets/creature/RavenMeshyRig.glb` and writes `assets/creature/raven.blend`
+(to look at, edit and animate) and `raven.glb` (what the game loads):
+
 ```bash
-python3 tools/bake_creature.py raven 0.09
+blender -b --factory-startup --python tools/raven_rig.py
 ```
 
-The balrog is not baked any more: it is the owner's Meshy model (see
-[docs/ART_PLAN.md](docs/ART_PLAN.md)). Its claw slashes are made in Blender
+The balrog's claw slashes are made in Blender
 by a script, which writes `assets/creature/balrog_claw_slash.blend` (to
 look at and edit) and `balrog_claw_slash.glb` (what the game plays):
 

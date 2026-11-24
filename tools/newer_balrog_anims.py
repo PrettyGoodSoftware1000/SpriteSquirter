@@ -79,6 +79,107 @@ def set_weights(i, weights):
         vg[b].add([i], w / total, 'REPLACE')
 
 
+# --- The chains hanging from the horns ------------------------------------------------
+# The owner: clip the chains hanging from the horns (they deformed badly:
+# Meshy skinned them, with the shoulder armour, to the upper arms). Only the
+# 3D strands that hang down from each horn go; the links wrapped round the
+# horns and the chains on the shoulder armour stay. Found as: silver (metal
+# map high, little colour, so not the gold trim), not horn-coloured (pale
+# tan), more than 3 cm from the horn's surface, below the horn's curl, and
+# joined to one of the two big hanging clumps. The top two polygons on each
+# side are horn (the owner checked) and stay.
+def remove_horn_chains():
+    import bmesh
+    from collections import defaultdict
+    from mathutils import kdtree
+    m = mesh_obj.data
+    mr, w, h = pixels("texture_0_metallic_roughness")
+    col, _, _ = pixels("texture_0")
+    uv = m.uv_layers.active.data
+
+    def sample(p):
+        uvs = [uv[li].uv for li in p.loop_indices]
+        pts = uvs + [sum(uvs, Vector((0, 0))) / len(uvs)]
+        px = [(min(h - 1, int(u[1] * h)), min(w - 1, int(u[0] * w))) for u in pts]
+        met = np.mean([mr[y, x, 2] for y, x in px])
+        rgb = np.mean([col[y, x, :3] for y, x in px], axis=0)
+        sat = np.mean([(lambda c: (c.max() - c.min()) / max(c.max(), 1e-3))(col[y, x, :3]) for y, x in px])
+        return met, sat, rgb
+
+    def is_horn(met, rgb):
+        r, g, b = rgb
+        tint = (r - b) / max(r, 1e-3)
+        return met < 0.35 and r > 0.3 and r >= g >= b and 0.12 < tint < 0.55
+
+    near = [p for p in m.polygons if 0.95 < p.center.z < 1.6 and 0.1 < abs(p.center.x) < 0.65 and -0.6 < p.center.y < 0.2]
+    info = {p.index: sample(p) for p in near}
+    chain = {p.index for p in near if 1.0 < p.center.z < 1.45 and 0.15 < abs(p.center.x) < 0.6
+             and -0.55 < p.center.y < 0.05 and info[p.index][0] > 0.4 and info[p.index][1] < 0.35}
+    horn_pts = [m.vertices[v].co.copy() for p in near if p.index not in chain and is_horn(info[p.index][0], info[p.index][2])
+                for v in p.vertices]
+    tree = kdtree.KDTree(len(horn_pts))
+    for i, c in enumerate(horn_pts):
+        tree.insert(c, i)
+    tree.balance()
+
+    def spot(v):
+        return tuple(round(c / 2e-3) for c in m.vertices[v].co)
+
+    # The two big clumps of touching chain polygons.
+    parent = {f: f for f in chain}
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    owner = {}
+    for f in chain:
+        for v in m.polygons[f].vertices:
+            k = spot(v)
+            if k in owner:
+                ra, rb = find(f), find(owner[k])
+                if ra != rb:
+                    parent[ra] = rb
+            else:
+                owner[k] = f
+    clumps = defaultdict(list)
+    for f in chain:
+        clumps[find(f)].append(f)
+    big = {f for g in clumps.values() if len(g) > 100 for f in g}
+    hanging = {f for f in big if tree.find(m.polygons[f].center)[2] > 0.035 and m.polygons[f].center.z < 1.27}
+    # Grow through touching silver polygons, clear of the horns.
+    by_spot = defaultdict(set)
+    for p in near:
+        for v in p.vertices:
+            by_spot[spot(v)].add(p.index)
+    for _ in range(12):
+        ring = set()
+        for f in hanging:
+            for v in m.polygons[f].vertices:
+                ring |= by_spot[spot(v)]
+        ring -= hanging
+        grow = [f for f in ring if info[f][0] > 0.3 and info[f][1] < 0.4 and not is_horn(info[f][0], info[f][2])
+                and tree.find(m.polygons[f].center)[2] > 0.03 and m.polygons[f].center.z < 1.27]
+        if not grow:
+            break
+        hanging.update(grow)
+    # Keep the top two on each side: horn.
+    for side in (1, -1):
+        mine = sorted((f for f in hanging if m.polygons[f].center.x * side > 0), key=lambda f: -m.polygons[f].center.z)
+        hanging -= set(mine[:2])
+    bm = bmesh.new()
+    bm.from_mesh(m)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[i] for i in sorted(hanging)], context='FACES')
+    bm.to_mesh(m)
+    bm.free()
+    print("HORN CHAINS: %d polygons removed" % len(hanging))
+
+
+remove_horn_chains()
+
+
 # --- The chain fix ------------------------------------------------------------------
 # Chain faces: shiny (metal map), silver rather than gold (little colour),
 # at belt height, and skinned to a thigh or the tail.

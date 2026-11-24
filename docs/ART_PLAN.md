@@ -235,6 +235,12 @@ game yet.
   - Chest-to-armpit stretch at the wind-ups (18, 35): the claws rise to
     about chin height, out to the side rather than back, and the
     collarbone carries half of each reach (down ~25% at those frames).
+- ✅ (0.45) **Horn chains clipped**: the owner asked for the chains that
+  hang from the horns to go (they deformed badly: Meshy skinned them, with
+  the shoulder armour and the lower horns, to the upper arms). 146 polygons
+  of the two hanging strands are removed (`remove_horn_chains()`); the
+  links wrapped round the horns, the chains on the shoulder armour, and the
+  top two polygons on each side (horn, the owner checked) stay.
 
 ## The other giants
 

@@ -165,6 +165,13 @@ func _ready() -> void:
 	hud.research_menu_requested.connect(_toggle_research_menu)
 	hud.research_selected.connect(_on_research_selected)
 	hud.spell_research_selected.connect(_on_spell_research_selected)
+	hud.buff_research_selected.connect(func(id: String) -> void:
+		var problem := village.start_buff_research(id)
+		hud.set_hint(problem if problem != "" else "Researching %s: %s minutes." % [BuffBook.find(id).name, Hud._number(Balance.num("buff_research_seconds") / 60.0)])
+		hud.update_spell_research(village))
+	hud.buff_selected.connect(cast_buff)
+	village.buff_researched.connect(func(id: String) -> void:
+		_announce(Texts.line("buff_researched", {"buff": BuffBook.find(id).name})))
 	hud.spells_requested.connect(func() -> void:
 		village.learn_all_spells()
 		hud.set_spell_slots(village.spell_slots))
@@ -392,8 +399,10 @@ func _update_hover() -> void:
 			_hover.set_highlight(true)
 
 
-## The wheat field under the mouse shows how far along it is.
+## The wheat field under the mouse shows how far along it is, and a
+## building under it what it is researching or training.
 var _field_hovered: CropField
+var _building_label: Label3D
 
 
 func _hover_field() -> void:
@@ -410,6 +419,42 @@ func _hover_field() -> void:
 		_field_hovered = over
 	if over != null:
 		over.show_progress(true)
+	_hover_building()
+
+
+## Over a village building under the mouse: its name, and what it is
+## researching or training and how far along (PlayerVillage.status_of()).
+func _hover_building() -> void:
+	var shown: Destructible = null
+	if _cursor_hit != null and not _choosing and mode == Mode.COMMAND and not get_viewport().gui_get_hovered_control() and is_instance_valid(village):
+		var p: Vector3 = _cursor_hit
+		var best := INF
+		for node in get_tree().get_nodes_in_group("player_buildings"):
+			var b := node as Destructible
+			if b == null or b.destroyed:
+				continue
+			var d := Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length()
+			if d < b.footprint * 1.2 + 1.0 and d < best:
+				best = d
+				shown = b
+	if shown == null:
+		if _building_label != null:
+			_building_label.visible = false
+		return
+	var status := village.status_of(shown)
+	if _building_label == null:
+		_building_label = Label3D.new()
+		_building_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_building_label.no_depth_test = true
+		_building_label.fixed_size = true
+		_building_label.pixel_size = 0.0011
+		_building_label.font_size = 24
+		_building_label.outline_size = 8
+		Game.effects.add_child(_building_label)
+	var title := BuildingCatalog.title(shown.get_meta("kind", ""))
+	_building_label.text = title if status == "" else "%s\n%s" % [title, status]
+	_building_label.global_position = shown.global_position + Vector3.UP * (shown.height + 2.0)
+	_building_label.visible = true
 
 
 ## Founds the village at a start location. In a random world each start is
@@ -647,6 +692,48 @@ func _command_move(pos: Vector3) -> void:
 		return
 	creature.move_to(pos)
 	Game.effects.spawn_marker(pos)
+
+
+# --- Creature buffs ----------------------------------------------------------------
+
+## When each buff (BuffBook) can next be cast: Game.now of the end of its
+## cooldown, for the whole village.
+var _buff_ready_at := {}
+
+
+## Seconds until buff `id` can be cast again (0 if it can now, or it is on).
+func buff_cooling(id: String) -> float:
+	if creature != null and creature.buff_on(id):
+		return 0.0
+	return maxf(0.0, float(_buff_ready_at.get(id, 0.0)) - Game.now)
+
+
+## Casts buff `id` on the creature, if it can be: it is researched, it is
+## not on already, it has cooled down, and there is the animus for it.
+## Returns why not, or "" (and says so in the hint either way).
+func cast_buff(id: String) -> String:
+	var buff := BuffBook.find(id)
+	var problem := ""
+	if buff.is_empty():
+		problem = "There is no such buff."
+	elif creature == null or creature.knocked_out:
+		problem = "Your creature cannot take a buff now."
+	elif not village.knows_buff(id):
+		problem = "%s must be researched first, at the %s." % [buff.name, BuildingCatalog.role_name("shrine")]
+	elif creature.buff_on(id):
+		problem = "%s is on already (%d s left)." % [buff.name, ceili(creature.buff_left(id))]
+	elif buff_cooling(id) > 0.0:
+		problem = "%s is cooling down: %d s." % [buff.name, ceili(buff_cooling(id))]
+	elif village.amount("animus") < BuffBook.cost(id):
+		problem = "Not enough animus for %s: it costs %d." % [buff.name, BuffBook.cost(id)]
+	if problem != "":
+		hud.set_hint(problem)
+		return problem
+	village.give("animus", -BuffBook.cost(id))
+	creature.start_buff(id, BuffBook.seconds(id))
+	_buff_ready_at[id] = Game.now + BuffBook.seconds(id) + BuffBook.cooldown(id)
+	hud.set_hint("%s: %d seconds." % [buff.name, roundi(BuffBook.seconds(id))])
+	return ""
 
 
 ## Right-click: the creature goes there, fighting whatever it meets on the
@@ -1466,6 +1553,7 @@ func _update_ui() -> void:
 		states.append(spell_state(k))
 	hud.update_spells(village.amount("magicko"), costs, cooling, states, not _choosing)
 	hud.update_creature(creature)
+	hud.update_buffs(village, creature, self)
 	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():
 		hud.update_build_menu(village)

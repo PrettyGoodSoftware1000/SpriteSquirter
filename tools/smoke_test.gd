@@ -1584,6 +1584,95 @@ func _run() -> void:
 		"on an attack move it goes after an enemy on the way and stays to fight (%.0f m short of where it was sent)" % beast._flat(goal, beast.global_position))
 	if is_instance_valid(lurker):
 		lurker.queue_free()
+
+	# Magicko: 1 every 2 seconds from a villager, 5 from a wizard.
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.magicko_rate, 30.0) and is_equal_approx(Balance.DEFAULTS["wizard_magicko"], 150.0),
+		"a villager makes 1 magicko every 2 seconds, a wizard 5")
+	# Defending the village: goblins marching near a Storehouse.
+	_check(beast.mind.personality("defensive") > Balance.num("raven_defensive_personality"), "the tortoise is the most defensive of the town")
+	beast.has_target = false
+	beast.attack_moving = false
+	var store_at := village.center
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		if BuildingCatalog.role(node.get_meta("kind", "")) == "store":
+			store_at = (node as Node3D).global_position
+			break
+	var marcher_at := store_at + Vector3(30, 0, 30)
+	var marcher := WorldPopulator.spawn_villager(game.world_root, game.terrain, marcher_at, 0.5, true)
+	marcher.process_mode = Node.PROCESS_MODE_DISABLED
+	marcher.raiding = true
+	_check(beast.mind.marching_on_stores() == marcher, "goblins marching within 200 m of a Storehouse are seen")
+	Balance.values["defensive_weight"] = 1000.0
+	beast.mind._defend_timer = 0.0
+	_check(beast.mind._consider_defending() and beast.attack_moving, "the creature sets off to attack them")
+	Balance.values["defensive_weight"] = Balance.DEFAULTS["defensive_weight"]
+	beast.attack_moving = false
+	beast.has_target = false
+	marcher.queue_free()
+	# Creature buffs, researched at the Shrines.
+	_check(village.buff_research_cost().get("animus", 0) == roundi(Balance.num("buff_research_first")), "the first buff costs 5 animus to research")
+	village.give("animus", 100.0)
+	_check(village.start_buff_research("growth") == "" and village.buff_research_cost().get("animus", 0) == roundi(Balance.num("buff_research_first") + Balance.num("buff_research_step")),
+		"and the next costs 5 more")
+	village.buff_job("growth").t = Balance.num("buff_research_seconds") - 0.5
+	await _wait(1.5)
+	_check(village.knows_buff("growth"), "a buff is researched in 8 minutes")
+	play.hud.update_buffs(village, beast, play)
+	_check(play.hud._buff_slots.growth.button.visible and play.hud._buff_slots.size() == BuffBook.BUFFS.size(), "it appears on the buff bar over the health bar")
+	var age_before := beast.age
+	beast.age = 0.0
+	beast.growth_paid = 10
+	_check(play.cast_buff("growth") == "" and beast.buff_on("growth"), "Creature Growth is cast")
+	_check(play.cast_buff("growth") != "", "but not while it is on")
+	await _wait(2.0)
+	_check(beast.age > 2.0 * 1.5, "the creature grows twice as fast (%.1f s of growth in 2 s)" % beast.age)
+	beast._buffs["growth"] = game.now
+	await _wait(0.2)
+	_check(play.cast_buff("growth") != "" and play.buff_cooling("growth") > 0.0, "a minute's cooldown after it wears off")
+	beast.age = age_before
+	village.buffs_known["aura"] = true
+	var singed := WorldPopulator.spawn_villager(game.world_root, game.terrain, beast.global_position + Vector3(5, 0, 0), 0.5, true)
+	singed.process_mode = Node.PROCESS_MODE_DISABLED
+	var singed_hp := singed.hp
+	_check(play.cast_buff("aura") == "" and beast.buff_on("aura"), "Flaming Aura is cast for 1 animus")
+	await _wait(2.2)
+	_check(singed.hp <= singed_hp - Balance.num("aura_damage") * 1.5, "enemies close by take fire damage every second (%d lost)" % roundi(singed_hp - singed.hp))
+	beast._buffs.clear()
+	singed.queue_free()
+	# Over a building: what it is researching.
+	village.give("lumber", 300.0)
+	village.give("stone", 300.0)
+	village.researched.erase("pitchforks_3")
+	village.start_research("pitchforks_3")
+	_check(village.status_of(smithy).contains("Researching Pitchforks III"), "the mouse over the Blacksmith shows what it researches (%s)" % village.status_of(smithy).replace("\n", " / "))
+	village.researching("smith").clear()
+	village.researched["pitchforks_3"] = true
+	# Farmers with nothing to sow or reap work the growing fields.
+	var tilled := get_tree().get_nodes_in_group("fields")[0] as CropField
+	tilled.process_mode = Node.PROCESS_MODE_INHERIT
+	for node in get_tree().get_nodes_in_group("fields"):
+		(node as CropField).stage = CropField.Stage.GROWING
+	var farmer: Villager = null
+	for v in village.people():
+		if v.can_work() and v.pin == "":
+			farmer = v
+			break
+	if farmer != null:
+		farmer.pin = "food"
+		farmer.clear_job()
+		village._assign_jobs()
+		_check(farmer.job == "tend", "a farmer with nothing to reap works a growing field (%s)" % farmer.job)
+		farmer.pin = ""
+		farmer.clear_job()
+	tilled.stage = CropField.Stage.GROWING
+	tilled.progress = 0.1
+	var growing_from := tilled.progress
+	tilled.tend(1.0)
+	tilled._process(1.0)
+	var tended_step := tilled.progress - growing_from
+	growing_from = tilled.progress
+	tilled._process(1.0)
+	_check(tended_step > (tilled.progress - growing_from) * 1.1, "and that makes it grow faster")
 	game.settings.goblin_rate = 2.0
 	Balance.values["goblin_bounce_below"] = Balance.DEFAULTS["goblin_bounce_below"]
 	beast.has_target = false
@@ -1667,6 +1756,7 @@ func _run() -> void:
 
 	# 3. The editor: a small map with starts, a cave and trees, saved.
 	await _open(game, "editor", "", 192)
+	_check(get_tree().current_scene.get_node("Atmosphere").mood_index == 0, "the map editor is always at noon")
 	var editor := get_tree().current_scene.get_node("Controller") as EditorMode
 	_check(editor != null, "editor controller")
 	_check(get_tree().get_nodes_in_group("buildings").is_empty(), "new editor map has no buildings")

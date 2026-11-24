@@ -10,6 +10,12 @@ const PATH := "res://balancing.txt"
 const DEFAULTS := {
 	"start_lumber": 100.0, "start_stone": 100.0, "start_food": 100.0, "start_magicko": 100.0,
 	"goblin_bounce_below": 5.0, "goblin_bounce_until": 6.0, "goblin_bounce_rate": 5.0,
+	"buff_cost_growth": 1.0, "buff_seconds_growth": 120.0, "buff_cooldown_growth": 60.0, "growth_buff_speed": 1.0,
+	"buff_cost_aura": 1.0, "buff_seconds_aura": 30.0, "buff_cooldown_aura": 0.0, "aura_radius": 10.0, "aura_damage": 5.0,
+	"buff_research_first": 5.0, "buff_research_step": 5.0, "buff_research_seconds": 480.0,
+	"defensive_weight": 3.0, "defend_range": 200.0,
+	"tortoise_defensive_personality": 1.6, "squirrel_defensive_personality": 0.9, "raven_defensive_personality": 0.8,
+	"wizard_magicko": 150.0, "crop_tend_bonus": 0.25, "crop_tend_most": 1.0,
 	"food_warning_seconds": 45.0, "crop_grow_seconds": 200.0,
 	"villager_health": 30.0, "villager_damage": 6.0, "villager_attack_seconds": 1.0,
 	"warrior_health": 120.0, "warrior_damage": 12.0, "sharper_swords_bonus": 1.5,

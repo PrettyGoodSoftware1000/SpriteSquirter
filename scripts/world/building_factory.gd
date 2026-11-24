@@ -555,6 +555,7 @@ static func _build_singing_rocks(b: Destructible, rng: RandomNumberGenerator) ->
 	noise.frequency = 0.4
 	var rocks := [MeshBuilder.new(), MeshBuilder.new(), MeshBuilder.new()]
 	var faces := [MeshBuilder.new(), MeshBuilder.new(), MeshBuilder.new()]
+	var face_count := 0
 	var glows := [Color(0.3, 0.98, 0.92), Color(0.98, 0.5, 0.82), Color(0.6, 0.98, 0.5)]
 	var top := 0.0
 	var layers := [[6, 3.3, 1.5], [4, 2.0, 4.0], [1, 0.0, 6.2]]
@@ -579,13 +580,19 @@ static func _build_singing_rocks(b: Destructible, rng: RandomNumberGenerator) ->
 			var face: MeshBuilder = faces[l]
 			face.color = glows[rng.randi() % 3]
 			var s := size.x * 0.42
-			var happy := rng.randf() < 0.75
+			# Every other face frowns (half smile, half frown).
+			rng.randf()
+			var happy := face_count % 2 == 0
+			face_count += 1
 			for sx: float in [-1.0, 1.0]:
-				face.add_blob(Vector3(s * 0.16, s * (0.08 if happy else 0.2), 0.08), xf.translated_local(Vector3(sx * s * 0.42, s * 0.3, 0)), null, 0.0, 4, 8)
+				# Frowning eyes slant down towards the nose.
+				var brow := Basis(Vector3.FORWARD, 0.0 if happy else sx * 0.45)
+				face.add_blob(Vector3(s * 0.16, s * (0.08 if happy else 0.12), 0.08), xf * Transform3D(brow, Vector3(sx * s * 0.42, s * 0.3, 0)), null, 0.0, 4, 8)
 			var smile := PackedVector3Array()
 			for m in 7:
 				var t := m / 3.0 - 1.0
-				smile.append(xf * Vector3(t * s * 0.55, -s * 0.38 + s * 0.26 * t * t * (1.0 if happy else 0.2), 0.03 - 0.1 * t * t))
+				# A smile curves up at the ends; a frown curves down.
+				smile.append(xf * Vector3(t * s * 0.55, -s * 0.38 + s * 0.26 * t * t * (1.0 if happy else -1.0) + (0.0 if happy else s * 0.12), 0.03 - 0.1 * t * t))
 			face.add_tube(smile, PackedFloat32Array([0.05, 0.08, 0.1, 0.1, 0.1, 0.08, 0.05]), 5)
 	b.footprint = 5.0
 	for l in 3:

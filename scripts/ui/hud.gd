@@ -35,6 +35,9 @@ signal research_selected(id: String)
 signal spell_moved(index: int, onto: int)
 ## A spell picked in the Shrine's research menu.
 signal spell_research_selected(id: String)
+## A creature buff's research button, and a buff on the buff bar.
+signal buff_research_selected(id: String)
+signal buff_selected(id: String)
 ## The dev menu's "Learn all spells".
 signal spells_requested
 signal resurrect_requested
@@ -63,7 +66,7 @@ const SETTING_SLIDERS := [
 	["stone_rate", "Stone rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["food_rate", "Food rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["birth_seconds", "Birth timer", 5.0, 300.0, 5.0, "s"],
-	["magicko_rate", "Magicko rate", 0.0, 30.0, 0.5, "/villager/min"],
+	["magicko_rate", "Magicko rate", 0.0, 120.0, 1.0, "/villager/min"],
 	["goblin_rate", "Goblin Spawn Rate", 0.0, 20.0, 0.5, "/cave/min"],
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
@@ -103,6 +106,12 @@ var _workers: Label
 var _spell_buttons: Array[Button] = []
 var _spell_costs: Array[Label] = []
 var _spell_sparkles: Array[CostBolts] = []
+## The buff bar over the creature's health bar (BuffBook.SLOTS places):
+## each buff's {"slot", "button", "fill", "left", "cost"}, and the Shrine
+## menu's rows for researching them.
+var _buff_slots := {}
+var _buff_research_rows := {}
+var _buff_research_title: Label
 ## Each spell's state on the bar last time (see update_spells()).
 var _spell_states: Array[int] = []
 var _spell_fills: Array[CooldownFill] = []
@@ -502,6 +511,52 @@ func _build_spell_bar(root: Control) -> void:
 	# (At the bottom, where it stays however tall the spell bar grows.)
 	stats.size_flags_vertical = Control.SIZE_SHRINK_END
 	row.add_child(stats)
+	# The buff bar: room for BuffBook.SLOTS buffs, over the health bar.
+	var buff_bar := HBoxContainer.new()
+	buff_bar.add_theme_constant_override("separation", 4)
+	stats.add_child(buff_bar)
+	for k in BuffBook.SLOTS:
+		var holder := VBoxContainer.new()
+		holder.add_theme_constant_override("separation", 1)
+		holder.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE + 16)
+		buff_bar.add_child(holder)
+		if k >= BuffBook.BUFFS.size():
+			continue
+		var buff: Dictionary = BuffBook.BUFFS[k]
+		var id: String = buff.id
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(SPELL_SIZE, SPELL_SIZE)
+		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		b.tooltip_text = "%s (%d animus)\n%s" % [buff.name, BuffBook.cost(id), buff.hint]
+		var icon := TextureRect.new()
+		icon.texture = spell_icon(id)
+		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+		icon.offset_left = 4
+		icon.offset_top = 4
+		icon.offset_right = -4
+		icon.offset_bottom = -4
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(icon)
+		var fill := CooldownFill.new()
+		b.add_child(fill)
+		var left := _text("", 12)
+		left.set_anchors_preset(Control.PRESET_FULL_RECT)
+		left.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		left.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		left.add_theme_color_override("font_outline_color", Color.BLACK)
+		left.add_theme_constant_override("outline_size", 4)
+		left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(left)
+		b.pressed.connect(func() -> void: buff_selected.emit(id))
+		holder.add_child(b)
+		var cost_row := ResourceIcon.cost_row({"animus": BuffBook.cost(id)}, 12)
+		holder.add_child(cost_row)
+		b.visible = false
+		cost_row.visible = false
+		_buff_slots[id] = {"slot": holder, "button": b, "fill": fill, "left": left, "cost": cost_row}
 	_resurrect = _button("Resurrect at the %s (%d animus)" % [BuildingCatalog.role_name("shrine"), roundi(Balance.num("resurrect_animus"))])
 	_resurrect.tooltip_text = "Your creature is dead. Bring it back to life beside the %s." % BuildingCatalog.role_name("shrine")
 	_resurrect.add_theme_color_override("font_color", RESOURCE_COLORS.animus)
@@ -537,6 +592,25 @@ func _build_spell_bar(root: Control) -> void:
 			var click := event as InputEventMouseButton
 			if click and click.pressed and click.double_click and click.button_index == MOUSE_BUTTON_LEFT:
 				creature_focus_requested.emit())
+
+
+## The buff bar: known buffs show; one that is on glows gold with its
+## seconds left; one cooling down fills from the bottom as it cools.
+func update_buffs(village: PlayerVillage, beast: Creature, play: Node) -> void:
+	for id: String in _buff_slots:
+		var slot: Dictionary = _buff_slots[id]
+		var known := village.knows_buff(id)
+		(slot.button as Button).visible = known
+		(slot.cost as Control).visible = known
+		if not known:
+			continue
+		var on := is_instance_valid(beast) and beast.buff_on(id)
+		var cooling: float = play.buff_cooling(id)
+		var full := maxf(BuffBook.cooldown(id), 0.01)
+		(slot.fill as CooldownFill).set_left(clampf(cooling / full, 0.0, 1.0))
+		(slot.left as Label).text = ("%d" % ceili(beast.buff_left(id))) if on else ""
+		var cannot := not on and (village.amount("animus") < BuffBook.cost(id) or cooling > 0.0 or not is_instance_valid(beast) or beast.knocked_out)
+		(slot.button as Button).modulate = Color(1.0, 0.85, 0.35) if on else (Color(1.0, 0.6, 0.6, 0.75) if cannot else Color.WHITE)
 
 
 ## The creature's bars, each with its level and how much of it has been
@@ -813,6 +887,44 @@ func _build_spell_research_menu(root: Control) -> void:
 		bar.custom_minimum_size = Vector2(90, 8)
 		state.add_child(bar)
 		_spell_research_rows[id] = {"button": b, "status": status, "bar": bar, "row": row}
+	_buff_research_title = _heading("")
+	box.add_child(_buff_research_title)
+	var buff_grid := GridContainer.new()
+	buff_grid.columns = 2
+	buff_grid.add_theme_constant_override("h_separation", 24)
+	buff_grid.add_theme_constant_override("v_separation", 8)
+	box.add_child(buff_grid)
+	for buff in BuffBook.BUFFS:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		buff_grid.add_child(row)
+		var icon := TextureRect.new()
+		icon.texture = spell_icon(buff.id)
+		icon.custom_minimum_size = Vector2(56, 56)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(icon)
+		var b := _button("")
+		b.custom_minimum_size = Vector2(300, 70)
+		var lines: Array[Control] = [_text(buff.name, 12), _text("Takes %s min.  Casting it costs %d animus" % [_number(Balance.num("buff_research_seconds") / 60.0), BuffBook.cost(buff.id)], 12)]
+		b.add_child(_stacked(lines))
+		b.tooltip_text = buff.hint
+		var id: String = buff.id
+		b.pressed.connect(func() -> void: buff_research_selected.emit(id))
+		row.add_child(b)
+		var state := VBoxContainer.new()
+		state.alignment = BoxContainer.ALIGNMENT_CENTER
+		state.custom_minimum_size.x = 90
+		row.add_child(state)
+		var status := _text("", 12)
+		state.add_child(status)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.max_value = 1.0
+		bar.custom_minimum_size = Vector2(90, 8)
+		state.add_child(bar)
+		_buff_research_rows[id] = {"button": b, "status": status, "bar": bar, "row": row}
 	var note := Label.new()
 	note.text = "Every spell is researched here (one at a time for each %s), before it appears on the spell bar. Known spells leave this list.\nEach costs 1 animus more than the last. Drag the spells on the bar to put them where you like." % BuildingCatalog.role_name("shrine")
 	note.add_theme_font_size_override("font_size", 12)
@@ -852,6 +964,20 @@ func update_spell_research(village: PlayerVillage) -> void:
 		status.text = "Known" if done else ("%d%%" % floori(progress * 100.0) if running else "")
 		b.disabled = done or running
 		b.modulate = Color.WHITE if done or running or village.can_afford(village.spell_research_cost()) else Color(1.0, 0.6, 0.6, 0.8)
+	var buff_cost: int = village.buff_research_cost().get("animus", 0)
+	_buff_research_title.text = "Creature buffs: cast from the buff bar over your creature's health bar. The next costs %d animus to research." % buff_cost
+	for id: String in _buff_research_rows:
+		var row: Dictionary = _buff_research_rows[id]
+		var b := row.button as Button
+		var done := village.knows_buff(id)
+		(row.row as Control).visible = not done
+		var running: bool = not village.buff_job(id).is_empty()
+		var progress := village.buff_research_progress(id)
+		(row.bar as ProgressBar).value = progress
+		(row.bar as ProgressBar).visible = running
+		(row.status as Label).text = ("%d%%" % floori(progress * 100.0)) if running else ""
+		b.disabled = done or running
+		b.modulate = Color.WHITE if done or running or village.can_afford(village.buff_research_cost()) else Color(1.0, 0.6, 0.6, 0.8)
 
 
 ## The sign of spell `id`, as a texture (the mouse pointer's, see SpellCursors).

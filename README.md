@@ -167,7 +167,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    unassigned Workers. More buildings train side by side. A grey
    bar fills over the count while recruits train. Lower the number and
    warriors or wizards go straight back to work; they have to train again
-   to return. **Wizards** make 5 magicko a minute each and throw tiny
+   to return. **Wizards** make 5 magicko every 2 seconds each (`wizard_magicko`, 150 a minute; a villager makes 1 every 2 seconds) and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
    sometimes setting them alight. Once **Bows** are researched an Archers
    count appears: each Town guard allows 2 **archers** (22½ seconds each),
@@ -466,7 +466,9 @@ In the game, press **Esc** and **Show controls** for this list.
 | Drag a spell | Move it to another place on the spell bar |
 | Click the creature's portrait | Pay the animus for it to grow on (it sparkles when it can) |
 | Double-click the creature's bars | Find the creature |
-| Click a Shrine / a Blacksmith | Research spells / research |
+| Click a Shrine / a Blacksmith | Research spells and creature buffs / research |
+| Mouse over a building | Its name, and what it is researching or training and how far along |
+| A buff on the buff bar (over the creature's health bar) | Cast that creature buff: **Creature Growth** (it grows twice as fast for 2 minutes, shedding yellow sparkles; then a minute's cooldown) or **Flaming Aura** (flames fall from it for 30 seconds and burn every enemy within 10 m for 5 a second). Each costs 1 animus and cannot be cast while it is on (`buff_...` in `balancing.txt`) |
 | Click outside a menu | Close it |
 | Click with a spell in hand | Cast it (Bless and Condemn: click anywhere); Shift+click keeps it in hand |
 | B / Backspace (or the hammer) | Open or close the build menu (1–9 pick the field, the bridge or a building) |

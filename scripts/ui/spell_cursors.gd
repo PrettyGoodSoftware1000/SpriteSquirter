@@ -108,6 +108,20 @@ static func _draw(id: String) -> Image:
 			# A pink heart with a shine on it.
 			_shape(img, func(p: Vector2) -> float: return _heart(p, Vector2(24, 25), 1.0), Color(1.0, 0.42, 0.7))
 			_shape(img, func(p: Vector2) -> float: return p.distance_to(Vector2(17, 17)) - 3.2, Color(1.0, 0.85, 0.93), false)
+		"growth":
+			# A creature's shape growing outwards: two fainter, bigger copies
+			# behind a bright yellow one.
+			for step: Array in [[1.55, Color(1.0, 0.85, 0.2, 0.35)], [1.27, Color(1.0, 0.88, 0.25, 0.6)], [1.0, Color(1.0, 0.92, 0.3)]]:
+				var k: float = step[0]
+				_shape(img, func(p: Vector2) -> float: return _beast((p - Vector2(24, 26)) / k + Vector2(24, 26)) * k, step[1], k == 1.0)
+		"aura":
+			# A creature in a ring of flames.
+			for k in 7:
+				var a := TAU * k / 7.0
+				var at := Vector2(24, 27) + Vector2(cos(a), sin(a) * 0.8) * 17.0
+				_shape(img, func(p: Vector2) -> float: return _flame(p, at + Vector2(0, 5), 4.5, 0.6, 11.0), Color(1.0, 0.45, 0.08))
+				_shape(img, func(p: Vector2) -> float: return _flame(p, at + Vector2(0, 5), 2.2, 0.3, 6.0), Color(1.0, 0.85, 0.3), false)
+			_shape(img, func(p: Vector2) -> float: return _beast(p), Color(0.55, 0.32, 0.2))
 		"condemn":
 			_shape(img, func(p: Vector2) -> float: return _star(p, Vector2(24, 24), 20.0, 5.0), Color(0.75, 0.06, 0.1))
 			_shape(img, func(p: Vector2) -> float: return p.distance_to(Vector2(24, 24)) - 4.5, Color(0.2, 0.0, 0.05), false)
@@ -148,6 +162,15 @@ static func _flame(p: Vector2, base: Vector2, r1: float, r2: float, tall: float)
 
 ## A heart centred on `c`, about 36 pixels across at `s` 1: two round lobes
 ## over a point.
+## A little creature seen from the side (a body, a head and two legs),
+## about 26 pixels long, in the middle of the icon.
+static func _beast(p: Vector2) -> float:
+	var body := (((p - Vector2(22, 27)) / Vector2(11.0, 7.0)).length() - 1.0) * 7.0
+	var head := p.distance_to(Vector2(35, 21)) - 5.0
+	var legs := minf(_segment(p, Vector2(16, 30), Vector2(15, 37)) - 2.4, _segment(p, Vector2(28, 30), Vector2(29, 37)) - 2.4)
+	return minf(minf(body, head), legs)
+
+
 static func _heart(p: Vector2, c: Vector2, s: float) -> float:
 	var q := (p - c) / s
 	var lobes := minf(q.distance_to(Vector2(-7.5, -6.0)) - 9.5, q.distance_to(Vector2(7.5, -6.0)) - 9.5)

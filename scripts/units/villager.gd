@@ -1437,7 +1437,7 @@ func _update_fey(delta: float) -> void:
 		want = 0.0 if _landed else 3.5 + 0.5 * sin(_wing_phase * 0.07)
 		if _fey_dust:
 			_fey_dust.emitting = not _landed and fmod(_wing_phase * 0.05, 3.0) < 1.2
-	elif state == State.JOB and _working and job in ["lumber", "stone", "food", "farm"]:
+	elif state == State.JOB and _working and job in ["lumber", "stone", "food", "farm", "tend"]:
 		want = 0.0
 	_hover = move_toward(_hover, want, delta * 2.0)
 
@@ -1627,7 +1627,7 @@ func _update_job(delta: float) -> void:
 			_farm_timer = randf_range(3.0, 6.0)
 		return
 	var target_3d := job_target as Node3D
-	if job == "farm":
+	if job == "farm" or job == "tend":
 		# Work along the rows: move to a new spot in the field now and then.
 		_farm_timer -= delta
 		if _farm_timer <= 0.0:
@@ -2569,7 +2569,7 @@ func _animate_work(blend: float) -> void:
 	var thigh := 0.0
 	var knee := 0.0
 	match job:
-		"food", "farm":
+		"food", "farm", "tend":
 			# Stooping, knees bent, hands busy near the ground.
 			lean = 0.55
 			thigh = -0.4

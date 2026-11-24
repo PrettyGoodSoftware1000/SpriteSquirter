@@ -239,6 +239,11 @@ var _strike_target: Node3D
 ## In the air: when it next looks about, and the bat it is chasing.
 var _air_scan := 0.0
 var _air_bat: GiantBat
+## Buffs on it (BuffBook): id -> when it wears off; their particles; and
+## when the Flaming Aura next burns.
+var _buffs := {}
+var _buff_fx := {}
+var _aura_tick := 0.0
 ## Standing still and turning to face goblins before attacking.
 var _turning := false
 var _crouch := 0.0
@@ -473,8 +478,10 @@ func _grow(delta: float) -> void:
 		if hostile:
 			age += delta
 		else:
-			# As far as the animus paid for so far allows.
-			age = maxf(age, minf(age + delta, _growth_allowed()))
+			# As far as the animus paid for so far allows (faster under
+			# the Creature Growth buff).
+			var rate := 1.0 + (Balance.num("growth_buff_speed") if buff_on("growth") else 0.0)
+			age = maxf(age, minf(age + delta * rate, _growth_allowed()))
 	var t := clampf(age / (minutes * 60.0), 0.0, 1.0)
 	size = lerpf(START_SIZE, 1.0, t)
 	scale = Vector3.ONE * size
@@ -486,6 +493,104 @@ func _grow(delta: float) -> void:
 		hp = 0.0
 	elif _hurt_timer <= 0.0 and not hungry:
 		hp = minf(max_hp, hp + max_hp * 0.01 * regen_boost("health") * delta)
+
+
+# --- Buffs ------------------------------------------------------------------------
+
+## True while buff `id` (BuffBook) is on.
+func buff_on(id: String) -> bool:
+	return float(_buffs.get(id, -INF)) > Game.now
+
+
+## Seconds buff `id` has left (0 if it is off).
+func buff_left(id: String) -> float:
+	return maxf(0.0, float(_buffs.get(id, -INF)) - Game.now)
+
+
+## Puts buff `id` on for `seconds`.
+func start_buff(id: String, seconds: float) -> void:
+	_buffs[id] = Game.now + seconds
+	if not _buff_fx.has(id):
+		_buff_fx[id] = _make_buff_fx(id)
+
+
+func _update_buffs(delta: float) -> void:
+	for id: String in _buff_fx:
+		var fx := _buff_fx[id] as CPUParticles3D
+		fx.emitting = buff_on(id) and not knocked_out
+		fx.position = Vector3.UP * 2.2
+		fx.emission_sphere_radius = 1.6
+		fx.scale_amount_min = 0.6
+		fx.scale_amount_max = 1.3
+	if not buff_on("aura") or knocked_out:
+		_aura_tick = 0.0
+		return
+	# Flaming Aura: every second, fire damage to every enemy close by.
+	_aura_tick += delta
+	while _aura_tick >= 1.0:
+		_aura_tick -= 1.0
+		var reach := Balance.num("aura_radius")
+		var burn := Balance.num("aura_damage")
+		for node in get_tree().get_nodes_in_group("goblins"):
+			var g := node as Villager
+			if g != null and g.is_alive() and not g.charmed() and g.state != Villager.State.HELD \
+					and _flat(g.global_position, global_position) < reach:
+				g.take_hit(burn, self)
+		var rival := _rival()
+		if rival != null and rival != self and _flat(rival.global_position, global_position) < reach + 2.0 * rival.size:
+			rival.take_hit(burn, self)
+		for node in get_tree().get_nodes_in_group("bats"):
+			var bat := node as GiantBat
+			if bat != null and bat.is_alive() and bat.global_position.distance_to(global_position) < reach:
+				bat.take_hit(burn, self)
+
+
+## The particles a buff sheds while it is on: yellow sparkles drifting
+## down to the ground (Creature Growth), or flames falling off it (Flaming
+## Aura). They are left behind as it moves.
+func _make_buff_fx(id: String) -> CPUParticles3D:
+	var fx := CPUParticles3D.new()
+	var dot := QuadMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.vertex_color_use_as_albedo = true
+	dot.material = mat
+	fx.mesh = dot
+	fx.local_coords = false
+	fx.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	fx.spread = 180.0
+	var fade := Gradient.new()
+	if id == "growth":
+		dot.size = Vector2(0.28, 0.28)
+		fx.amount = 48
+		fx.lifetime = 2.2
+		fx.gravity = Vector3(0, -2.2, 0)
+		fx.initial_velocity_min = 0.2
+		fx.initial_velocity_max = 0.8
+		fade.set_color(0, Color(1.0, 0.95, 0.4, 1.0))
+		fade.set_color(1, Color(1.0, 0.8, 0.15, 0.0))
+		fade.add_point(0.7, Color(1.0, 0.88, 0.25, 0.9))
+	else:
+		dot.size = Vector2(0.6, 0.6)
+		fx.amount = 70
+		fx.lifetime = 1.1
+		fx.gravity = Vector3(0, -3.0, 0)
+		fx.initial_velocity_min = 0.3
+		fx.initial_velocity_max = 1.4
+		fade.set_color(0, Color(1.0, 0.85, 0.3, 1.0))
+		fade.set_color(1, Color(0.6, 0.08, 0.02, 0.0))
+		fade.add_point(0.35, Color(1.0, 0.45, 0.08, 0.95))
+		var glow := OmniLight3D.new()
+		glow.light_color = Color(1.0, 0.5, 0.15)
+		glow.light_energy = 1.2
+		glow.omni_range = 6.0
+		fx.add_child(glow)
+	fx.color_ramp = fade
+	fx.emitting = false
+	add_child(fx)
+	return fx
 
 
 ## How old (in seconds of growing) the animus paid for lets it grow.
@@ -984,6 +1089,7 @@ func _process(delta: float) -> void:
 	_time += delta
 	_cast_timer = maxf(0.0, _cast_timer - delta)
 	_grow(delta)
+	_update_buffs(delta)
 	_update_stats(delta)
 	_update_toss(delta)
 	if hiding and (Game.now - _last_hit_at > Balance.num("shell_calm_seconds") or Game.now - _hid_at > Balance.num("shell_max_seconds")):

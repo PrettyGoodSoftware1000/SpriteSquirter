@@ -2,7 +2,7 @@ class_name Sapling
 extends Node
 ## A young tree. It is an ordinary tree (FloraFactory) that starts small
 ## and grows to full size over Balance "sapling_grow_days" days (each day
-## is Game.settings.day_minutes long). Until then it is in the "saplings"
+## is a day and a night: DayCycle.cycle_seconds()). Until then it is in the "saplings"
 ## group instead of "trees", so nobody chops it down or carries it off.
 ## Villagers plant them (see PlayerVillage), and so does the magic tree.
 
@@ -42,7 +42,7 @@ func _settle() -> void:
 
 ## How far grown it is, 0..1.
 func share() -> float:
-	var days := maxf(0.01, Balance.num("sapling_grow_days")) * maxf(0.1, Game.settings.day_minutes) * 60.0
+	var days := maxf(0.01, Balance.num("sapling_grow_days")) * DayCycle.cycle_seconds()
 	return clampf(_age / days, 0.0, 1.0)
 
 

@@ -39,6 +39,17 @@ func _ready() -> void:
 	if is_building:
 		# Walls nobody walks through (once it has been put in its place).
 		_block_paths.call_deferred()
+	else:
+		# A trunk walkers step round.
+		_list_trunk.call_deferred()
+
+
+func _list_trunk() -> void:
+	if not destroyed and is_inside_tree() and is_in_group("trees") and Game.terrain != null and is_instance_valid(Game.terrain):
+		Game.path_grid().add_trunk(self)
+		tree_exiting.connect(func() -> void:
+			if Game.terrain != null and is_instance_valid(Game.terrain):
+				Game.path_grid().remove_trunk(self), CONNECT_ONE_SHOT)
 
 
 func _block_paths() -> void:

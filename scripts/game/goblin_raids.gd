@@ -30,6 +30,12 @@ extends Node
 ## home when the others raid, and keep at it until the building is
 ## finished. They stop at "goblin_buildings_max" buildings. They build one
 ## of each kind, in a random order, before starting on the kinds again.
+## When there is no room where they first look they look further from the
+## cave, and if there is still none they try again a little later.
+##
+## A goblin that crawls out of a cave is a Goblin Archer one time in four
+## (Balance "goblin_archer_chance"): it shoots from afar, at the flying
+## creature and at archers on their posts too.
 
 signal raid_started(goblins: int, ogres: int)
 signal raid_ended
@@ -43,6 +49,8 @@ signal balrog_died
 const OGRE_HOME := "goblin_war_hut"
 const BAT_HOME := "goblin_watchtower"
 const BUILDERS := 3
+## How soon the goblins look again for somewhere to build, when they found nowhere.
+const RETRY_SECONDS := 10.0
 ## How near a painted path's ends must be to the goblin's cave and to the village.
 const PATH_SNAP := 45.0
 
@@ -115,13 +123,34 @@ func _process(delta: float) -> void:
 			_balrog_timer = Balance.num("balrog_respawn_minutes") * 60.0
 			hatch_balrog()
 	_build_timer += delta
-	if _build_timer >= Balance.num("goblin_build_minutes") * 60.0 / maxf(Game.settings.goblin_build_speed, 0.01):
+	var every := Balance.num("goblin_build_minutes") * 60.0 / maxf(Game.settings.goblin_build_speed, 0.01)
+	if _build_timer >= every:
 		_build_timer = 0.0
-		start_building()
+		if start_building() == null and _wants_to_build():
+			# Nowhere to put it: look again in a few seconds.
+			_build_timer = maxf(0.0, every - RETRY_SECONDS)
 	_site_timer -= delta
 	if _site_timer <= 0.0:
 		_site_timer = 1.0
 		_manage_builders()
+
+
+## The dev menu's Advance time: `seconds` go by at once for the caves (the
+## goblins they would have spawned crawl out), the goblins' building and
+## the next balrog.
+func advance(seconds: float) -> void:
+	for cave in _caves:
+		if not is_instance_valid(cave):
+			continue
+		var due: float = _spawned.get(cave, 0.0) + cave_rate(cave) / 60.0 * seconds
+		var made := 0
+		while due >= 1.0 and made < 500:
+			due -= 1.0
+			made += 1
+			spawn_at(cave)
+		_spawned[cave] = minf(due, 1.0)
+	_balrog_timer -= seconds
+	_build_timer += seconds
 
 
 ## How many goblins there are (alive, not charmed; ogres not counted).
@@ -162,7 +191,8 @@ func _bounce_back(delta: float) -> void:
 
 
 ## A new balrog, as small as a newborn creature, at one of the caves.
-func hatch_balrog() -> Balrog:
+## `quiet`: nothing is announced (a saved game's balrog coming back).
+func hatch_balrog(quiet := false) -> Balrog:
 	var caves: Array[Node3D] = []
 	for cave in _caves:
 		if is_instance_valid(cave):
@@ -177,15 +207,31 @@ func hatch_balrog() -> Balrog:
 	balrog.died.connect(func() -> void:
 		_balrog_timer = Balance.num("balrog_respawn_minutes") * 60.0
 		balrog_died.emit())
-	balrog_came.emit()
+	if not quiet:
+		balrog_came.emit()
 	return balrog
 
 
 # --- Building ---------------------------------------------------------------------
 
+## True while the goblins could start another building (none under way,
+## fewer than they stop at, and a cave to build by).
+func _wants_to_build() -> bool:
+	var tree := get_tree()
+	if not tree.get_nodes_in_group("goblin_sites").is_empty():
+		return false
+	if tree.get_nodes_in_group("goblin_buildings").size() >= roundi(Balance.num("goblin_buildings_max")):
+		return false
+	for cave in _caves:
+		if is_instance_valid(cave):
+			return true
+	return false
+
+
 ## Marks out a new goblin building near a cave (`kind`, or one picked at
 ## random). Returns its site, or null if the goblins have enough, are
-## still busy on the last one, or there is no room.
+## still busy on the last one, or there is no room. It tries spots further
+## and further from the caves until one fits.
 func start_building(kind := "") -> ConstructionSite:
 	var tree := get_tree()
 	if not tree.get_nodes_in_group("goblin_sites").is_empty():
@@ -205,10 +251,12 @@ func start_building(kind := "") -> ConstructionSite:
 		kind = _kinds_left.back()
 	var footprint := 3.4
 	var terrain := Game.terrain
-	for attempt in 40:
+	for attempt in 160:
 		var cave := caves[randi() % caves.size()]
-		var a: float = cave.get_meta("facing", 0.0) + randf_range(-2.0, 2.0)
-		var p := cave.global_position + Vector3(sin(a), 0.0, cos(a)) * randf_range(17.0, 26.0 + attempt)
+		# (Before the cave at first, then all round it, further and further out.)
+		var a: float = cave.get_meta("facing", 0.0) + randf_range(-2.0, 2.0) * minf(1.0 + attempt / 40.0, PI / 2.0)
+		var out := 17.0 + attempt * 0.6
+		var p := cave.global_position + Vector3(sin(a), 0.0, cos(a)) * randf_range(out, out + 9.0)
 		if not _site_ok(p, footprint):
 			continue
 		# The goblins must be able to walk to it from their cave (round the
@@ -350,14 +398,69 @@ func _manage_builders() -> void:
 					g.set_meta("fetching", true)
 
 
-## One new goblin crawls out of the cave and joins its camp.
+## One new goblin crawls out of the cave and joins its camp: a Goblin
+## Archer one time in four (Balance "goblin_archer_chance").
 func spawn_at(cave: Node3D) -> Villager:
 	var facing: float = cave.get_meta("facing", 0.0)
 	var front := Vector3(sin(facing), 0.0, cos(facing))
 	var g := WorldPopulator.spawn_villager(Game.world_root, Game.terrain, cave.global_position + front * 10.0, 9.0, true)
 	var mouth := cave.global_position + front * randf_range(2.0, 4.0)
 	g.global_position = Vector3(mouth.x, Game.terrain.get_height(mouth.x, mouth.z), mouth.z)
+	if randf() < Balance.num("goblin_archer_chance"):
+		g.become_goblin_archer()
 	return g
+
+
+# --- What the mouse shows ------------------------------------------------------
+
+## What pointing at `cave` shows: how fast it spawns (with its buildings)
+## and how many of each enemy there are.
+func cave_tip(cave: Node3D) -> String:
+	var built := 0
+	for node in get_tree().get_nodes_in_group("goblin_buildings"):
+		if node.get_meta("cave", null) == cave and not (node as Destructible).destroyed:
+			built += 1
+	var lines: PackedStringArray = ["Goblin cave", "Spawns %s goblins a minute" % _num(cave_rate(cave) if _caves.has(cave) else 0.0)]
+	if built > 0:
+		lines.append("(%s of them from its %d buildings)" % [_num(built * Balance.num("goblin_rate_per_building")), built])
+	var goblins := 0
+	var archers := 0
+	var ogres := 0
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g == null or not g.is_alive() or g.charmed():
+			continue
+		if g.ogre:
+			ogres += 1
+		elif g.archer:
+			archers += 1
+		else:
+			goblins += 1
+	var bats := 0
+	for tower in standing(BAT_HOME):
+		bats += roundi(Balance.num("bats_per_watchtower"))
+	lines.append("Goblins %d   Goblin archers %d   Ogres %d" % [goblins, archers, ogres])
+	lines.append("Giant bats %d a raid   Balrogs %d" % [bats, get_tree().get_nodes_in_group("balrogs").size()])
+	return "\n".join(lines)
+
+
+## What pointing at one of the goblins' buildings shows: what it does.
+static func building_tip(kind: String) -> String:
+	var more := "Makes %s more goblins spawn a minute" % _num(Balance.num("goblin_rate_per_building"))
+	match kind:
+		OGRE_HOME:
+			var n := roundi(Balance.num("ogres_per_war_hut"))
+			return "Adds %d ogre%s\n%s" % [n, "" if n == 1 else "s", more]
+		BAT_HOME:
+			var n := roundi(Balance.num("bats_per_watchtower"))
+			return "Sends %d giant bat%s each raid\n%s" % [n, "" if n == 1 else "s", more]
+		"goblin_hut":
+			return "Goblins live here"
+	return more
+
+
+static func _num(value: float) -> String:
+	return str(roundi(value)) if is_equal_approx(value, roundf(value)) else "%.1f" % value
 
 
 func start_raid() -> void:

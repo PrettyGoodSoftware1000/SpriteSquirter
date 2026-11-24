@@ -8,8 +8,8 @@ extends RefCounted
 ## the first tap of the key shows what the creature last did, the second
 ## blesses or condemns it for that.
 ##
-## Every spell must first be researched at the Shrine (the Singing rocks):
-## click it for its menu. The first costs Balance "spell_research_animus"
+## Every spell must first be researched at the Wizardry tower (the Moon
+## tower): click it for its menu. The first costs Balance "spell_research_animus"
 ## animus, and each after "spell_research_animus_step" more; each takes
 ## "spell_research_seconds". The spell bar shows the spells the
 ## village knows, in the order it learned them (PlayerVillage.spell_order),
@@ -25,7 +25,7 @@ const SPELLS := [
 	{"id": "lightning", "name": "Chain Lightning",
 		"hint": "Strikes near the mouse and jumps from one to the next. Anything wet from rain or standing in water takes double. It does not spare your own people."},
 	{"id": "blood", "name": "Blood Sacrifice",
-		"hint": "Sacrifices the villager of yours nearest the mouse: magicko comes in twice as fast for 30 seconds."},
+		"hint": "Sacrifices the villager of yours nearest the mouse: magicko comes in twice as fast for 30 seconds (three times with the Necromancer tower's upgrade). It cannot be overcast, and does not stack."},
 	{"id": "bless", "name": "Bless",
 		"hint": "Take it in hand to see what your creature last did; click anywhere to bless it: its affinity for that goes up 10."},
 	{"id": "condemn", "name": "Condemn",
@@ -33,7 +33,7 @@ const SPELLS := [
 	{"id": "gnomes", "name": "Gnomish Subcontractors",
 		"hint": "Click a building under construction: five gnomes come running from 50 m away and help build it."},
 	{"id": "fey", "name": "Kinky Fey Stuff",
-		"hint": "Click near a villager at work: a pixie flies from the nearest tree, and off they go into a building for 2 minutes. Then births come twice as fast for 2 minutes, and every child born is a winged fey girl."},
+		"hint": "Click near a villager at work: a pixie flies from the nearest tree, and off they go into a building for 2 minutes. As soon as they go in, births come twice as fast for 2 minutes, and every child born is a winged fey girl."},
 	{"id": "charm", "name": "Charm Offensive",
 		"hint": "Pink hearts fill the spot: about half the goblins caught in it are charmed for 60 seconds and fight their own kind."},
 ]
@@ -44,8 +44,8 @@ const SPELLS := [
 const GROWTH_SPELLS := {"bless": 1, "condemn": 2}
 
 
-## True for a spell that must be researched at the Shrine before it is
-## cast: all but Bless and Condemn, which come as the creature grows.
+## True for a spell that must be researched at the Wizardry tower before
+## it is cast: all but Bless and Condemn, which come as the creature grows.
 static func needs_research(id: String) -> bool:
 	return index_of(id) >= 0 and not GROWTH_SPELLS.has(id)
 

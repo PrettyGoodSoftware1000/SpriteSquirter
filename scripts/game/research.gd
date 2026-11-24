@@ -1,7 +1,8 @@
 class_name Research
 extends RefCounted
 ## What the village can research, and where: at a Blacksmith ("smith") or
-## at a Wizardry tower ("wizard"); click the building for its menu. Each
+## at a Wizardry tower ("wizard") or at a Necromancer tower ("necro");
+## click the building for its menu. Each
 ## building researches one thing at a time; it is paid for up front and
 ## takes `seconds` while such a building stands. An item with `needs`
 ## waits until that one is done (the tool tiers go 1, 2, 3).
@@ -35,6 +36,8 @@ const ITEMS := [
 		"desc": "Lumber cut 50% faster in all"},
 	{"id": "overcast", "place": "wizard", "name": "Overcast", "seconds": 60.0, "cost": {"animus": 10},
 		"desc": "Cast a spell once while it cools down, for twice the magicko"},
+	{"id": "blood_x3", "place": "necro", "name": "Bloodier Sacrifice", "seconds": 60.0, "cost": {"animus": 10},
+		"desc": "Blood Sacrifice makes magicko come in 3 times as fast"},
 ]
 ## Which research speeds up which resource (in tiers: "<name>_1", "_2", "_3").
 const TOOLS := {"food": "pitchforks", "stone": "picks", "lumber": "axes"}
@@ -51,6 +54,8 @@ static func describe(item: Dictionary) -> String:
 			var bonus := Balance.num("tool_tier_bonus") * 100.0
 			return "+%s%% of base %s gathering speed (%s%% of base after this tier)" % [
 				_pct(bonus), kind, _pct(100.0 + bonus * tier)]
+	if id == "blood_x3":
+		return "Blood Sacrifice makes magicko come in %s times as fast" % _pct(Balance.num("blood_sacrifice_upgraded_boost"))
 	return item.desc
 
 

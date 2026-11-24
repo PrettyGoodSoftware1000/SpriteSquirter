@@ -63,11 +63,11 @@ const GAMEPLAY := {
 	"cottage": ["Cottage", "home", "cottage", "Room for %d villagers"],
 	"storehouse": ["Storehouse", "store", "storehouse", "Stores goods, houses %d"],
 	"granary": ["Granary", "granary", "granary", "Stores food"],
-	"shrine": ["Shrine", "shrine", "shrine", "Makes animus; research spells, revive the creature"],
+	"shrine": ["Shrine", "shrine", "shrine", "Makes animus\nRevives the creature"],
 	"town guard": ["Town guard", "guard", "town_guard", "Trains warriors"],
 	"blacksmith": ["Blacksmith", "smith", "blacksmith", "Wheelbarrows; research"],
-	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Trains wizards"],
-	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Turns wizards into necromancers"],
+	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Trains wizards\nResearches spells"],
+	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Turns wizards into necromancers\nBlood Sacrifice upgrade"],
 	"decoration": ["Decoration", "", "decoration", "No use yet"],
 }
 ## Menu entries that are not placed like buildings.
@@ -77,6 +77,10 @@ const SPECIAL := [
 	{"kind": "bridge", "name": "Rope bridge", "asset": "Rope bridge", "title": "Rope bridge", "gameplay": "", "role": "bridge", "cost": {},
 		"desc": "Joins 2 treehouses. 1 lumber a metre"},
 ]
+## What the build menu says each gameplay effect does, as Names.txt has
+## it ("Shrine description = Makes animus\nRevives the creature"): gameplay
+## effect (lower case) -> text.
+static var _descriptions := {}
 ## What the goblins put up (see GoblinRaids).
 const GOBLIN_NAMES := {
 	"goblin_hut": "Goblin hut", "goblin_tent": "Goblin tent", "goblin_war_hut": "Goblin war hut",
@@ -112,7 +116,10 @@ static func apply_balance() -> void:
 			entry.gameplay = info[0]
 			entry.role = info[1]
 			entry.housing = roundi(Balance.num(info[2] + "_housing"))
-			entry.desc = (info[3] as String) % entry.housing if "%d" in info[3] else info[3]
+			var desc: String = _descriptions.get(key, info[3])
+			entry.desc = desc.replace("{housing}", str(entry.housing))
+			if "%d" in desc:
+				entry.desc = desc % entry.housing
 			for res: String in COST_RESOURCES:
 				var n := roundi(Balance.num("cost_%s_%s" % [info[2], res]))
 				if n > 0:
@@ -137,11 +144,20 @@ static func _read_names() -> Dictionary:
 	var known := {}
 	for pair: Array in ASSETS:
 		known[(pair[1] as String).to_lower()] = true
+	_descriptions = {}
 	while not file.eof_reached():
 		var line := file.get_line().split("#")[0].strip_edges()
 		if line == "" or not "=" in line:
 			continue
 		var asset := line.get_slice("=", 0).strip_edges().to_lower()
+		# "<Gameplay effect> description = what the build menu says"
+		if asset.ends_with(" description"):
+			var effect := asset.trim_suffix(" description").strip_edges()
+			if GAMEPLAY.has(effect):
+				_descriptions[effect] = line.substr(line.find("=") + 1).strip_edges().replace("\\n", "\n")
+			else:
+				push_warning("Names.txt: there is no gameplay effect '%s'" % effect)
+			continue
 		if not known.has(asset):
 			push_warning("Names.txt: there is no asset called '%s'" % line.get_slice("=", 0).strip_edges())
 			continue

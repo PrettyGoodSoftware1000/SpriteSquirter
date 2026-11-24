@@ -23,8 +23,9 @@ func _run() -> void:
 	var game := Game
 	Engine.time_scale = 8.0
 	game.settings.birth_seconds = 5.0
-	# The test's timings were made with a 24-minute day.
-	game.settings.day_minutes = 24.0
+	# The test's timings were made with a 24-minute day and night.
+	game.settings.day_minutes = 16.0
+	game.settings.night_minutes = 8.0
 	# Goblins spawn and build as they used to, for the raid checks.
 	game.settings.goblin_rate = 2.0
 	game.settings.goblin_build_speed = 4.0
@@ -103,15 +104,20 @@ func _run() -> void:
 	_check(not get_tree().paused, "and lets it go again")
 	var before: Dictionary = village.resources.duplicate()
 	_check(not get_tree().get_nodes_in_group("rocks").is_empty(), "boulder fields placed (%d boulders)" % get_tree().get_nodes_in_group("rocks").size())
-	_check(is_equal_approx(1.0 - DayCycle.NIGHT_START, DayCycle.NIGHT_START * 0.5), "night is half as long as day")
-	# A wheat field: sown by the villagers, then it grows by itself.
+	_check(is_equal_approx(DayCycle.NIGHT_START, 0.75) and DayCycle.MIDNIGHT == DayCycle.NIGHT_START, "night starts at midnight")
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 10.0) and is_equal_approx(Game.DEFAULT_SETTINGS.night_minutes, 8.0)
+		and play.hud._setting_sliders.has("day_minutes") and play.hud._setting_sliders.has("night_minutes"),
+		"days are 10 minutes and nights 8 by default, each with a slider")
+	# A wheat field: sown by a farmer (only farmers sow), then it grows by itself.
 	var field := CropField.new()
 	field.setup(Vector2(8, 8))
 	field.position = village.center + Vector3(0, 0, 14)
 	game.world_root.add_child(field)
+	village.change_quota("food", 1)
+	_check(village.quota.food == 1, "a worker can be set to farm")
 	# (Checked after a minute: in two the field can be reaped and under the plough again.)
 	await _wait(60.0)
-	_check(field.stage != CropField.Stage.SOWING or field.progress > 0.3, "villagers sow the field (stage %d, %.2f)" % [field.stage, field.progress])
+	_check(field.stage != CropField.Stage.SOWING or field.progress > 0.3, "the farmer sows the field (stage %d, %.2f)" % [field.stage, field.progress])
 	play._cursor_hit = field.global_position
 	play._hover_field()
 	_check(field._label != null and field._label.visible and field._label.text.contains("% to harvest") or field.stage == CropField.Stage.RIPE,
@@ -178,40 +184,59 @@ func _run() -> void:
 		var gnomes := SpellBook.index_of("gnomes")
 		village.give("magicko", 100.0)
 		var magicko_before := village.amount("magicko")
-		# Spells are researched at the Shrine first.
+		# Spells are researched at the Wizardry tower first. (Bless and
+		# Condemn, which came with the creature's growth, are set aside.)
+		for growth_spell: String in ["bless", "condemn"]:
+			village.spells_known.erase(growth_spell)
+			var slot_g := village.spell_slots.find(growth_spell)
+			if slot_g >= 0:
+				village.spell_slots[slot_g] = ""
+		play.hud.set_spell_slots(village.spell_slots)
 		play._spell_key(gnomes)
 		_check(play._armed < 0 and not village.knows_spell("gnomes") and not village.knows_spell("fireball") and village.spell_at(0) == ""
 			and play.hud._spell_slot_of[gnomes] == -1, "every spell must be researched before it is on the spell bar or cast")
-		_check(village.shrines().is_empty() and village.start_spell_research("gnomes") != "", "spells are researched at a Shrine")
-		var shrine := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
+		# (The village site's own Wizardry towers, if it has any, are set aside.)
+		var site_towers: Array[Node] = []
+		for node in get_tree().get_nodes_in_group("player_buildings"):
+			if BuildingCatalog.role(node.get_meta("kind", "")) == "wizard":
+				site_towers.append(node)
+				node.remove_from_group("player_buildings")
+		_check(village.start_spell_research("gnomes") != "", "spells are researched at a Wizardry tower")
+		var tower_kind := BuildingCatalog.kind_for_role("wizard", "moon_tower")
+		var shrine := BuildingFactory.create(tower_kind, RandomNumberGenerator.new())
 		game.world_root.add_child(shrine)
+		shrine.set_meta("kind", tower_kind)
 		shrine.global_position = village.center + Vector3(14, 0, 10)
 		shrine.add_to_group("player_buildings")
 		play._cursor_hit = shrine.global_position
 		play._on_left_click()
-		_check(play.hud.is_spell_research_open(), "clicking a Shrine opens its spell research")
+		_check(play.hud.is_spell_research_open() and not play.hud._tower_research_rows.is_empty(),
+			"clicking a Wizardry tower opens its spell research, with Overcast in it")
 		play.hud.show_spell_research(false)
 		village.give("animus", 10.0)
 		var animus_then := village.amount("animus")
 		_check(village.start_spell_research("gnomes") == "" and village.amount("animus") == animus_then - 1,
 			"the first spell costs 1 animus to research")
-		_check(village.start_spell_research("rain") != "", "one spell at a time for one Shrine")
+		_check(village.start_spell_research("rain") != "", "one spell at a time for one Wizardry tower")
 		village.spell_job("gnomes").t = SpellBook.research_seconds("gnomes") - 0.5
 		await _wait(1.0)
 		_check(village.knows_spell("gnomes") and not village.knows_spell("rain") and village.spell_at(0) == "gnomes"
-			and play.hud._spell_slot_of[gnomes] == 0, "the Shrine teaches the spell, and it appears on the spell bar")
+			and play.hud._spell_slot_of[gnomes] == 0, "the Wizardry tower teaches the spell, and it appears on the spell bar")
 		animus_then = village.amount("animus")
 		_check(village.start_spell_research("rain") == "" and village.amount("animus") == animus_then - 2, "the next spell costs 2 animus")
-		var shrine_2 := BuildingFactory.create("singing_rocks", RandomNumberGenerator.new())
+		var shrine_2 := BuildingFactory.create(tower_kind, RandomNumberGenerator.new())
 		game.world_root.add_child(shrine_2)
+		shrine_2.set_meta("kind", tower_kind)
 		shrine_2.global_position = village.center + Vector3(-16, 0, 12)
 		shrine_2.add_to_group("player_buildings")
 		_check(village.start_spell_research("roots") == "" and village.spell_jobs.size() == 2 and village.start_spell_research("lightning") != "",
-			"two Shrines research two spells at once (and no more)")
+			"two Wizardry towers research two spells at once (and no more)")
 		await _wait(1.0)
 		_check(village.spell_job("rain").t > 0.5 and village.spell_job("roots").t > 0.5, "both at the same time")
 		village.spell_jobs.clear()
 		shrine_2.queue_free()
+		for node in site_towers:
+			node.add_to_group("player_buildings")
 		village.learn_all_spells()
 		play.hud.set_spell_slots(village.spell_slots)
 		_check(village.knows_spell("rain") and village.knows_spell("charm") and village.spell_at(0) == "gnomes" and village.spell_at(1) != "",
@@ -242,6 +267,13 @@ func _run() -> void:
 		play._click_spell()
 		var crew_g := get_tree().get_nodes_in_group("gnomes")
 		_check(crew_g.size() == 5 and magicko_before - village.amount("magicko") == SpellBook.cost("gnomes"), "Gnomish Subcontractors: 5 gnomes for spell_cost_gnomes")
+		play._cooldowns[gnomes] = 0.0
+		var magicko_again := village.amount("magicko")
+		play._spell_key(gnomes)
+		play._cursor_hit = spot
+		play._click_spell()
+		_check(get_tree().get_nodes_in_group("gnomes").size() == 5 and village.amount("magicko") == magicko_again
+			and play.hud._prompt.text == Texts.line("gnomes_dont_stack"), "Gnomish Subcontractors don't stack on one building (and say so)")
 		var far := 0.0
 		for g in crew_g:
 			far = maxf(far, (g as Node3D).global_position.distance_to(spot))
@@ -552,7 +584,42 @@ func _run() -> void:
 	var people_before := village.population()
 	_check(village.sacrifice(village.people()[0].global_position), "blood sacrifice finds a villager")
 	_check(village.population() == people_before - 1 and village.blood_active(), "the sacrifice kills one villager and starts the boost")
-	await _wait(2.0)
+	var blood_end := village.blood_until
+	await _wait(1.0)
+	village.sacrifice(village.people()[0].global_position)
+	_check(village.blood_until < blood_end + PlayerVillage.BLOOD_SECONDS * 0.5, "a second sacrifice does not stack")
+	_check(is_equal_approx(village.blood_boost(), Balance.num("blood_sacrifice_boost")), "it speeds magicko up blood_sacrifice_boost times")
+	var blood_k := SpellBook.index_of("blood")
+	var had_overcast := village.has_research("overcast")
+	village.researched["overcast"] = true
+	play._cooldowns[blood_k] = 5.0
+	_check(not play.spell_ready(blood_k) and not play.overcast_open(blood_k) and play.spell_state(blood_k) == 1,
+		"Blood Sacrifice cannot be overcast (no lightning round its cost)")
+	play._cooldowns[blood_k] = 0.0
+	if not had_overcast:
+		village.researched.erase("overcast")
+	village.researched["blood_x3"] = true
+	_check(is_equal_approx(village.blood_boost(), Balance.num("blood_sacrifice_upgraded_boost")) and Research.find("blood_x3").place == "necro"
+		and (Research.find("blood_x3").cost as Dictionary).get("animus", 0) == 10,
+		"the Necromancer tower's upgrade (10 animus) makes it blood_sacrifice_upgraded_boost times")
+	village.researched.erase("blood_x3")
+	play.hud.set_resources(village, "")
+	_check((play.hud._rate_labels.bones as Label).text == "" and not play.hud._warning.visible, "bones show only their total, and the village panel has no red warning")
+	# A Windmill adds windmill_food_rate to the food rate (one is enough).
+	var plain_rate := village.food_rate()
+	var mills: Array[Destructible] = []
+	for n in 2:
+		var mill := BuildingFactory.create("windmill", RandomNumberGenerator.new())
+		game.world_root.add_child(mill)
+		mill.set_meta("kind", "windmill")
+		mill.global_position = village.center + Vector3(60 + n * 10, 0, 60)
+		mill.add_to_group("player_buildings")
+		mills.append(mill)
+	_check(is_equal_approx(village.food_rate(), plain_rate + Balance.num("windmill_food_rate")) or plain_rate > game.settings.food_rate,
+		"a Windmill adds windmill_food_rate to the food rate per worker, and a second adds nothing (%.1f -> %.1f)" % [plain_rate, village.food_rate()])
+	for mill in mills:
+		mill.free()
+	await _wait(1.0)
 
 	# Rain makes wheat grow faster.
 	field.stage = CropField.Stage.GROWING
@@ -1088,9 +1155,23 @@ func _run() -> void:
 	beast._action = Creature.Action.NONE
 	beast._arm_one = [null, null]
 
-	# Growing takes animus: 1 for the first tenth, 2 for the second...
+	# Growing as the owner has it: with growth_animus_step at 0 it grows by
+	# itself, and Bless and Condemn come with its first two tenths.
 	var age_kept := beast.age
 	var animus_kept := village.amount("animus")
+	var step_kept := Balance.num("growth_animus_step")
+	if step_kept <= 0.0:
+		beast.growth_paid = 0
+		beast.age = 0.0
+		village.resources.animus = 0.0
+		for growth_spell: String in ["bless", "condemn"]:
+			village.spells_known.erase(growth_spell)
+		await _wait(1.0)
+		_check(beast.age > 0.0 and beast.growth_paid >= 1 and village.knows_spell("bless") and not beast.can_grow(),
+			"with growth_animus_step 0 the creature grows by itself, for no animus, and Bless comes")
+	# Growing for animus, when growth_animus_step is above 0: 1 step for the
+	# first tenth, 2 for the second...
+	Balance.values["growth_animus_step"] = 1.0
 	beast.growth_paid = 0
 	beast.age = 0.0
 	village.resources.animus = 0.0
@@ -1100,7 +1181,7 @@ func _run() -> void:
 		var slot_k := village.spell_slots.find(growth_spell)
 		if slot_k >= 0:
 			village.spell_slots[slot_k] = ""
-	_check(village.start_spell_research("bless") != "", "Bless cannot be researched at the Shrine")
+	_check(village.start_spell_research("bless") != "", "Bless cannot be researched")
 	await _wait(1.0)
 	_check(beast.age == 0.0 and beast.growth_paid == 0 and not beast.can_grow(), "with no animus, the creature does not grow")
 	village.give("animus", 1.0)
@@ -1123,6 +1204,7 @@ func _run() -> void:
 	beast.growth_paid = 10
 	beast.age = age_kept
 	village.resources.animus = float(animus_kept)
+	Balance.values["growth_animus_step"] = step_kept
 	await _wait(0.3)
 
 	# Out of its shell, a harmless blast knocks the goblins near it away,
@@ -1152,6 +1234,8 @@ func _run() -> void:
 		lover = village.fey_target(village.people()[0].global_position)
 	_check(lover != null, "Kinky Fey Stuff finds a villager at work")
 	if lover != null:
+		# (Near the middle of the village, so the walk to a building is short.)
+		lover.global_position = village.center + Vector3(3, 0, 3)
 		Balance.values["fey_tryst_seconds"] = 3.0
 		var tryst := FeyTryst.new()
 		game.world_root.add_child(tryst)
@@ -1161,11 +1245,16 @@ func _run() -> void:
 			if lover.job == "tryst":
 				break
 		_check(lover.job == "tryst" and lover._pink_eyes.size() == 2, "a pixie flies to the villager, whose eyes glow green, and they go off together")
-		for k in 40:
+		for k in 120:
 			await _wait(0.5)
 			if village.fey_until > game.now:
 				break
-		_check(village.fey_until > game.now and lover.visible and lover._pink_eyes.is_empty(), "the villager comes back out, eyes no longer glowing, and the fey are about")
+		_check(village.fey_until > game.now and not lover.visible, "as soon as they go into the building, the fey are about (births come faster)")
+		for k in 60:
+			await _wait(0.5)
+			if lover.visible:
+				break
+		_check(lover.visible and lover._pink_eyes.is_empty(), "the villager comes back out, eyes no longer glowing")
 		Balance.values["fey_tryst_seconds"] = Balance.DEFAULTS["fey_tryst_seconds"]
 	# Children born meanwhile are winged girls, who grow up flying.
 	village.fey_until = game.now + 60.0
@@ -1223,8 +1312,105 @@ func _run() -> void:
 		and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "the owner's sliders are the defaults: Goblin Spawn Rate 0, goblin build speed 1")
 	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 10.0) and play.day_cycle.clock_text().contains(":"), "a day is 10 minutes by default (%s)" % play.day_cycle.clock_text())
 	_check(DayCycle.twelve_hour(16.0) == "4:00 pm" and DayCycle.twelve_hour(0.5) == "12:30 am" and DayCycle.twelve_hour(12.25) == "12:15 pm"
-		and DayCycle.twelve_hour(9.0) == "9:00 am" and (play.day_cycle.clock_text().contains(" am (") or play.day_cycle.clock_text().contains(" pm (")),
-		"the clock is a 12-hour one (%s)" % play.day_cycle.clock_text())
+		and DayCycle.twelve_hour(9.0) == "9:00 am" and (play.day_cycle.clock_text().ends_with(" am") or play.day_cycle.clock_text().ends_with(" pm")),
+		"the clock is a 12-hour one, with no daytime or nighttime (%s)" % play.day_cycle.clock_text())
+	# Night begins at midnight; the hours go by at the night's own pace.
+	var clock := DayCycle.new()
+	add_child(clock)
+	clock.process_mode = Node.PROCESS_MODE_DISABLED
+	clock.time = 0.0
+	var fell := [false]
+	clock.nightfall.connect(func() -> void: fell[0] = true)
+	clock.advance(DayCycle.day_seconds() - 1.0)
+	_check(not fell[0] and not clock.is_night(), "the daylight lasts day_minutes")
+	clock.advance(2.0)
+	_check(fell[0] and clock.is_night() and clock.hour() < 1.0, "and then night falls, at midnight (%s)" % DayCycle.twelve_hour(clock.hour()))
+	clock.advance(DayCycle.night_seconds() * 0.5)
+	_check(clock.is_night() and absf(clock.hour() - 3.0) < 0.2, "the night's hours pass at the night's pace (%s halfway)" % DayCycle.twelve_hour(clock.hour()))
+	clock.advance(DayCycle.night_seconds() * 0.5 + 1.0)
+	_check(not clock.is_night() and clock.day == 2 and clock.hour() < 6.1, "and morning comes at 6 am after night_minutes")
+	clock.free()
+
+	# Magic rain: a field being sown sprouts at once; ripe wheat sprouts
+	# seedlings where it has been reaped.
+	var wet_field := CropField.new()
+	wet_field.setup(Vector2(6, 6))
+	wet_field.position = village.center + Vector3(-70, 0, -70)
+	wet_field.process_mode = Node.PROCESS_MODE_DISABLED
+	game.world_root.add_child(wet_field)
+	wet_field.water(5.0)
+	_check(wet_field.stage == CropField.Stage.GROWING and wet_field.progress == 0.0, "rain on a field being sown sprouts it all at once, sown or not")
+	wet_field.stage = CropField.Stage.RIPE
+	wet_field.progress = 0.4
+	wet_field.water(5.0)
+	_check(is_equal_approx(wet_field.sprouted, 0.4) and wet_field._sprouts.multimesh.visible_instance_count > 0,
+		"rain on ripe wheat sprouts seedlings in the reaped ground")
+	wet_field.add_work(1.0e6)
+	_check(wet_field.stage == CropField.Stage.SOWING and is_equal_approx(wet_field.progress, 0.4), "and they count as sown when the reaping is done")
+	_check(is_equal_approx(Balance.num("rain_crop_growth"), Balance.values.get("rain_crop_growth", 3.5)) and Balance.num("rain_crop_growth") > 1.0,
+		"wet wheat grows rain_crop_growth times as fast (%.2f)" % Balance.num("rain_crop_growth"))
+	# Only farmers sow; anyone may reap, and farmers reap first.
+	var helper: Villager = null
+	for v in village.people():
+		if v.can_work() and v.pin == "" and v.job != "train":
+			helper = v
+			break
+	if helper != null:
+		var saved_fields: Array[Node] = []
+		for node in get_tree().get_nodes_in_group("fields"):
+			if node != wet_field:
+				saved_fields.append(node)
+				node.remove_from_group("fields")
+		_check(not village._give_job(helper, "food", {}), "an unassigned worker does not sow")
+		wet_field.stage = CropField.Stage.RIPE
+		wet_field.progress = 0.0
+		_check(village._give_job(helper, "food", {}) and helper.job_target == wet_field, "but reaps ripe wheat")
+		helper.clear_job()
+		for node in saved_fields:
+			node.add_to_group("fields")
+	wet_field.queue_free()
+	# Unassigned workers go after whatever the village has least of.
+	var kept_res: Dictionary = village.resources.duplicate()
+	village.resources.lumber = 250.0
+	village.resources.food = 250.0
+	village.resources.stone = 0.0
+	var idle_worker: Villager = null
+	for v in village.people():
+		if v.can_work() and v.pin == "" and v.job != "train" and v.job != "build" and v.job != "tryst" and v.job != "plant":
+			idle_worker = v
+			break
+	if idle_worker != null:
+		idle_worker.clear_job()
+		village._assign_jobs()
+		_check(idle_worker.job == "stone" or get_tree().get_nodes_in_group("rocks").is_empty(), "an unassigned worker goes after the resource the village has least of (%s)" % idle_worker.job)
+	village.resources = kept_res
+
+	# Goblin archers.
+	var bowman := WorldPopulator.spawn_villager(game.world_root, game.terrain, village.center + Vector3(80, 0, 80), 1.0, true)
+	await _wait(0.1)
+	bowman.become_goblin_archer()
+	_check(bowman.archer and bowman.is_in_group("goblin_archers") and is_equal_approx(bowman.max_hp, Balance.num("goblin_archer_health"))
+		and is_equal_approx(bowman.shot_range(), Balance.num("goblin_archer_range")) and Balance.num("goblin_archer_chance") > 0.0,
+		"a goblin archer has goblin_archer_health and shoots goblin_archer_range metres")
+	bowman.queue_free()
+	var some_cave: Node3D = null
+	for node in get_tree().get_nodes_in_group("caves"):
+		some_cave = node as Node3D
+		break
+	if some_cave != null:
+		var tip := play.raids.cave_tip(some_cave)
+		_check(tip.contains("Spawns") and tip.contains("Goblin archers") and tip.contains("Ogres"), "pointing at a goblin cave shows its spawn rate and every enemy")
+	_check(GoblinRaids.building_tip("goblin_war_hut").contains("ogre") and GoblinRaids.building_tip("goblin_watchtower").contains("bat")
+		and GoblinRaids.building_tip("goblin_tent").contains("goblins"), "goblin buildings say what they do")
+	_check(SpellCursors.grey_image("fireball").get_pixel(16, 16).s < 0.01 or SpellCursors.grey_image("fireball").get_pixel(16, 16).a == 0.0,
+		"outside the influence the spell pointer is grey")
+	# Advance time: five minutes at once.
+	var day_was := play.day_cycle.time + play.day_cycle.day
+	var born_before := village.population()
+	village.resources.food = 200.0
+	play.advance_time(PlayMode.ADVANCE_SECONDS)
+	_check(play.day_cycle.time + play.day_cycle.day > day_was and (village.population() > born_before or village.population() >= village.housing())
+		and village.amount("food") >= 1, "the dev menu's Advance time moves the clock on, and the births come")
 	# Nobody walks through a building unless they are going into it.
 	var walled: Destructible = null
 	for node in get_tree().get_nodes_in_group("player_buildings"):
@@ -1666,6 +1852,73 @@ func _run() -> void:
 	_check(near == 0, "rain puts out the fires (%d left)" % near)
 	game.fire.start_fire(fire_at)
 	_check(game.fire._fires.filter(func(f: Dictionary) -> bool: return (f.pos as Vector3).distance_to(fire_at) < 2.0).is_empty(), "wet ground does not burn")
+
+	# Trees: walkers step round their trunks, and a target nobody could
+	# reach is left alone for a while.
+	var trunk_tree := WorldPopulator.spawn_tree(game.world_root, game.terrain, village.center.x + 40.0, village.center.z - 40.0, 0.0, 11)
+	await _wait(0.1)
+	_check(game.path_grid().trunk_at(trunk_tree.global_position + Vector3(0.2, 0, 0), 0.3) == trunk_tree, "the path finder knows where the tree trunks are")
+	trunk_tree.set_meta("blocked_until", game.now + 60.0)
+	_check(village._nearest_free(trunk_tree.global_position, "trees", {}) != trunk_tree, "a tree nobody could get to is left alone for a while")
+	trunk_tree.queue_free()
+
+	# Archer posts: an archer climbs a treehouse, shoots twice as far from
+	# up there, cannot be reached by goblin blades, and falls with it.
+	var perch_spot := _free_spot(play, village.center + Vector3(-30, 0, 30))
+	var perch := BuildingFactory.create("treehouse", RandomNumberGenerator.new())
+	game.world_root.add_child(perch)
+	perch.global_position = perch_spot
+	perch.add_to_group("player_buildings")
+	var bowman_v: Villager = null
+	for v in village.people():
+		if v.can_work() and v.job != "train" and not v.fey:
+			bowman_v = v
+			break
+	if bowman_v != null:
+		# (The village is not asked for archers, so it is kept from standing this one down.)
+		village._army_timer = 1.0e9
+		bowman_v.global_position = RopeBridge.ladder_foot(perch) + Vector3(2, 0, 0)
+		bowman_v.become_archer(perch_spot)
+		for k in 60:
+			await _wait(0.5)
+			if bowman_v.on_post():
+				break
+		_check(bowman_v.on_post() and bowman_v.global_position.y > perch.global_position.y + 2.0,
+			"an archer climbs a treehouse to stand on it (%s)" % Villager.State.keys()[bowman_v.state])
+		_check(is_equal_approx(bowman_v.shot_range(), Villager.ARCHER_RANGE * Balance.num("archer_post_range")), "up there it shoots archer_post_range as far")
+		var blade := WorldPopulator.spawn_villager(game.world_root, game.terrain, perch_spot, 1.0, true)
+		await _wait(0.1)
+		var hp_then := bowman_v.hp
+		bowman_v.take_hit(10.0, blade)
+		_check(bowman_v.hp == hp_then and blade._nearest_villager(50.0) != bowman_v, "goblins with blades cannot reach it")
+		blade.queue_free()
+		perch.shatter(perch.global_position, 1.0)
+		await _wait(0.5)
+		_check(not bowman_v.is_alive(), "and it falls with its post")
+		village._army_timer = 0.0
+
+	# Save the game, load it again, and everything is back.
+	var save_path := "user://smoke_save.txt"
+	_check(SaveGame.save(play, save_path) == "" and not SaveGame.read(save_path).is_empty(), "the game saves to a readable text file")
+	var had := {"buildings": get_tree().get_nodes_in_group("player_buildings").size(), "people": village.population(),
+		"goblins": get_tree().get_nodes_in_group("goblins").size(), "fields": get_tree().get_nodes_in_group("fields").size(),
+		"lumber": village.amount("lumber"), "research": village.researched.size(), "spells": village.spells_known.size(),
+		"day": play.day_cycle.day, "kind": game.creature_kind}
+	_check(SaveGame.load_game(save_path) == "", "and loads")
+	for k in 4:
+		await get_tree().process_frame
+	play = get_tree().current_scene.get_node("Controller") as PlayMode
+	village = play.village
+	await _wait(0.5)
+	var has := {"buildings": get_tree().get_nodes_in_group("player_buildings").size(), "people": village.population(),
+		"goblins": get_tree().get_nodes_in_group("goblins").size(), "fields": get_tree().get_nodes_in_group("fields").size(),
+		"lumber": village.amount("lumber"), "research": village.researched.size(), "spells": village.spells_known.size(),
+		"day": play.day_cycle.day, "kind": game.creature_kind}
+	_check(village.founded and is_instance_valid(play.creature) and has.buildings == had.buildings and absi(has.people - had.people) <= 2
+		and has.fields == had.fields and absi(has.lumber - had.lumber) <= 2 and has.research == had.research and has.spells == had.spells
+		and has.day == had.day and has.kind == had.kind and absi(has.goblins - had.goblins) <= 2,
+		"a loaded game has its buildings, people, fields, resources, research, spells, day and creature back (%s -> %s)" % [had, has])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
 
 	# 3. The editor: a small map with starts, a cave and trees, saved.
 	await _open(game, "editor", "", 192)

@@ -1,7 +1,12 @@
 class_name CropField
 extends Node3D
-## A wheat field the player drew on the ground. Villagers sow it, the wheat
+## A wheat field the player drew on the ground. Farmers sow it, the wheat
 ## grows by itself, and villagers reap it for food; then it starts again.
+##
+## Rain is magic: on a field still being sown it sprouts the whole field at
+## once (sown or not) and it starts to grow; on ripe wheat it sprouts
+## seedlings in the reaped ground, which count as sown when the reaping is
+## done. Wet wheat grows Balance "rain_crop_growth" times as fast.
 ##
 ## The field is a rectangle `size` (metres along local X and Z) centred on
 ## the node. Set position and rotation and call setup() before adding it to
@@ -17,8 +22,8 @@ const SPACING := 0.8
 const SOW_SECONDS := 0.2
 const REAP_SECONDS := 0.25
 ## How long sown wheat takes to ripen by itself: Balance "crop_grow_seconds".
-## Rained-on wheat grows this many times faster, while it is wet.
-const WET_GROWTH := 3.0
+## Rained-on wheat grows Balance "rain_crop_growth" times faster, while it
+## is wet.
 ## Food from one square metre of ripe wheat at the default food rate.
 const FOOD_PER_M2 := 0.5
 const GREEN := Color(0.36, 0.62, 0.2)
@@ -32,6 +37,12 @@ var stage := Stage.SOWING
 var progress := 0.0
 
 var _crops: MultiMeshInstance3D
+## Seedlings the rain sprouted in the reaped part of ripe wheat: the share
+## of the field they cover, and how they are drawn (the same spots, from the
+## reaped end).
+var sprouted := 0.0
+var _sprouts: MultiMeshInstance3D
+var _shown_sprouts := -1
 var _spots := PackedVector3Array()
 var _turns := PackedFloat32Array()
 var _shown_scale := -1.0
@@ -82,6 +93,15 @@ func _ready() -> void:
 	_crops.multimesh = mm
 	_crops.material_override = Art.paint("plaster", 0.0)
 	add_child(_crops)
+	var sprout_mm := MultiMesh.new()
+	sprout_mm.transform_format = MultiMesh.TRANSFORM_3D
+	sprout_mm.mesh = _clump_mesh()
+	sprout_mm.instance_count = _spots.size()
+	sprout_mm.visible_instance_count = 0
+	_sprouts = MultiMeshInstance3D.new()
+	_sprouts.multimesh = sprout_mm
+	_sprouts.material_override = _crops.material_override
+	add_child(_sprouts)
 
 	# Tilled soil, and a post at each corner.
 	var terrain := Game.terrain
@@ -116,6 +136,11 @@ func needs_work() -> bool:
 	return stage != Stage.GROWING
 
 
+## True while there is ripe wheat to reap.
+func is_ripe() -> bool:
+	return stage == Stage.RIPE
+
+
 func wanted_workers() -> int:
 	return clampi(ceili(area() / 40.0), 1, 4)
 
@@ -146,10 +171,9 @@ func add_work(seconds: float) -> float:
 		Stage.RIPE:
 			var done := minf(seconds / (area() * REAP_SECONDS), 1.0 - progress)
 			progress += done
-			food = done * area() * FOOD_PER_M2 * Game.settings.food_rate / Game.DEFAULT_SETTINGS.food_rate
+			food = done * area() * FOOD_PER_M2 * _food_rate() / Game.DEFAULT_SETTINGS.food_rate
 			if progress >= 0.999:
-				stage = Stage.SOWING
-				progress = 0.0
+				_reaped()
 	_refresh()
 	return food
 
@@ -193,9 +217,18 @@ func show_progress(shown: bool) -> void:
 			_label.text = progress_text()
 
 
-## Rain: the field stays wet, and grows faster, for `seconds`.
+## Rain: the field stays wet, and grows faster, for `seconds`. Magic rain
+## sprouts a field being sown at once, and seedlings in the reaped part of
+## ripe wheat.
 func water(seconds: float) -> void:
 	_wet = maxf(_wet, seconds)
+	match stage:
+		Stage.SOWING:
+			stage = Stage.GROWING
+			progress = 0.0
+		Stage.RIPE:
+			sprouted = maxf(sprouted, progress)
+	_refresh()
 
 
 ## The creature reaps up to `amount` food from ripe wheat in one go.
@@ -203,21 +236,33 @@ func water(seconds: float) -> void:
 func take(amount: float) -> float:
 	if stage != Stage.RIPE:
 		return 0.0
-	var per_field: float = area() * FOOD_PER_M2 * Game.settings.food_rate / Game.DEFAULT_SETTINGS.food_rate
+	var per_field: float = area() * FOOD_PER_M2 * _food_rate() / Game.DEFAULT_SETTINGS.food_rate
 	var done := minf(amount / maxf(per_field, 0.01), 1.0 - progress)
 	progress += done
 	if progress >= 0.999:
-		stage = Stage.SOWING
-		progress = 0.0
+		_reaped()
 	_refresh()
 	return done * per_field
+
+
+## The last of the wheat is reaped: sowing begins again, with whatever the
+## rain sprouted already sown.
+func _reaped() -> void:
+	stage = Stage.SOWING
+	progress = clampf(sprouted, 0.0, 0.999)
+	sprouted = 0.0
+
+
+## The village's food rate per worker (with a Windmill's bonus).
+func _food_rate() -> float:
+	return Game.village.food_rate() if is_instance_valid(Game.village) else float(Game.settings.food_rate)
 
 
 func _process(delta: float) -> void:
 	_wet = maxf(0.0, _wet - delta)
 	if stage != Stage.GROWING:
 		return
-	progress += delta * maxf(0.0, Game.settings.crop_growth_rate) / maxf(1.0, Balance.num("crop_grow_seconds")) * (WET_GROWTH if _wet > 0.0 else 1.0)
+	progress += delta * maxf(0.0, Game.settings.crop_growth_rate) / maxf(1.0, Balance.num("crop_grow_seconds")) * (Balance.num("rain_crop_growth") if _wet > 0.0 else 1.0)
 	if progress >= 1.0:
 		stage = Stage.RIPE
 		progress = 0.0
@@ -248,6 +293,15 @@ func _refresh() -> void:
 			shown = int((1.0 - progress) * count)
 	_crops.multimesh.visible_instance_count = shown
 	_crops.set_instance_shader_parameter("tint", colour)
+	# Seedlings in the reaped ground (drawn from the far end of the rows).
+	var seedlings := int(sprouted * count) if stage == Stage.RIPE else 0
+	if seedlings != _shown_sprouts:
+		_shown_sprouts = seedlings
+		for k in seedlings:
+			var spot := count - 1 - k
+			_sprouts.multimesh.set_instance_transform(k, Transform3D(Basis(Vector3.UP, _turns[spot]).scaled(Vector3(0.55, 0.18, 0.55)), _spots[spot]))
+		_sprouts.multimesh.visible_instance_count = seedlings
+	_sprouts.set_instance_shader_parameter("tint", GREEN)
 	# Resizing every clump is only worth it when the change can be seen.
 	grown = snappedf(grown, 0.05)
 	if not is_equal_approx(grown, _shown_scale):
@@ -265,6 +319,7 @@ func _settle() -> void:
 		var world := to_global(Vector3(_spots[k].x, 0.0, _spots[k].z))
 		_spots[k].y = terrain.get_height(world.x, world.z) - global_position.y
 	_shown_scale = -1.0
+	_shown_sprouts = -1
 
 
 func _on_terrain_changed(center: Vector3, radius: float) -> void:

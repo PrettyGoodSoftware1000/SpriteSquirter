@@ -105,6 +105,8 @@ static func create(kind: String, rng: RandomNumberGenerator) -> Destructible:
 	var b := Destructible.new()
 	b.name = kind.capitalize()
 	b.set_meta("kind", kind)
+	# (Where the dice stood, so a saved game can build it the same again.)
+	b.set_meta("look_state", rng.state)
 	b.is_building = true
 	var top := 0.0
 	match kind:

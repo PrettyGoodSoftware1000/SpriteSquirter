@@ -19,11 +19,12 @@ raid_started_balrog = The balrog marches with them!
 balrog_came = A balrog has hatched at a goblin cave. It will guard the cave until it is full grown.
 balrog_grown = The balrog is full grown. It will march with the next raid.
 balrog_died = The balrog is dead!
-research_done = The Blacksmith has finished: {research}.
-spell_researched = The Shrine has taught you a new spell: {spell}.
+research_done = The {place} has finished: {research}.
+spell_researched = The {place} has taught you a new spell: {spell}.
 spell_unlocked = Your {creature} has grown: you can now cast {spell}.
 out_of_food = Out of food! No births, and people will starve
 starving = Starving!
+villager_stuck = Villager stuck!
 fey_birthing = The fey are about: children come twice as fast, and every one is born a girl with wings.
 creature_died = The {creature} has died! Bring it back to life at a Shrine for {animus} animus.
 creature_resurrected = The {creature} lives again!
@@ -68,6 +69,7 @@ forest_seeded = The creature tossed a magic acorn!
 cast_water = The creature cast rain on the crops
 hid_in_shell = The {creature} hid in its shell ({health}% health)
 gnomes_came = Gnomish Subcontractors are on their way!
+gnomes_dont_stack = Gnomish Subcontractors don't stack. Gnomes are union workers, and it's in all their contracts.
 stat_grew = The {creature}'s {stat} grew! Level {level}
 
 # (The sentence for each thing the creature did, as Bless and Condemn show

@@ -61,7 +61,8 @@ func _ready() -> void:
 	var info := {"name": "Random island", "starts": PackedVector2Array(), "caves": [], "from_map": false}
 	if not map.is_empty():
 		terrain.load_map(map)
-		WorldPopulator.populate_from_map(self, terrain, map, mode == "play")
+		# (A saved game brings its own goblins.)
+		WorldPopulator.populate_from_map(self, terrain, map, mode == "play" and not Game.session.has("save"))
 		info = {"name": map.name, "starts": map.starts, "caves": map.caves, "paths": map.get("paths", []), "from_map": true, "path": Game.session.map_path,
 			"unsaved": not Game.session.get("map_data", {}).is_empty()}
 	elif mode == "editor":

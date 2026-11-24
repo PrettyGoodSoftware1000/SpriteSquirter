@@ -11,7 +11,7 @@ extends Node3D
 ## cast a spell cools down (Balance "spell_cooldown_<id>") and cannot be
 ## cast again until it has; its square sparkles blue meanwhile. With
 ## Overcast (researched at the Wizardry tower) it can be cast once while
-## cooling down, for twice the magicko.
+## cooling down, for twice the magicko (all but Blood Sacrifice).
 
 enum Mode { COMMAND, PLACE, SCULPT, FIELD, BRIDGE, RULER }
 
@@ -23,9 +23,12 @@ const PICK_RADIUS := 9.0
 const BRIDGE_HINT := "The treehouses a rope bridge can join are lit up. Click one, then another.  Right-click or Esc to stop."
 const FIELD_HINT := "Hold the left mouse button and drag to draw the field, then let go. Villagers sow and reap it.  Shift keeps drawing,  right-click or Esc to stop."
 
-## The shortest time between two casts of the same spell.
 ## The shortest time between two casts of a spell, whatever its cooldown.
 const SPELL_DEBOUNCE := 0.25
+## How far the dev menu's Advance time moves the game on, in seconds.
+const ADVANCE_SECONDS := 300.0
+## Spells Overcast cannot cast while they cool down.
+const NO_OVERCAST := ["blood"]
 
 var mode: Mode = Mode.COMMAND
 var sculpt_brush := Terrain.Brush.RAISE
@@ -77,6 +80,9 @@ var _place_bridges: Node3D
 var _rng := RandomNumberGenerator.new()
 ## Seconds the influence wall stays up after a spell was aimed outside it.
 var _wall_flash := 0.0
+## True while the spell in hand points outside the village's influence
+## (the pointer is grey, and the wall shows).
+var _cursor_grey := false
 
 # The wheat field being drawn: dragged out from one corner to the other.
 var _field_dragging := false
@@ -149,6 +155,8 @@ func _ready() -> void:
 	pause_menu = PauseMenu.new()
 	add_child(pause_menu)
 	pause_menu.menu_requested.connect(func() -> void: Game.start("menu", "", Terrain.SIZE))
+	pause_menu.save_requested.connect(func() -> void: _save_dialog(true))
+	pause_menu.load_requested.connect(func() -> void: _save_dialog(false))
 	hud.quota_changed.connect(func(kind: String, change: int) -> void: village.change_quota(kind, change))
 	hud.sculpt_selected.connect(_on_sculpt_selected)
 	hud.spell_selected.connect(_on_spell_button)
@@ -168,20 +176,23 @@ func _ready() -> void:
 	hud.spells_requested.connect(func() -> void:
 		village.learn_all_spells()
 		hud.set_spell_slots(village.spell_slots))
+	hud.time_advance_requested.connect(func() -> void: advance_time(ADVANCE_SECONDS))
 	hud.spell_moved.connect(func(index: int, slot: int) -> void:
 		village.move_spell(SpellBook.SPELLS[index].id, slot)
 		hud.set_spell_slots(village.spell_slots))
 	village.fey_birthing.connect(func() -> void: _announce(Texts.line("fey_birthing")))
+	village.villager_stuck.connect(func(_v: Villager) -> void: _announce(Texts.line("villager_stuck")))
 	village.spell_unlocked.connect(func(id: String) -> void:
 		hud.set_spell_slots(village.spell_slots)
 		_announce(Texts.line("spell_unlocked", {"spell": SpellBook.find(id).name, "creature": creature.species_name().to_lower() if creature else "creature"})))
 	village.spell_researched.connect(func(id: String) -> void:
 		hud.set_spell_slots(village.spell_slots)
-		_announce(Texts.line("spell_researched", {"spell": SpellBook.find(id).name})))
+		_announce(Texts.line("spell_researched", {"spell": SpellBook.find(id).name, "place": BuildingCatalog.role_name("wizard")})))
 	village._bar()
 	hud.set_spell_slots(village.spell_slots)
 	village.research_done.connect(func(id: String) -> void:
-		_announce(Texts.line("research_done", {"research": (Research.find(id).name as String).to_lower()})))
+		var item := Research.find(id)
+		_announce(Texts.line("research_done", {"research": (item.name as String).to_lower(), "place": BuildingCatalog.role_name(item.place)})))
 	hud.regenerate_requested.connect(_regenerate)
 	hud.mood_selected.connect(_set_mood)
 	hud.palette_selected.connect(_set_palette)
@@ -205,6 +216,12 @@ func _ready() -> void:
 	hud.set_settings(Game.settings)
 	hud.set_dev_visible(Game.dev_menu)
 
+	if Game.session.has("save"):
+		# A saved game: put it back instead of asking where to begin.
+		_choosing = false
+		SaveGame.restore.call_deferred(self, Game.session.save)
+		_set_mode(Mode.COMMAND)
+		return
 	var starts: PackedVector2Array = _info.starts
 	for k in starts.size():
 		var m := StartMarker.new()
@@ -244,7 +261,9 @@ func _process(delta: float) -> void:
 		Game.terrain.sculpt(sculpt_brush, _cursor_hit, brush_radius, delta, _flatten_height)
 	_update_ring()
 	_update_ghost()
+	_update_spell_cursor()
 	_update_wall()
+	hud.set_hover_tip(_goblin_tip() if not _choosing else "")
 	if mode == Mode.RULER and _ruler_from != null and not _ruler_fixed and _cursor_hit != null:
 		_ruler.show_line(_ruler_from, _cursor_hit)
 	_ui_timer -= delta
@@ -425,6 +444,16 @@ func _found(pos: Vector3, start_index: int) -> void:
 	village.found(pos, site)
 	day_cycle.process_mode = Node.PROCESS_MODE_INHERIT
 
+	var out := Vector2(pos.x, pos.z)
+	var dir := (-out).normalized() if out.length() > 1.0 else Vector2.RIGHT
+	var spot := out + dir * (PlayerVillage.HOME_RADIUS + 12.0)
+	_make_creature(Vector3(spot.x, 0.0, spot.y), atan2(dir.x, dir.y))
+	Game.camera_rig.focus_on(pos)
+	Game.camera_rig.set_zoom(75.0)
+
+
+## The player's creature (Game.creature_kind), at `pos` facing `facing`.
+func _make_creature(pos: Vector3, facing: float) -> Creature:
 	creature = Creature.new()
 	creature.name = "Creature"
 	creature.kind = Game.creature_kind
@@ -432,13 +461,9 @@ func _found(pos: Vector3, start_index: int) -> void:
 	creature.knocked_down.connect(func() -> void:
 		_announce(Texts.line("creature_died", {"creature": creature.species_name().to_lower(), "animus": roundi(Balance.num("resurrect_animus"))})))
 	creature.got_up.connect(func() -> void: _announce(Texts.line("creature_resurrected", {"creature": creature.species_name().to_lower()})))
-	var out := Vector2(pos.x, pos.z)
-	var dir := (-out).normalized() if out.length() > 1.0 else Vector2.RIGHT
-	var spot := out + dir * (PlayerVillage.HOME_RADIUS + 12.0)
-	creature.place(Vector3(spot.x, 0.0, spot.y), atan2(dir.x, dir.y))
+	creature.place(pos, facing)
 	Game.creature = creature
-	Game.camera_rig.focus_on(pos)
-	Game.camera_rig.set_zoom(75.0)
+	return creature
 
 
 # --- Modes --------------------------------------------------------------------
@@ -526,14 +551,16 @@ func _on_research_selected(id: String) -> void:
 		var item := Research.find(id)
 		hud.set_hint("Researching %s: %s minutes." % [(item.name as String).to_lower(), Hud._number(item.seconds / 60.0)])
 	hud.update_research(village)
+	if hud.is_spell_research_open():
+		hud.update_spell_research(village)
 
 
-## Opens the Shrine's menu, where spells are researched (clicking a Shrine:
-## the Singing rocks).
-func open_spell_research(shrine: Destructible) -> void:
+## Opens the Wizardry tower's menu, where spells are researched (clicking
+## a Wizardry tower).
+func open_spell_research(tower: Destructible) -> void:
 	hud.show_build_menu(false)
 	hud.show_research_menu(false)
-	hud.show_spell_research(true, BuildingCatalog.title(shrine.get_meta("kind", "")))
+	hud.show_spell_research(true, BuildingCatalog.title(tower.get_meta("kind", "")))
 	hud.update_spell_research(village)
 
 
@@ -578,15 +605,16 @@ func _on_left_click() -> void:
 		return
 	match mode:
 		Mode.COMMAND:
-			var shrine := _shrine_at_mouse()
-			if shrine != null:
-				open_spell_research(shrine)
+			var tower := _building_at_mouse("wizard")
+			if tower != null:
+				# A Wizardry tower: the spells, and Overcast.
+				open_spell_research(tower)
 			elif _building_at_mouse("smith") != null:
 				# A Blacksmith: its research.
 				_toggle_research_menu("smith")
-			elif _building_at_mouse("wizard") != null:
-				# A Wizardry tower: Overcast.
-				_toggle_research_menu("wizard")
+			elif _building_at_mouse("necro") != null:
+				# A Necromancer tower: the Blood Sacrifice upgrade.
+				_toggle_research_menu("necro")
 			else:
 				_command_move(_cursor_hit)
 		Mode.RULER:
@@ -676,14 +704,15 @@ func cooling_share(index: int) -> float:
 func spell_ready(index: int) -> bool:
 	if _cooldowns[index] <= 0.0:
 		return true
-	return village.has_research("overcast") and not _overcast_used[index] and cooling_share(index) > 0.0 \
+	return overcast_open(index) and cooling_share(index) > 0.0 \
 		and SpellBook.cooldown(SpellBook.SPELLS[index].id) - _cooldowns[index] >= SPELL_DEBOUNCE
 
 
 ## True while spell `index` cools down but Overcast can still cast it
 ## (once each cooldown, for twice the magicko).
 func overcast_open(index: int) -> bool:
-	return _cooldowns[index] > 0.0 and village.has_research("overcast") and not _overcast_used[index]
+	return _cooldowns[index] > 0.0 and village.has_research("overcast") and not _overcast_used[index] \
+		and not NO_OVERCAST.has(SpellBook.SPELLS[index].id)
 
 
 ## What a spell costs in magicko right now: twice as much to overcast it.
@@ -741,11 +770,12 @@ func _spell_key(index: int) -> void:
 		return
 	var spell: Dictionary = SpellBook.SPELLS[index]
 	if not village.knows_spell(spell.id):
-		hud.set_hint("%s must be researched first: click the %s to research spells." % [spell.name, BuildingCatalog.role_name("shrine")])
+		hud.set_hint("%s must be researched first: click the %s to research spells." % [spell.name, BuildingCatalog.role_name("wizard")])
 		return
 	if mode != Mode.COMMAND:
 		_set_mode(Mode.COMMAND)
 	_armed = index
+	_cursor_grey = false
 	hud.set_spell(index)
 	Input.set_custom_mouse_cursor(SpellCursors.image(spell.id), Input.CURSOR_ARROW, SpellCursors.hotspot())
 	if _is_judgement(index):
@@ -803,6 +833,7 @@ func _disarm() -> void:
 		Input.set_custom_mouse_cursor(null)
 		hud.set_spell(-1)
 	_armed = -1
+	_cursor_grey = false
 	if _judge_prompt:
 		_judge_prompt = false
 		hud.set_prompt("")
@@ -881,6 +912,9 @@ func _cast(index: int) -> void:
 		if building_site == null:
 			hud.set_hint("Gnomish Subcontractors: click on one of your buildings under construction.")
 			return
+		if building_site.has_meta("gnomes"):
+			_announce(Texts.line("gnomes_dont_stack"))
+			return
 	var fey_villager: Villager = null
 	if spell.id == "fey":
 		fey_villager = village.fey_target(target)
@@ -915,6 +949,7 @@ func _cast(index: int) -> void:
 		"lightning":
 			ChainLightning.cast(target)
 		"gnomes":
+			building_site.set_meta("gnomes", true)
 			Gnome.summon(building_site)
 			_announce(Texts.line("gnomes_came"))
 		"fey":
@@ -980,6 +1015,41 @@ func load_sliders(path: String) -> void:
 	hud.set_hint("Loaded %d sliders from %s" % [loaded.size(), path] if not loaded.is_empty() else "No sliders found in %s" % path)
 
 
+# --- Saving and loading the game ------------------------------------------------------
+
+## Opens a file box to save the game to a .txt file, or to load one (see
+## SaveGame). It starts in the "saves" folder beside the game.
+func _save_dialog(saving: bool) -> void:
+	var box := FileDialog.new()
+	box.access = FileDialog.ACCESS_FILESYSTEM
+	box.file_mode = FileDialog.FILE_MODE_SAVE_FILE if saving else FileDialog.FILE_MODE_OPEN_FILE
+	box.filters = PackedStringArray(["*.txt ; Saved games"])
+	box.title = "Save game" if saving else "Load game"
+	box.use_native_dialog = true
+	box.process_mode = Node.PROCESS_MODE_ALWAYS
+	DirAccess.make_dir_recursive_absolute(SaveGame.default_dir())
+	box.current_dir = SaveGame.default_dir()
+	if saving:
+		box.current_file = "save %s.txt" % Time.get_datetime_string_from_system(false, true).replace(":", "-")
+	box.file_selected.connect(func(path: String) -> void:
+		box.queue_free()
+		pause_menu.close()
+		if saving:
+			save_game(path)
+		else:
+			var problem := SaveGame.load_game(path)
+			if problem != "":
+				hud.set_hint(problem))
+	box.canceled.connect(box.queue_free)
+	add_child(box)
+	box.popup_centered_ratio(0.6)
+
+
+func save_game(path: String) -> void:
+	var problem := SaveGame.save(self, path)
+	hud.set_hint(problem if problem != "" else "Game saved to %s" % path)
+
+
 # --- Influence ------------------------------------------------------------------
 
 ## Shows the wall at the edge of the village's influence while a building
@@ -989,9 +1059,48 @@ func _update_wall() -> void:
 	if _choosing or not village.founded:
 		return
 	_wall_flash = maxf(0.0, _wall_flash - get_process_delta_time())
-	var show := mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE or _wall_flash > 0.0 or _store_at_mouse()
+	var show := mode == Mode.PLACE or mode == Mode.FIELD or mode == Mode.BRIDGE or _wall_flash > 0.0 or _store_at_mouse() or _cursor_grey
 	if show:
 		_wall.show_at(village.center, village.influence())
+
+
+## With a spell in hand (not Bless or Condemn, cast anywhere), the pointer
+## turns grey outside the village's influence, and the wall shows.
+func _update_spell_cursor() -> void:
+	var grey := false
+	if _armed >= 0 and not _is_judgement(_armed) and village.founded:
+		grey = _cursor_hit == null or not village.in_territory(_cursor_hit)
+	if grey == _cursor_grey:
+		return
+	_cursor_grey = grey
+	if _armed >= 0:
+		var id: String = SpellBook.SPELLS[_armed].id
+		Input.set_custom_mouse_cursor(SpellCursors.grey_image(id) if grey else SpellCursors.image(id), Input.CURSOR_ARROW, SpellCursors.hotspot())
+
+
+## What the box by the pointer says over a goblin cave (how fast it
+## spawns, and every enemy there is) or a goblin building (what it does).
+func _goblin_tip() -> String:
+	if _cursor_hit == null or get_viewport().gui_get_hovered_control() != null:
+		return ""
+	var p: Vector3 = _cursor_hit
+	for node in get_tree().get_nodes_in_group("caves"):
+		var cave := node as Node3D
+		if Vector2(cave.global_position.x - p.x, cave.global_position.z - p.z).length() < 12.0:
+			return raids.cave_tip(cave)
+	for group: String in ["goblin_buildings", "buildings"]:
+		for node in get_tree().get_nodes_in_group(group):
+			var b := node as Destructible
+			if b == null or b.destroyed or not BuildingCatalog.GOBLIN_NAMES.has(b.get_meta("kind", "")):
+				continue
+			var kind: String = b.get_meta("kind", "")
+			if Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < b.footprint * 1.2 + 1.0:
+				return "%s\n%s" % [BuildingCatalog.title(kind), GoblinRaids.building_tip(kind)]
+	for node in get_tree().get_nodes_in_group("goblin_sites"):
+		var site := node as ConstructionSite
+		if Vector2(site.global_position.x - p.x, site.global_position.z - p.z).length() < site.footprint * 1.2 + 1.0:
+			return "%s (being built)\n%s" % [BuildingCatalog.title(site.kind), GoblinRaids.building_tip(site.kind)]
+	return ""
 
 
 ## True with the mouse over one of the village's Storehouses.
@@ -1394,6 +1503,47 @@ func _announce(text: String) -> void:
 
 
 # --- Dev menu actions -----------------------------------------------------------
+
+## The dev menu's Advance time: `seconds` go by at once. The clock moves on;
+## the villagers and goblins who would have been born are, and children
+## grow up; building, research, training, crops, spell cooldowns and the
+## creature's and the balrogs' growth all move on; and every resource
+## changes at its rate over the last minute (food never below 1). Nobody
+## walks anywhere.
+func advance_time(seconds: float) -> void:
+	if _choosing or not village.founded or seconds <= 0.0:
+		return
+	var minutes := seconds / 60.0
+	for res: String in ["lumber", "stone", "food", "magicko", "animus"]:
+		var change := village.last_minute(res) * minutes
+		if change > 0.0:
+			village.give(res, change)
+		elif change < 0.0:
+			village.resources[res] = maxf(village.resources[res] + change, 1.0 if res == "food" else 0.0)
+	if village.amount("food") < 1:
+		village.resources.food = 1.0
+	village.advance(seconds)
+	raids.advance(seconds)
+	for node in get_tree().get_nodes_in_group("construction_sites") + get_tree().get_nodes_in_group("goblin_sites"):
+		var site := node as ConstructionSite
+		if site == null or not is_instance_valid(site):
+			continue
+		var crew := 0
+		for v_node in get_tree().get_nodes_in_group("villagers"):
+			var v := v_node as Villager
+			if v.job == "build" and v.job_target == site:
+				crew += 1
+		site.add_work(seconds * maxi(crew, 1))
+	for node in get_tree().get_nodes_in_group("fields"):
+		(node as CropField)._process(seconds)
+	if is_instance_valid(creature):
+		creature._grow(seconds)
+	for node in get_tree().get_nodes_in_group("balrogs"):
+		(node as Creature)._grow(seconds)
+	for k in _cooldowns.size():
+		_cooldowns[k] = maxf(0.0, _cooldowns[k] - seconds)
+	day_cycle.advance(seconds)
+	hud.set_hint("Time moved on %d minutes." % roundi(minutes))
 
 func _set_mood(index: int) -> void:
 	_atmosphere.set_mood(index)

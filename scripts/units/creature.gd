@@ -145,11 +145,13 @@ var kind := "tortoise"
 var size := START_SIZE
 ## Seconds of growing so far.
 var age := 0.0
-## Growing takes animus (the player's creature only): each tenth of the way
-## from START_SIZE to full size must be paid for before it grows on, the
-## first 1 (Balance "growth_animus_step"), the second 2, and so on. The
-## player pays by clicking its portrait (see pay_for_growth()). How many
-## tenths have been paid for.
+## Growing can take animus (the player's creature only): with Balance
+## "growth_animus_step" above 0, each tenth of the way from START_SIZE to
+## full size must be paid for before it grows on, the first 1 step, the
+## second 2, and so on, by clicking its portrait (see pay_for_growth()).
+## With it at 0 (as the owner has it) it grows by itself, and each tenth
+## counts as paid as it starts. How many tenths have been paid for (Bless
+## and Condemn come with the first two).
 var growth_paid := 0
 ## Out of its shell: a burst of speed until then (Game.now).
 var _burst_until := 0.0
@@ -472,6 +474,13 @@ func _grow(delta: float) -> void:
 	if not hungry:
 		if hostile:
 			age += delta
+		elif growth_cost() <= 0 and is_instance_valid(Game.village) and Game.village.founded:
+			# Free growth: it grows by itself.
+			age += delta
+			var tenth := 0.1 * minutes * 60.0
+			while growth_paid < 10 and age >= growth_paid * tenth - 0.01:
+				growth_paid += 1
+				Game.village.unlock_growth_spells(growth_paid)
 		else:
 			# As far as the animus paid for so far allows.
 			age = maxf(age, minf(age + delta, _growth_allowed()))
@@ -502,7 +511,7 @@ func growth_cost() -> int:
 ## has the animus for the next tenth (its portrait sparkles).
 func can_grow() -> bool:
 	var village := Game.village
-	return not hostile and growth_paid < 10 and age >= _growth_allowed() - 0.01 and is_instance_valid(village) \
+	return not hostile and growth_paid < 10 and growth_cost() > 0 and age >= _growth_allowed() - 0.01 and is_instance_valid(village) \
 		and village.founded and village.amount("animus") >= growth_cost()
 
 
@@ -1203,8 +1212,9 @@ func _on_footfall(pos: Vector3) -> void:
 			d.stomp(pos)
 	for node in get_tree().get_nodes_in_group("villagers"):
 		var v := node as Villager
-		# The tortoise watches its step around its own village.
-		if _spares(v) or size <= 0.3 or v.global_position.distance_to(pos) >= 1.8 * size:
+		# The tortoise watches its step around its own village. (Archers up
+		# on their posts are out of reach.)
+		if _spares(v) or v.on_post() or size <= 0.3 or v.global_position.distance_to(pos) >= 1.8 * size:
 			continue
 		if hostile:
 			# The village's fighters are not squashed flat by a careless step.
@@ -1471,7 +1481,7 @@ func _on_stomp(pos: Vector3) -> void:
 		var d := _flat(v.global_position, pos)
 		if d >= radius:
 			continue
-		if _spares(v):
+		if _spares(v) or v.on_post():
 			continue
 		hit.append(v)
 		# Enough to kill a goblin at the centre; less towards the edge.

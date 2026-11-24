@@ -40,7 +40,7 @@ func _ready() -> void:
 
 ## How far grown it is, 0..1.
 func share() -> float:
-	var days := maxf(0.01, Balance.num("magic_tree_grow_days")) * maxf(0.1, Game.settings.day_minutes) * 60.0
+	var days := maxf(0.01, Balance.num("magic_tree_grow_days")) * DayCycle.cycle_seconds()
 	return clampf(_age / days, 0.0, 1.0)
 
 

@@ -17,6 +17,8 @@ sharper_swords_bonus = 1.25      # warrior damage is multiplied by this once res
 archer_health = 150
 archer_arrow_damage = 20
 archer_arrow_seconds = 0.5      # time between arrows
+archer_post_range = 200%        # archers up on a treehouse or a rope bridge shoot this much as far (height advantage);
+                                # nothing that fights hand to hand can reach them there, but they fall with their post
 
 wizard_health = 45              # a wizard's health
 wizard_firebolt_damage = 70
@@ -30,6 +32,14 @@ goblin_attack_seconds = 1.0
 ogre_health = 600
 ogre_damage = 40
 
+# Goblin archers: a goblin that crawls out of a cave is one this often. They
+# shoot from afar, at the flying creature and at archers on posts too.
+goblin_archer_chance = 25%
+goblin_archer_health = 30
+goblin_archer_arrow_damage = 8
+goblin_archer_arrow_seconds = 1.5   # time between arrows
+goblin_archer_range = 20            # metres
+
 # --- Creatures (full grown; a newborn has 30% of the health) -----------------
 tortoise_health = 2000
 squirrel_health = 900
@@ -42,8 +52,9 @@ creature_getup_health = 1       # share of its health it has when it is brought 
 resurrect_animus = 5            # animus it costs to bring the creature back to life, at the Shrine
 creature_young_appetite = 0.5   # under half grown it eats this share of what it otherwise would
 creature_aggro_range = 45       # metres: it goes after any enemy this close to it
-growth_animus_step = 1          # growing takes animus: each tenth of its growth costs this many times
-                                # which tenth it is (1, then 2, then 3...: 55 in all), paid as it starts
+growth_animus_step = 0          # 0: the creature grows by itself, for nothing. Above 0, growing takes
+                                # animus: each tenth of its growth costs this many times which tenth
+                                # it is (1, then 2, then 3...), paid by clicking its portrait
 
 # --- The raven ---------------------------------------------------------------
 raven_fly_distance = 30         # metres: it flies any journey longer than this, and walks shorter ones (unless the way climbs steeply or it is getting out of a fight)
@@ -110,16 +121,18 @@ start_villagers = 20                # villagers a new village starts with (on a 
 # --- What the village starts with --------------------------------------------
 start_lumber = 100
 start_stone = 100
-start_food = 100
+start_food = 200
 start_magicko = 100
 food_warning_seconds = 45           # "Out of food" floats up over the Storehouse no oftener than this
 crop_grow_seconds = 200             # how long sown wheat takes to ripen by itself (rain makes it faster)
+rain_crop_growth = 350%             # wet wheat grows this much as fast (it was 300%: rain is 25% more effective now)
 
 # --- Storage ------------------------------------------------------------------
 # What the village can keep. Lumber, stone, food and bones over the limit
 # are lost. Magicko and animus are not stored, so they have no limit.
 storehouse_holds = 300              # of each, for every Storehouse
 granary_holds = 300                 # more food, for every Granary
+windmill_food_rate = 3              # with a Windmill standing (one is enough; more add nothing), each worker gathers this much more food a minute
 animus_per_minute = 1               # animus the village gets a minute without any Shrine (base income)
 animus_per_shrine = 1               # animus each Shrine makes a minute, on top
 
@@ -158,12 +171,17 @@ spell_cooldown_gnomes    = 30
 spell_cooldown_charm     = 30
 spell_cooldown_fey       = 300
 
-# --- Spells researched at the Shrine ----------------------------------------
-# Click a Shrine (the Singing rocks) to research spells, one at a time.
+# --- Spells researched at the Wizardry tower ---------------------------------
+# Click a Wizardry tower (the Moon tower) to research spells, one at a time.
 # Every spell must be researched before it appears on the spell bar.
 spell_research_animus = 1       # animus the first spell costs to research, paid when it starts...
 spell_research_animus_step = 1  # ...and each one after costs this much more than the last
-spell_research_seconds = 90     # how long each takes, while a Shrine stands
+spell_research_seconds = 90     # how long each takes, while a Wizardry tower stands
+
+# --- Blood Sacrifice --------------------------------------------------------------
+# It cannot be overcast, and a second one while it runs does not stack.
+blood_sacrifice_boost = 200%            # magicko comes in this much as fast for 30 seconds...
+blood_sacrifice_upgraded_boost = 300%   # ...or this much once the Necromancer tower's upgrade is researched (10 animus)
 
 # --- Kinky Fey Stuff and the fey -----------------------------------------------
 fey_tryst_seconds = 120         # how long the villager is away with the pixie

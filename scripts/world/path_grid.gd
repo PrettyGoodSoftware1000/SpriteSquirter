@@ -11,6 +11,10 @@ extends RefCounted
 ## round them, and building_in_way() lets a walker step round one it is
 ## about to bump into.
 ##
+## Tree trunks are not walls on the map (the forest would be one big wall),
+## but each tree is listed by its square (add_trunk(), which every tree does
+## for itself), so trunk_at() lets a walker step round one in its way.
+##
 ## It keeps itself up to date as the terrain is reshaped. Get it from
 ## Game.path_grid().
 
@@ -33,6 +37,8 @@ var _has_dirty := false
 var _walled := {}
 var _walls := {}
 var _blocks := {}
+## Square -> the trees standing on it.
+var _trunks := {}
 
 
 func setup(t: Terrain) -> void:
@@ -169,6 +175,46 @@ func remove_building(building: Destructible) -> void:
 		# Work the freed squares out again from the ground.
 		_dirty = _dirty.merge(touched) if _has_dirty else touched
 		_has_dirty = true
+
+
+## `tree` stands where it is: walkers step round its trunk.
+func add_trunk(tree: Destructible) -> void:
+	var id := _cell(tree.global_position)
+	if tree.has_meta("trunk_cell"):
+		remove_trunk(tree)
+	if not _trunks.has(id):
+		_trunks[id] = []
+	(_trunks[id] as Array).append(tree)
+	tree.set_meta("trunk_cell", id)
+
+
+func remove_trunk(tree: Destructible) -> void:
+	if not tree.has_meta("trunk_cell"):
+		return
+	var id: Vector2i = tree.get_meta("trunk_cell")
+	tree.remove_meta("trunk_cell")
+	var list: Array = _trunks.get(id, [])
+	list.erase(tree)
+	if list.is_empty():
+		_trunks.erase(id)
+
+
+## How far from its middle a tree's trunk reaches (more for a big tree).
+static func trunk_radius(tree: Destructible) -> float:
+	return clampf(tree.footprint * 0.3, 0.3, 3.0)
+
+
+## The standing tree whose trunk comes within `margin` of `p`, or null.
+func trunk_at(p: Vector3, margin: float) -> Destructible:
+	var c := _cell(p)
+	for dj in range(-1, 2):
+		for di in range(-1, 2):
+			for node: Variant in _trunks.get(c + Vector2i(di, dj), []):
+				var t := node as Destructible
+				if is_instance_valid(t) and not t.destroyed \
+						and Vector2(t.global_position.x - p.x, t.global_position.z - p.z).length() < trunk_radius(t) + margin:
+					return t
+	return null
 
 
 ## The building whose walls `p` is inside, or null.

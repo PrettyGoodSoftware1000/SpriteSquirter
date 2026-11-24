@@ -116,6 +116,10 @@ func _ready() -> void:
 		OS.shell_open(ProjectSettings.globalize_path(MapData.DIR)))
 	map_row.add_child(folder)
 
+	var load := _button("Load game")
+	load.pressed.connect(_load_dialog)
+	box.add_child(load)
+
 	var test := _button("Test environment")
 	test.pressed.connect(func() -> void: Game.start("test"))
 	box.add_child(test)
@@ -167,3 +171,23 @@ func _button(text: String) -> Button:
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	return b
+
+
+## Opens a file box to pick a saved game (see SaveGame) and starts it.
+func _load_dialog() -> void:
+	var box := FileDialog.new()
+	box.access = FileDialog.ACCESS_FILESYSTEM
+	box.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	box.filters = PackedStringArray(["*.txt ; Saved games"])
+	box.title = "Load game"
+	box.use_native_dialog = true
+	DirAccess.make_dir_recursive_absolute(SaveGame.default_dir())
+	box.current_dir = SaveGame.default_dir()
+	box.file_selected.connect(func(path: String) -> void:
+		box.queue_free()
+		var problem := SaveGame.load_game(path)
+		if problem != "":
+			push_warning(problem))
+	box.canceled.connect(box.queue_free)
+	add_child(box)
+	box.popup_centered_ratio(0.6)

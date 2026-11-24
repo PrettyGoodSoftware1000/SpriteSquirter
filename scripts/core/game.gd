@@ -8,7 +8,8 @@ extends Node
 
 ## Gameplay numbers the dev menu (~) can change while playing.
 const DEFAULT_SETTINGS := {
-	"day_minutes": 10.0, # length of a full day-night cycle
+	"day_minutes": 10.0, # length of the daylight (dawn to midnight)
+	"night_minutes": 8.0, # length of the night (midnight to dawn)
 	"lumber_rate": 6.0, # per worker per minute
 	"stone_rate": 4.0, # per worker per minute
 	"food_rate": 6.0, # per worker per minute
@@ -26,6 +27,7 @@ const DEFAULT_SETTINGS := {
 	"influence_per_person": 1.0, # metres the influence grows for every villager
 	"crop_growth_rate": 1.0, # how many times as fast wheat ripens (balancing.txt crop_grow_seconds at 1)
 	"night_darkness": -100.0, # percent darker the night is than it was made (negative: lighter)
+	"starve_per_minute": 6.0, # villagers who starve a minute while there is no food
 }
 
 ## The creature the player chose in the main menu: a key of Creature.SPECIES.

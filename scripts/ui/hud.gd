@@ -33,10 +33,12 @@ signal research_menu_requested
 signal research_selected(id: String)
 ## Spell `index` was dragged onto spell `onto` on the spell bar.
 signal spell_moved(index: int, onto: int)
-## A spell picked in the Shrine's research menu.
+## A spell picked in the Wizardry tower's research menu.
 signal spell_research_selected(id: String)
 ## The dev menu's "Learn all spells".
 signal spells_requested
+## The dev menu's "Advance time": five minutes go by at once.
+signal time_advance_requested
 signal resurrect_requested
 ## The creature's portrait was clicked (to pay for its growth).
 signal grow_requested
@@ -59,6 +61,7 @@ const JOB_NAMES := {"lumber": "lumberjack", "stone": "miner", "food": "farmer", 
 ## key, label, min, max, step, unit
 const SETTING_SLIDERS := [
 	["day_minutes", "Day length", 1.0, 30.0, 0.5, "min"],
+	["night_minutes", "Night length", 1.0, 30.0, 0.5, "min"],
 	["lumber_rate", "Lumber rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["stone_rate", "Stone rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["food_rate", "Food rate", 0.0, 60.0, 1.0, "/worker/min"],
@@ -76,7 +79,10 @@ const SETTING_SLIDERS := [
 	["influence_start", "Starting influence", 10.0, 150.0, 5.0, "m"],
 	["influence_per_person", "Influence per person", 0.0, 5.0, 0.25, "m"],
 	["night_darkness", "Night darkness", -150.0, 90.0, 5.0, "%"],
+	["starve_per_minute", "Starvation deaths", 0.0, 30.0, 0.5, "/min"],
 ]
+## The dev menu's sliders are laid out in this many columns.
+const SLIDER_COLUMNS := 3
 const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.66, 0.26), "magicko": Color(0.5, 0.34, 0.86)}
 ## role -> [name in the jobs row, the building that trains it]
 ## role -> [name in the panel, the building that trains it, one of them]
@@ -151,6 +157,9 @@ var _grass_button: Button
 var _brush: Label
 var _stats: Label
 var _dev_panel: PanelContainer
+## What the thing under the mouse is (a goblin cave or building), by the pointer.
+var _tip_panel: PanelContainer
+var _tip: Label
 var _root: Control
 var _blood := false
 var _drop_timer := 0.0
@@ -180,6 +189,13 @@ func _ready() -> void:
 	_build_spell_research_menu(root)
 	_build_prompt(root)
 	_build_dev_menu(root)
+	_tip_panel = PanelContainer.new()
+	_tip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tip_panel.visible = false
+	root.add_child(_tip_panel)
+	_tip = Label.new()
+	_tip.add_theme_font_size_override("font_size", 12)
+	_tip_panel.add_child(_tip)
 
 
 # --- Layout -------------------------------------------------------------------
@@ -205,7 +221,7 @@ func _build_status_panel(root: Control) -> void:
 	people.add_theme_color_override("font_color", RESOURCE_COLORS.people)
 	people.custom_minimum_size = Vector2(84, 28)
 	people.mouse_filter = Control.MOUSE_FILTER_STOP
-	people.tooltip_text = "Villagers / room for them. The bar fills towards the next birth."
+	people.tooltip_text = "Villagers / room for them"
 	people.add_child(_fill_bar(Color(1.0, 0.95, 0.85, 0.3)))
 	top.add_child(people)
 	_resource_labels.people = people
@@ -228,14 +244,14 @@ func _build_status_panel(root: Control) -> void:
 	_workers = _text("Workers", 12)
 	_workers.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_workers.mouse_filter = Control.MOUSE_FILTER_STOP
-	_workers.tooltip_text = "Villagers you have not set to a job. They gather whatever is most needed and help on building sites."
+	_workers.tooltip_text = "Villagers with no set job"
 	grid.add_child(_workers)
 	_workers_count = _text("", 12)
 	grid.add_child(_workers_count)
 	var builders := _text("Builders", 12)
 	builders.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	builders.mouse_filter = Control.MOUSE_FILTER_STOP
-	builders.tooltip_text = "Builders only build: they are first onto every building site, and wait when there is nothing to build."
+	builders.tooltip_text = "Villagers who only build"
 	grid.add_child(builders)
 	grid.add_child(_quota_controls("build"))
 	for res: String in PlayerVillage.RESOURCES:
@@ -309,8 +325,7 @@ func _quota_controls(kind: String) -> Control:
 	var count := _text("0", 12)
 	count.custom_minimum_size.x = 34
 	count.mouse_filter = Control.MOUSE_FILTER_STOP
-	count.tooltip_text = "Villagers you have set to gather this. + takes one of the unassigned Workers, - sends one back." if kind != "build" \
-		else "Builders only build: they are first onto every building site, and wait when there is nothing to build."
+	count.tooltip_text = "Villagers set to gather this" if kind != "build" else "Villagers who only build"
 	row.add_child(count)
 	var more := _button("+")
 	more.custom_minimum_size.x = 28
@@ -566,7 +581,9 @@ func _update_portrait(beast: Creature) -> void:
 	var village := Game.village
 	var have: int = village.amount("animus") if is_instance_valid(village) else 0
 	if beast.growth_paid >= 10:
-		_portrait.tooltip_text = "%s: grown %d%%. Fully paid for." % [beast.species_name(), roundi(beast.grown() * 100.0)]
+		_portrait.tooltip_text = "%s: grown %d%%" % [beast.species_name(), roundi(beast.grown() * 100.0)]
+	elif beast.growth_cost() <= 0:
+		_portrait.tooltip_text = "%s: grown %d%%" % [beast.species_name(), roundi(beast.grown() * 100.0)]
 	else:
 		_portrait.tooltip_text = "%s: grown %d%%, step %d of 10 paid for.\nThe next step costs %d animus (you have %d).%s" % [
 			beast.species_name(), roundi(beast.grown() * 100.0), beast.growth_paid, beast.growth_cost(), have,
@@ -760,9 +777,9 @@ func update_research(village: PlayerVillage) -> void:
 		b.modulate = Color.WHITE if done or running or village.can_afford(item.cost) else Color(1.0, 0.6, 0.6, 0.8)
 
 
-## The Shrine's menu (the Singing rocks; opened by clicking one): one
-## button for each spell to research, with what it costs, how long it
-## takes and how far along it is.
+## The Wizardry tower's menu (opened by clicking one): one button for each
+## spell to research, with what it costs, how long it takes and how far
+## along it is, and then the tower's other research (Overcast).
 func _build_spell_research_menu(root: Control) -> void:
 	_spell_research_panel = PanelContainer.new()
 	_spell_research_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -813,21 +830,54 @@ func _build_spell_research_menu(root: Control) -> void:
 		bar.custom_minimum_size = Vector2(90, 8)
 		state.add_child(bar)
 		_spell_research_rows[id] = {"button": b, "status": status, "bar": bar, "row": row}
+	# The tower's own research (Overcast), as in the research menu.
+	for item in Research.ITEMS:
+		if item.place != "wizard":
+			continue
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		grid.add_child(row)
+		var icon := Control.new()
+		icon.custom_minimum_size = Vector2(56, 56)
+		row.add_child(icon)
+		var b := _button("")
+		b.custom_minimum_size = Vector2(300, 70)
+		var lines: Array[Control] = [_text(item.name, 12), _text("Takes %s min" % _number(item.seconds / 60.0), 12),
+			ResourceIcon.cost_row(item.cost, 12)]
+		b.add_child(_stacked(lines))
+		b.tooltip_text = Research.describe(item)
+		var id: String = item.id
+		b.pressed.connect(func() -> void: research_selected.emit(id))
+		row.add_child(b)
+		var state := VBoxContainer.new()
+		state.alignment = BoxContainer.ALIGNMENT_CENTER
+		state.custom_minimum_size.x = 90
+		row.add_child(state)
+		var status := _text("", 12)
+		state.add_child(status)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.max_value = 1.0
+		bar.custom_minimum_size = Vector2(90, 8)
+		state.add_child(bar)
+		_tower_research_rows[id] = {"button": b, "status": status, "bar": bar, "row": row}
 	var note := Label.new()
-	note.text = "Every spell is researched here (one at a time for each %s), before it appears on the spell bar. Known spells leave this list.\nEach costs 1 animus more than the last. Drag the spells on the bar to put them where you like." % BuildingCatalog.role_name("shrine")
+	note.text = "Spells are researched here (one at a time for each %s) before they go on the spell bar.\nEach costs 1 animus more than the last." % BuildingCatalog.role_name("wizard")
 	note.add_theme_font_size_override("font_size", 12)
 	note.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(note)
 
 
-## Opens (or closes) the Shrine's menu; `title` is what the building is called.
+## Opens (or closes) the Wizardry tower's menu; `title` is what the building is called.
 func show_spell_research(shown: bool, title := "") -> void:
 	_spell_research_panel.visible = shown
 	if title != "":
 		_spell_research_place = title
 
 
-var _spell_research_place := "Shrine"
+var _spell_research_place := "Wizardry tower"
+## The Wizardry tower's own research in its menu (Overcast): id -> its row.
+var _tower_research_rows := {}
 
 
 func is_spell_research_open() -> bool:
@@ -836,8 +886,18 @@ func is_spell_research_open() -> bool:
 
 func update_spell_research(village: PlayerVillage) -> void:
 	var cost: int = village.spell_research_cost().get("animus", 0)
-	_spell_research_title.text = "%s: research spells, one at a time for each %s (%d at once). The next costs %d animus (you have %d)." % [
-		_spell_research_place, BuildingCatalog.role_name("shrine"), maxi(1, village.shrines().size()), cost, village.amount("animus")]
+	_spell_research_title.text = "%s: research spells. The next costs %d animus (you have %d)." % [
+		_spell_research_place, cost, village.amount("animus")]
+	for id: String in _tower_research_rows:
+		var row: Dictionary = _tower_research_rows[id]
+		var running: bool = not village.research_job(id).is_empty()
+		(row.row as Control).visible = not village.has_research(id)
+		var progress := village.research_progress(id)
+		(row.bar as ProgressBar).value = progress
+		(row.bar as ProgressBar).visible = running
+		(row.status as Label).text = "%d%%" % floori(progress * 100.0) if running else ""
+		(row.button as Button).disabled = running
+		(row.button as Button).modulate = Color.WHITE if running or village.can_afford(Research.find(id).cost) else Color(1.0, 0.6, 0.6, 0.8)
 	for id: String in _spell_research_rows:
 		var row: Dictionary = _spell_research_rows[id]
 		var b := row.button as Button
@@ -891,8 +951,13 @@ func _build_dev_menu(root: Control) -> void:
 	top.add_child(version)
 
 	dev.add_child(_heading("Gameplay"))
+	var sliders := GridContainer.new()
+	sliders.columns = SLIDER_COLUMNS
+	sliders.add_theme_constant_override("h_separation", 18)
+	sliders.add_theme_constant_override("v_separation", 2)
+	dev.add_child(sliders)
 	for s in SETTING_SLIDERS:
-		dev.add_child(_setting_row(s))
+		sliders.add_child(_setting_row(s))
 	var files := HBoxContainer.new()
 	dev.add_child(files)
 	var save := _button("Save sliders as simple human readable .txt file")
@@ -912,6 +977,10 @@ func _build_dev_menu(root: Control) -> void:
 	spells.tooltip_text = "Researches every spell at once."
 	spells.pressed.connect(func() -> void: spells_requested.emit())
 	cheats.add_child(spells)
+	var advance := _button("Advance time")
+	advance.tooltip_text = "Five minutes go by at once"
+	advance.pressed.connect(func() -> void: time_advance_requested.emit())
+	cheats.add_child(advance)
 
 	dev.add_child(_heading("Terrain tools"))
 	var sculpt := HBoxContainer.new()
@@ -975,14 +1044,14 @@ func _setting_row(s: Array) -> Control:
 	var key: String = s[0]
 	var row := HBoxContainer.new()
 	var label := Label.new()
-	label.custom_minimum_size.x = 230
+	label.custom_minimum_size.x = 215
 	label.add_theme_font_size_override("font_size", 12)
 	row.add_child(label)
 	var slider := HSlider.new()
 	slider.min_value = s[2]
 	slider.max_value = s[3]
 	slider.step = s[4]
-	slider.custom_minimum_size = Vector2(150, 20)
+	slider.custom_minimum_size = Vector2(120, 20)
 	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slider.focus_mode = Control.FOCUS_NONE
 	row.add_child(slider)
@@ -1040,6 +1109,19 @@ static func _number(value: float) -> String:
 
 # --- Updates from PlayMode ----------------------------------------------------
 
+## Shows `text` in a little box beside the mouse pointer ("" hides it).
+func set_hover_tip(text: String) -> void:
+	_tip_panel.visible = text != ""
+	if text == "":
+		return
+	if _tip.text != text:
+		_tip.text = text
+		_tip_panel.reset_size()
+	var at := get_viewport().get_mouse_position() + Vector2(18, 18)
+	var room := get_viewport().get_visible_rect().size - _tip_panel.size - Vector2(4, 4)
+	_tip_panel.position = Vector2(minf(at.x, room.x), minf(at.y, room.y))
+
+
 func set_hint(text: String) -> void:
 	_hint.text = text
 
@@ -1054,23 +1136,22 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 		var label: Label = _resource_labels[res]
 		label.text = str(village.amount(res))
 		if village.capacity(res) < INF:
-			label.tooltip_text = "%s: %d of %d the village can store" % [res.capitalize(), village.amount(res), roundi(village.capacity(res))]
+			label.tooltip_text = "%s: %d / %d" % [res.capitalize(), village.amount(res), roundi(village.capacity(res))]
 		var change := village.last_minute(res)
 		(_rate_labels[res] as Label).text = ("+%d" % change) if change >= 0 else str(change)
+	# (Bones only show the total.)
+	(_rate_labels.bones as Label).text = ""
 	if village.blood_active():
-		_resource_labels.magicko.text += " x2"
+		_resource_labels.magicko.text += " x%s" % _number(village.blood_boost())
 	var people: Label = _resource_labels.people
 	people.text = "%d/%d" % [village.population(), village.housing()]
 	(people.get_child(0) as ProgressBar).value = village.birth_share()
 	_update_jobs(village)
 	_clock.text = clock
-	var warning := ""
-	if village.founded:
-		# (Running out of food is said over the Storehouse: PlayerVillage._eat().)
-		if village.population() >= village.housing():
-			warning = "No room for more villagers: build a %s" % BuildingCatalog.role_name("home")
-	_warning.text = warning
-	_warning.visible = warning != ""
+	# (No warnings in the village panel: running out of food is said over
+	# the Storehouse, PlayerVillage._eat(), and the people count shows when
+	# there is no room.)
+	_warning.visible = false
 
 
 func _update_jobs(village: PlayerVillage) -> void:
@@ -1088,9 +1169,7 @@ func _update_jobs(village: PlayerVillage) -> void:
 		# most the buildings allow (0 without one).
 		var asked := maxi(want, village.count(role) + village.training_progress(role).size())
 		(w.count as Label).text = "%d/%d" % [asked, top]
-		(w.count as Label).tooltip_text = "%d trained, %d in training, of the %d your %s buildings allow. + trains one more, while %s free to train." % [
-			village.count(role), maxi(0, asked - village.count(role)), top, BuildingCatalog.role_name(ROLES[role][1]),
-			"a wizard is" if role == "necromancer" else "an unassigned worker is"]
+		(w.count as Label).tooltip_text = "Trained or training / most"
 		# Each shows once there is a building to train it (archers: once
 		# bows are researched too).
 		var known := top > 0 or village.count(role) > 0

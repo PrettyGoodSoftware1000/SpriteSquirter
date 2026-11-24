@@ -28,7 +28,7 @@ extends Node3D
 ## Homes when one is on their way (State.CROSS, see RopeBridge), and
 ## goblins take the "build" job on their own buildings (see GoblinRaids).
 
-enum State { IDLE, WALK, FLEE, BURNING, DEAD, JOB, FIGHT, HELD, RAISE, CROSS }
+enum State { IDLE, WALK, FLEE, BURNING, DEAD, JOB, FIGHT, HELD, RAISE, CROSS, POST }
 
 const LOOKS := 14
 const GROW_SECONDS := 60.0
@@ -83,6 +83,16 @@ static var OGRE_DAMAGE := 3.0
 const RAISE_REACH := 7.0
 ## How long the dead lie where they fell before they sink away.
 const CORPSE_SECONDS := 40.0
+## Getting stuck (see _watch_stuck()): how long trying to walk without
+## getting anywhere before it tries to get itself out, and before it is
+## reported; and how long a target it could not reach is left alone.
+## Archer posts: the most archers on one treehouse or rope bridge, and how
+## far an archer looks for one.
+const POST_ARCHERS := 3
+const POST_REACH := 80.0
+const UNSTICK_SECONDS := 5.0
+const STUCK_SECONDS := 15.0
+const BLOCKED_SECONDS := 60.0
 
 ## The detailed meshes switch on within Game.settings.villager_detail
 ## metres of the camera, and off again this much farther away. At
@@ -106,6 +116,8 @@ const GOBLIN_EYE := Color(0.98, 0.9, 0.3)
 static var GOBLIN_HEALTH := 30.0
 static var GOBLIN_DAMAGE := 6.0
 static var GOBLIN_ATTACK_SECONDS := 1.0
+## How far a goblin archer shoots (Balance "goblin_archer_range").
+static var GOBLIN_ARCHER_RANGE := 20.0
 
 static var _looks: Array[Dictionary] = []
 static var _goblin_looks: Array[Dictionary] = []
@@ -260,6 +272,24 @@ var _raid_i := 0
 ## may next take one.
 var _route := PackedVector3Array()
 var _route_i := 0
+## Getting stuck: when it last tried to walk (Game.now), where it was when
+## it last got anywhere, how long it has tried since without getting
+## anywhere, and whether it has tried to get itself out yet.
+## An archer's post (see _update_post()): the treehouse or rope bridge it
+## stands on, how far it has got (0 walking to the ladder, 1 climbing, 2 up
+## there), where on it it is and is going (an angle round a treehouse's
+## deck, or how far along a bridge), and how long it stays put.
+var post: Destructible
+var _post_stage := 0
+var _post_at := 0.0
+var _post_aim := 0.0
+var _post_wait := 0.0
+var _post_cool := 0.0
+var _tried_at := -INF
+var _stuck_from := Vector3.INF
+var _stuck_for := 0.0
+var _unstick_tried := false
+var _stuck_label: Label3D
 var _bridge: RopeBridge
 var _cross_time := 0.0
 var _cross_cool := 0.0
@@ -285,6 +315,7 @@ static func apply_balance() -> void:
 	GOBLIN_ATTACK_SECONDS = Balance.num("goblin_attack_seconds")
 	OGRE_HEALTH = Balance.num("ogre_health") / GOBLIN_HEALTH
 	OGRE_DAMAGE = Balance.num("ogre_damage") / GOBLIN_DAMAGE
+	GOBLIN_ARCHER_RANGE = Balance.num("goblin_archer_range")
 
 
 func _ready() -> void:
@@ -1322,6 +1353,8 @@ func _process(delta: float) -> void:
 		return
 	if child:
 		_grow(delta)
+	if owned and not skeleton:
+		_watch_stuck(delta)
 	if _hit_flash > 0.0:
 		_hit_flash -= delta
 		if _hit_flash <= 0.0:
@@ -1365,6 +1398,8 @@ func _process(delta: float) -> void:
 			_update_raise(delta)
 		State.CROSS:
 			_update_cross(delta)
+		State.POST:
+			_update_post(delta)
 		State.WALK:
 			var pace := 2.6 if raiding else (1.8 if goblin else 1.3)
 			if ogre:
@@ -1399,7 +1434,7 @@ func _process(delta: float) -> void:
 				_die(true)
 	if state == State.DEAD:
 		return
-	if state == State.CROSS and _route_i > 0:
+	if (state == State.CROSS and _route_i > 0) or (state == State.POST and _post_stage >= 1):
 		# Up a ladder or out on a bridge: not on the ground.
 		_animate(delta)
 		return
@@ -1585,6 +1620,58 @@ func clear_job() -> void:
 		_timer = randf_range(0.3, 1.0)
 
 
+## Gives up on the job's target for now: nobody is sent to it again for
+## BLOCKED_SECONDS (PlayerVillage skips it), and the village finds this one
+## something else to do.
+func _give_up_on_target() -> void:
+	if is_instance_valid(job_target) and not job_target is ConstructionSite and not job_target is PlayerVillage:
+		job_target.set_meta("blocked_until", Game.now + BLOCKED_SECONDS)
+	clear_job()
+
+
+## Keeps an eye on a villager of the village that is trying to walk but
+## getting nowhere. After UNSTICK_SECONDS it tries to get itself out (a
+## fresh route, a step to one side, another job); after STUCK_SECONDS it
+## is reported (PlayerVillage.report_stuck(): a message, a few times a game)
+## and marked "Stuck" until it moves.
+func _watch_stuck(delta: float) -> void:
+	var trying := Game.now - _tried_at <= delta + 0.05 and (state == State.JOB or state == State.WALK or state == State.FIGHT or state == State.FLEE)
+	if not trying or _stuck_from == Vector3.INF or _flat_to(_stuck_from) > 1.5:
+		_stuck_from = global_position
+		_stuck_for = 0.0
+		_unstick_tried = false
+		if _stuck_label != null:
+			_stuck_label.queue_free()
+			_stuck_label = null
+		return
+	_stuck_for += delta
+	if _stuck_for >= UNSTICK_SECONDS and not _unstick_tried:
+		_unstick_tried = true
+		_path_until = 0.0
+		_path_next = 0.0
+		var a := randf() * TAU
+		_shove = Vector3(cos(a), 0.0, sin(a)) * 3.0
+		if state == State.JOB and job != "" and job != "train" and job != "tryst" and not _delivering:
+			_give_up_on_target()
+		elif state == State.WALK and not raiding:
+			state = State.IDLE
+			_timer = 0.2
+	if _stuck_for >= STUCK_SECONDS and _stuck_label == null:
+		_stuck_label = Label3D.new()
+		_stuck_label.text = "Stuck"
+		_stuck_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_stuck_label.no_depth_test = true
+		_stuck_label.fixed_size = true
+		_stuck_label.pixel_size = 0.0011
+		_stuck_label.font_size = 22
+		_stuck_label.outline_size = 8
+		_stuck_label.modulate = Color(1.0, 0.5, 0.4)
+		_stuck_label.position = Vector3.UP * 2.4
+		add_child(_stuck_label)
+		if is_instance_valid(Game.village):
+			Game.village.report_stuck(self)
+
+
 ## True while the villager is at its job and working.
 func is_working() -> bool:
 	return state == State.JOB and _working
@@ -1594,7 +1681,9 @@ func _update_job(delta: float) -> void:
 	if _delivering:
 		if _move_towards(_drop_pos, 1.7 * _speed_scale, delta):
 			_unload()
-			if job == "":
+			# An unassigned worker home with a load picks its next work
+			# afresh: whatever the village has least of.
+			if job == "" or (owned and not goblin and pin == "" and job in ["lumber", "stone", "food", "farm"]):
 				clear_job()
 		return
 	if job == "":
@@ -1620,8 +1709,9 @@ func _update_job(delta: float) -> void:
 						job_pos = site.work_spot(randi() % 8, 8)
 						return
 				else:
-					# Blocked by water or the island's edge: let the village pick another job.
-					clear_job()
+					# Blocked by water or the island's edge: let the village
+					# pick another job (and not give it this one again soon).
+					_give_up_on_target()
 					return
 			_working = true
 			_farm_timer = randf_range(3.0, 6.0)
@@ -1887,6 +1977,177 @@ func _crumble() -> void:
 	_timer = CORPSE_SECONDS - 5.0
 
 
+# --- Archer posts -------------------------------------------------------------------
+
+## True while it stands up on a treehouse or a rope bridge.
+func on_post() -> bool:
+	return state == State.POST and _post_stage >= 2
+
+
+## True for a building an archer can stand on: a treehouse (any building
+## with a deck) or a rope bridge, standing.
+static func is_post(node: Variant) -> bool:
+	if node == null or not is_instance_valid(node) or not node is Destructible:
+		return false
+	var b := node as Destructible
+	if b.destroyed:
+		return false
+	if b is RopeBridge:
+		return (b as RopeBridge).usable()
+	return b.has_meta("deck_h") and b.is_in_group("player_buildings")
+
+
+## Out of battle, an archer goes to the nearest post with room on it.
+## True if it set off for one.
+func _find_post() -> bool:
+	if Game.now < _post_cool:
+		return false
+	_post_cool = Game.now + randf_range(4.0, 8.0)
+	var taken := {}
+	for node in get_tree().get_nodes_in_group("archers"):
+		var a := node as Villager
+		if a != self and a.state == State.POST and is_instance_valid(a.post):
+			taken[a.post] = taken.get(a.post, 0) + 1
+	var best: Destructible = null
+	var best_d := POST_REACH
+	for group: String in ["player_buildings", "bridges"]:
+		for node in get_tree().get_nodes_in_group(group):
+			var b := node as Destructible
+			if not is_post(b) or taken.get(b, 0) >= POST_ARCHERS:
+				continue
+			var d := _flat_to(b.global_position)
+			if d < best_d:
+				best_d = d
+				best = b
+	if best == null:
+		return false
+	post = best
+	_post_stage = 0
+	_foe = null
+	state = State.POST
+	return true
+
+
+## The treehouse whose ladder leads up to the post.
+func _post_home() -> Destructible:
+	return (post as RopeBridge).a if post is RopeBridge else post
+
+
+## A place on the post: round a treehouse's deck at angle `s`, or `s` of
+## the way along a bridge.
+func _post_point(s: float) -> Vector3:
+	if post is RopeBridge:
+		return (post as RopeBridge).point_at(s) + Vector3.UP * 0.06
+	var r: float = post.get_meta("deck_r", 3.5) - 0.7
+	return post.global_position + Vector3(sin(s) * r, post.get_meta("deck_h", 4.7), cos(s) * r)
+
+
+func _update_post(delta: float) -> void:
+	_attack_timer = maxf(0.0, _attack_timer - delta)
+	if not is_post(post):
+		if _post_stage >= 1:
+			# Its post has come down, and so does the archer.
+			_die(false)
+		else:
+			_leave_post()
+		return
+	var home_b := _post_home()
+	match _post_stage:
+		0:
+			var foot := RopeBridge.ladder_foot(home_b)
+			if _move_towards(foot, 1.7 * _speed_scale, delta):
+				if _flat_to(foot) > 1.5:
+					_leave_post()
+				else:
+					_post_stage = 1
+			return
+		1:
+			var top := RopeBridge.ladder_top(home_b)
+			var to := top - global_position
+			var step := 1.4 * delta
+			if to.length() <= step:
+				global_position = top
+				_post_stage = 2
+				_post_at = 0.08 if post is RopeBridge else post.rotation.y
+				_post_aim = randf_range(0.15, 0.85) if post is RopeBridge else _post_at + randf_range(-1.2, 1.2)
+				_post_wait = 0.0
+			else:
+				global_position += to / to.length() * step
+			_moving = true
+			return
+	# Up on the post: shoot at whatever comes in range, and stroll about
+	# along it the rest of the time.
+	if is_instance_valid(_foe) and _foe_ok():
+		var to_foe := _foe.global_position - global_position
+		to_foe.y = 0.0
+		if to_foe.length() <= shot_range():
+			rotation.y = lerp_angle(rotation.y, atan2(to_foe.x, to_foe.z), minf(1.0, delta * 10.0))
+			_in_reach = true
+			if _attack_timer <= 0.0:
+				_attack_timer = ARROW_SECONDS
+				var arrow := Arrow.new()
+				Game.world_root.add_child(arrow)
+				arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to_foe.normalized() * 0.5, _foe, self, ARROW_DAMAGE)
+			return
+	_in_reach = false
+	var span := (post as RopeBridge).length if post is RopeBridge else maxf(post.get_meta("deck_r", 3.5) - 0.7, 0.5)
+	if is_equal_approx(_post_at, _post_aim):
+		_post_wait -= delta
+		if _post_wait <= 0.0:
+			_post_wait = randf_range(3.0, 8.0)
+			_post_aim = randf_range(0.1, 0.9) if post is RopeBridge else _post_at + randf_range(-1.5, 1.5)
+		global_position = _post_point(_post_at)
+		return
+	var before := _post_point(_post_at)
+	_post_at = move_toward(_post_at, _post_aim, 1.1 * _speed_scale * delta / span)
+	var now := _post_point(_post_at)
+	global_position = now
+	var flat := Vector2(now.x - before.x, now.z - before.z)
+	if flat.length() > 0.001:
+		rotation.y = lerp_angle(rotation.y, atan2(flat.x, flat.y), minf(1.0, delta * 8.0))
+	_moving = true
+
+
+## On a post, every so often: picks the nearest enemy in range to shoot at.
+func _post_think() -> void:
+	if _post_stage < 2:
+		return
+	if is_instance_valid(_foe) and _foe_ok() and _flat_to(_foe.global_position) <= shot_range():
+		return
+	_foe = null
+	var reach := shot_range()
+	var bat := _nearest_bat(reach)
+	if bat != null:
+		_foe = bat
+		return
+	var best_d := reach
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g == null or g.charmed() or not g.is_alive() or not (g.raiding or g.threatens_village()):
+			continue
+		var d := _flat_to(g.global_position)
+		if d < best_d:
+			best_d = d
+			_foe = g
+	var fiend := _fiend()
+	if fiend != null and _flat_to(fiend.global_position) - 2.0 * fiend.size < best_d:
+		_foe = fiend
+
+
+## Comes down from (or gives up going to) its post, to the foot of the ladder.
+func _leave_post() -> void:
+	if _post_stage >= 1 and is_instance_valid(post) and is_instance_valid(_post_home()):
+		var foot := RopeBridge.ladder_foot(_post_home())
+		global_position = foot
+	post = null
+	_post_stage = 0
+	_foe = null
+	_post_cool = Game.now + randf_range(10.0, 20.0)
+	if state == State.POST:
+		state = State.IDLE
+		_timer = 0.5
+
+
 # --- Rope bridges -------------------------------------------------------------------
 
 ## Sets off over a rope bridge if one lies more or less on the way to
@@ -1963,6 +2224,22 @@ func sharpen() -> void:
 		damage = ATTACK_DAMAGE * SOLDIER_DAMAGE * Balance.num("sharper_swords_bonus")
 
 
+## A goblin that crawls out of its cave with a bow (GoblinRaids.spawn_at):
+## it shoots from afar (Balance "goblin_archer_range"), at the flying
+## creature and at archers on their posts too, with its own health, arrows
+## and pace ("goblin_archer_health", "goblin_archer_arrow_damage",
+## "goblin_archer_arrow_seconds").
+func become_goblin_archer() -> void:
+	if not goblin or ogre or archer or state == State.DEAD:
+		return
+	archer = true
+	add_to_group("goblin_archers")
+	max_hp = Balance.num("goblin_archer_health")
+	hp = max_hp
+	damage = Balance.num("goblin_archer_arrow_damage")
+	_hold("bow", 1, Vector3(0.0, -0.55, 0.0))
+
+
 ## Trained at a Town guard once the village has bows: a green hood, a
 ## quiver and a longbow.
 func become_archer(post: Vector3) -> void:
@@ -2025,6 +2302,8 @@ func become_worker() -> void:
 	for g in _gear_nodes:
 		g.queue_free()
 	_gear_nodes.clear()
+	if state == State.POST:
+		_leave_post()
 	soldier = false
 	wizard = false
 	archer = false
@@ -2101,12 +2380,14 @@ func _think() -> void:
 	if goblin:
 		if not raiding or (state == State.FIGHT and _foe_ok() and (_foe is Villager or _foe is Creature)):
 			return
-		var victim := _nearest_villager(AGGRO)
+		# (A goblin archer shoots from afar, the flying creature too.)
+		var sight := GOBLIN_ARCHER_RANGE if archer else AGGRO
+		var victim := _nearest_villager(sight)
 		# The creature is fair game when it is close, unless a villager is closer.
 		var beast := Game.creature
-		if is_instance_valid(beast) and not beast.knocked_out and not beast.is_flying():
+		if is_instance_valid(beast) and not beast.knocked_out and (archer or not beast.is_flying()):
 			var d := _flat_to(beast.global_position)
-			if d < 4.0 + 5.0 * beast.size and (victim == null or d < _flat_to(victim.global_position)):
+			if d < (sight if archer else 4.0) + 5.0 * beast.size and (victim == null or d < _flat_to(victim.global_position)):
 				_engage(beast)
 				return
 		if victim:
@@ -2116,6 +2397,13 @@ func _think() -> void:
 			if building:
 				_engage(building)
 		return
+	# Archers take up posts on treehouses and rope bridges, and shoot from there.
+	if owned and archer and not fey_archer:
+		if state == State.POST:
+			_post_think()
+			return
+		if (state == State.IDLE or state == State.WALK) and _find_post():
+			return
 	# Anyone who can shoot always goes for a giant bat first.
 	if owned and (archer or wizard) and not (is_instance_valid(_foe) and _foe is GiantBat and _foe_ok()):
 		var bat := _nearest_bat(BAT_SIGHT)
@@ -2200,8 +2488,9 @@ func _nearest_villager(reach: float) -> Villager:
 	var best_d := reach
 	for node in get_tree().get_nodes_in_group("villagers"):
 		var v := node as Villager
-		# (A goblin's victims include goblins that have been charmed.)
-		if (v.goblin and not v.charmed()) or v.state == State.DEAD:
+		# (A goblin's victims include goblins that have been charmed. Archers
+		# up on their posts are out of reach of all but other archers.)
+		if (v.goblin and not v.charmed()) or v.state == State.DEAD or (v.on_post() and not archer):
 			continue
 		var d := _flat_to(v.global_position)
 		if d < best_d:
@@ -2244,7 +2533,7 @@ func _foe_ok() -> bool:
 		return (_foe as GiantBat).is_alive()
 	var v := _foe as Villager
 	if v:
-		if v.state == State.DEAD or v.state == State.HELD:
+		if v.state == State.DEAD or v.state == State.HELD or (v.on_post() and not archer):
 			return false
 		if goblin:
 			# Goblins fight charmed goblins, and charmed goblins fight goblins.
@@ -2256,7 +2545,7 @@ func _foe_ok() -> bool:
 	if beast:
 		if beast.hostile:
 			return owned and not beast.knocked_out and beast.is_threat()
-		return raiding and not beast.knocked_out and not beast.is_flying()
+		return raiding and not beast.knocked_out and (archer or not beast.is_flying())
 	var b := _foe as Destructible
 	return b != null and not b.destroyed
 
@@ -2300,18 +2589,33 @@ func _update_fight(delta: float) -> void:
 			(_foe as Villager).take_hit(damage, self)
 
 
-## Archers stand off and shoot.
+## Archers stand off and shoot (goblin archers too).
 func _shoot_at(foe: Node3D, to: Vector3, delta: float) -> void:
-	_in_reach = to.length() <= ARCHER_RANGE
+	_in_reach = to.length() <= shot_range()
 	if not _in_reach:
 		_move_towards(foe.global_position, 2.6 * _speed_scale, delta)
 		return
 	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
 	if _attack_timer <= 0.0:
+		if goblin:
+			_attack_timer = Balance.num("goblin_archer_arrow_seconds")
+			var shot := Arrow.new()
+			Game.world_root.add_child(shot)
+			shot.launch(global_position + Vector3.UP * 1.1 * scale.y + to.normalized() * 0.5, foe, self, damage)
+			return
 		_attack_timer = ARROW_SECONDS / (Balance.num("fey_archer_shot_speed") if fey_archer else 1.0)
 		var arrow := Arrow.new()
 		Game.world_root.add_child(arrow)
 		arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to.normalized() * 0.5, foe, self, damage if skeleton else ARROW_DAMAGE)
+
+
+## How far an archer shoots: ARCHER_RANGE, or GOBLIN_ARCHER_RANGE for a
+## goblin archer.
+func shot_range() -> float:
+	if goblin:
+		return GOBLIN_ARCHER_RANGE
+	# (High on a post: Balance "archer_post_range" as far.)
+	return ARCHER_RANGE * (Balance.num("archer_post_range") if on_post() else 1.0)
 
 
 ## Wizards keep their distance and throw firebolts.
@@ -2330,9 +2634,12 @@ func _cast_at(foe: Node3D, to: Vector3, delta: float) -> void:
 		bolt.launch(global_position + Vector3.UP * 1.9 * scale.y + to.normalized() * 0.4, foe, self, power())
 
 
-## Loses health to a blow. Fighters hit back.
+## Loses health to a blow. Fighters hit back. Up on a post, nothing that
+## fights hand to hand (or a giant) can reach it: only arrows and spells.
 func take_hit(amount: float, from: Node3D) -> void:
 	if state == State.DEAD or state == State.HELD:
+		return
+	if on_post() and (from is Creature or (from is Villager and not (from as Villager).archer)):
 		return
 	hp -= amount
 	_hit_flash = 0.15
@@ -2341,6 +2648,11 @@ func take_hit(amount: float, from: Node3D) -> void:
 		_die(false)
 		return
 	var attacker := from as Villager
+	if attacker and state == State.POST:
+		# Up on a post: it shoots back from there.
+		if _post_stage >= 2:
+			_foe = attacker
+		return
 	if attacker and state != State.FIGHT and state != State.BURNING and state != State.CROSS and can_fight():
 		if goblin and not raiding:
 			start_raid(global_position)
@@ -2376,6 +2688,7 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 	if Game.now < snared_until or Game.now < _stagger_until:
 		# Held fast by roots, or staggered by a shove.
 		return false
+	_tried_at = Game.now
 	if Game.now < slowed_until:
 		# Wading through roots.
 		speed *= SLOWED_SPEED
@@ -2393,7 +2706,7 @@ func _move_towards(goal: Vector3, speed: float, delta: float) -> bool:
 		speed *= _slope_speed(dir)
 	var step := dir * minf(speed * delta, dist)
 	if not fey:
-		step = _round_walls(step, goal)
+		step = _round_trunks(_round_walls(step, goal), goal)
 	if not _open(global_position + step) or (not fey and _is_cliff(dir)):
 		_path_until = 0.0
 		if not raiding:
@@ -2438,6 +2751,31 @@ func _round_walls(step: Vector3, goal: Vector3) -> Vector3:
 		along = -along
 	# A little outwards too, so as not to scrape along the wall.
 	return (along + out.normalized() * 0.15).normalized() * length
+
+
+## `step`, unless it would walk into a tree trunk: then a step round it,
+## on the side it was heading for. (Not round the tree it is going to.)
+func _round_trunks(step: Vector3, goal: Vector3) -> Vector3:
+	var grid := Game.path_grid()
+	var next := global_position + step
+	var trunk := grid.trunk_at(next, 0.35)
+	if trunk == null:
+		return step
+	var c := trunk.global_position
+	var reach := PathGrid.trunk_radius(trunk) + 0.35
+	if Vector2(goal.x - c.x, goal.z - c.z).length() < reach + 1.5:
+		return step
+	var out := Vector3(global_position.x - c.x, 0.0, global_position.z - c.z)
+	var length := step.length()
+	if out.length() < 0.05:
+		out = Vector3(randf() - 0.5, 0.0, randf() - 0.5)
+	if out.length() < reach:
+		# Inside it already: straight out.
+		return out.normalized() * length
+	var along := Vector3(-out.z, 0.0, out.x).normalized()
+	if along.dot(step) < 0.0:
+		along = -along
+	return (along + out.normalized() * 0.2).normalized() * length
 
 
 ## The next point to make for on the way to `goal`. The route is worked out
@@ -2677,7 +3015,7 @@ func flee(from: Vector3) -> void:
 	if state == State.DEAD or state == State.BURNING or state == State.HELD:
 		return
 	# Raiders, soldiers and anyone in a fight stand their ground.
-	if raiding or soldier or skeleton or state == State.FIGHT or state == State.CROSS:
+	if raiding or soldier or skeleton or state == State.FIGHT or state == State.CROSS or state == State.POST:
 		return
 	_danger = from
 	_working = false

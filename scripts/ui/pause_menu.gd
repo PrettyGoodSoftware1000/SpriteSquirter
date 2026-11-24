@@ -5,6 +5,8 @@ extends CanvasLayer
 ## Resume is pressed. "Show controls" opens a window listing the keys.
 
 signal menu_requested
+signal save_requested
+signal load_requested
 
 var CONTROLS := [
 	["W A S D", "Move the camera"],
@@ -14,7 +16,7 @@ var CONTROLS := [
 	["Space", "Find your creature"],
 	["Left or right click", "Send your creature there"],
 	["Double-click the creature's bars", "Find your creature"],
-	["Click the creature's portrait", "Pay the animus for it to grow on (it sparkles when it can)"],
+	["Click the creature's portrait", "Pay the animus for it to grow on, if growing costs animus (it sparkles when it can)"],
 	["1 - 0, or the numpad (or a spell's square)", "Take the spell in that place on the spell bar in hand; click to cast it, press again to put it away"],
 	["Ctrl + 1 - 0", "The spell bar's second row (add rows with its +)"],
 	["Shift + 1 - 0", "The spell bar's third row"],
@@ -22,7 +24,8 @@ var CONTROLS := [
 	["Shift + click", "Cast and keep the spell in hand"],
 	["Bless / Condemn", "Shows what your creature last did; press the key again (or click) to bless or condemn it"],
 	["B or Backspace (or the hammer)", "Build menu"],
-	["Click the %s" % BuildingCatalog.role_name("shrine"), "Research spells"],
+	["Click the %s" % BuildingCatalog.role_name("wizard"), "Research spells"],
+	["Click the %s" % BuildingCatalog.role_name("necro"), "The Blood Sacrifice upgrade"],
 	["Click the %s (or U)" % BuildingCatalog.role_name("smith"), "Research"],
 	["R / Shift+R, T", "Turn a building's outline, try another look"],
 	["Shift + click", "Keep placing"],
@@ -66,6 +69,16 @@ func _ready() -> void:
 	controls.focus_mode = Control.FOCUS_NONE
 	controls.pressed.connect(func() -> void: _controls.visible = true)
 	box.add_child(controls)
+	var save := Button.new()
+	save.text = "Save game"
+	save.focus_mode = Control.FOCUS_NONE
+	save.pressed.connect(func() -> void: save_requested.emit())
+	box.add_child(save)
+	var load := Button.new()
+	load.text = "Load game"
+	load.focus_mode = Control.FOCUS_NONE
+	load.pressed.connect(func() -> void: load_requested.emit())
+	box.add_child(load)
 	var menu := Button.new()
 	menu.text = "Main menu"
 	menu.focus_mode = Control.FOCUS_NONE

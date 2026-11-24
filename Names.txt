@@ -17,10 +17,10 @@
 #   Storehouse         villagers carry what they gather to it
 #   Town guard         trains warriors, and archers once bows are researched
 #   Blacksmith         wheelbarrows and research
-#   Wizardry tower     trains wizards
+#   Wizardry tower     trains wizards; spells (and Overcast) are researched there
 #   Granary            stores more food
-#   Shrine             makes animus; spells are researched and the creature revived there
-#   Necromancer tower  turns wizards into necromancers
+#   Shrine             makes animus; the creature is revived there
+#   Necromancer tower  turns wizards into necromancers; the Blood Sacrifice upgrade
 #   Decoration         can be built, but does nothing yet
 #
 # Leave the gameplay effect empty to keep a building out of the build menu.
@@ -42,3 +42,18 @@ Skull tower         = Necromancer tower = Tower of Bone
 Windmill            = Granary           = Windmill
 Crystal tower       = Decoration        = Ain't doing nothing
 Tall house          = Town guard        = Guard House
+
+# What the build menu says each gameplay effect does. Each line is
+#   <Gameplay effect> description = text
+# Write \n where a new line should start. {housing} is filled in with how
+# many villagers it has room for.
+Home description              = Room for {housing} villagers
+Cottage description           = Room for {housing} villagers
+Storehouse description        = Stores goods, houses {housing}
+Granary description           = Stores food
+Shrine description            = Makes animus\nRevives the creature
+Town guard description        = Trains warriors
+Blacksmith description        = Wheelbarrows; research
+Wizardry tower description    = Trains wizards\nResearches spells
+Necromancer tower description = Turns wizards into necromancers\nBlood Sacrifice upgrade
+Decoration description        = No use yet

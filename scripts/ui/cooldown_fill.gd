@@ -1,8 +1,9 @@
 class_name CooldownFill
 extends Control
-## Over a spell button while the spell cools down: a see-through band that
-## rises from the bottom of the icon and reaches the top as the spell is
-## ready again.
+## Over a spell button while the spell cools down (with or without
+## Overcast): the part still cooling is dark, and the cooled part rises from
+## the bottom of the icon, its top edge a bright line, until it reaches the
+## top as the spell is ready again.
 
 ## 0..1: how much of the cooldown is still to go (0: ready).
 var left := 0.0
@@ -23,8 +24,9 @@ func set_left(share: float) -> void:
 func _draw() -> void:
 	if left <= 0.0:
 		return
-	# The whole icon dims a little; the band of what has cooled rises over it.
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.05, 0.12, 0.35))
 	var risen := size.y * (1.0 - left)
-	draw_rect(Rect2(0.0, size.y - risen, size.x, risen), Color(0.75, 0.85, 1.0, 0.35))
-	draw_line(Vector2(0.0, size.y - risen), Vector2(size.x, size.y - risen), Color(1.0, 1.0, 1.0, 0.8), 2.0)
+	var edge := size.y - risen
+	# Still cooling: dark. Cooled: a light wash rising from the bottom.
+	draw_rect(Rect2(0.0, 0.0, size.x, edge), Color(0.02, 0.02, 0.06, 0.62))
+	draw_rect(Rect2(0.0, edge, size.x, risen), Color(0.7, 0.82, 1.0, 0.22))
+	draw_line(Vector2(0.0, edge), Vector2(size.x, edge), Color(1.0, 1.0, 1.0, 0.95), 2.0)

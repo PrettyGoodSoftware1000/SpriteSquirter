@@ -37,15 +37,20 @@ extends Node
 ## Research.ITEMS: sharper swords, bows (archers: ARCHERS_PER_GUARD per Town
 ## guard), wheelbarrows (bigger loads), and three tiers of tools for food,
 ## stone and lumber (Balance "tool_tier_bonus" faster each). A Wizardry
-## tower researches Overcast.
+## tower researches the spells and Overcast, and a Necromancer tower the
+## Blood Sacrifice upgrade.
+##
+## A Windmill (one or more, standing) adds Balance "windmill_food_rate" to
+## the food rate per worker (see food_rate()).
 ##
 ## Everyone eats: villagers FOOD_PER_VILLAGER a minute, warriors
 ## FOOD_PER_WARRIOR, archers FOOD_PER_ARCHER and wizards FOOD_PER_WIZARD.
 ## The creature eats too: Game.settings.creature_food a minute when full
 ## grown, and in proportion to its size before that (and only Balance
 ## "creature_young_appetite" of that while it is under half grown). With no food, no children
-## are born; after STARVE_AFTER seconds without food, someone starves every
-## STARVE_EVERY seconds until there is food again.
+## are born; after STARVE_AFTER seconds without food, villagers starve,
+## Game.settings.starve_per_minute of them a minute (the dev menu's
+## Starvation deaths), until there is food again.
 
 const RESOURCES := ["lumber", "stone", "food", "bones", "animus", "magicko"]
 const START_RESOURCES := {"lumber": 100.0, "stone": 100.0, "food": 100.0, "bones": 0.0, "animus": 0.0, "magicko": 30.0}
@@ -58,7 +63,6 @@ const DEFEND_RADIUS := 50.0
 const INTRUDER_RADIUS := 25.0
 ## How far workers walk to reach trees and rocks.
 const WORK_REACH := 65.0
-const JOB_SHARE := {"lumber": 0.4, "food": 0.35, "stone": 0.25}
 const MAX_PER_TARGET := 2
 const TREE_WOOD := 30.0
 const BUSH_WOOD := 10.0
@@ -72,8 +76,9 @@ const FOOD_PER_VILLAGER := 1.0
 const FOOD_PER_WARRIOR := 3.0
 const FOOD_PER_WIZARD := 2.0
 const FOOD_PER_ARCHER := 2.0
-const STARVE_AFTER := 60.0
-const STARVE_EVERY := 30.0
+const STARVE_AFTER := 30.0
+## The most times a game "Villager stuck" is said.
+const STUCK_REPORTS := 3
 ## role -> [building role in the catalog, per building]. The training
 ## times come from balancing.txt ("<role>_training_seconds"). Necromancers
 ## are wizards trained on at a Necromancer tower; how many a tower takes
@@ -85,16 +90,18 @@ const ARMY := {
 	"necromancer": ["necro", 2],
 	"fey_archer": ["guard", 0],
 }
-## Blood Sacrifice: how long the magicko boost lasts, how big it is, and
-## how near the click a villager must be.
+## Blood Sacrifice: how long the magicko boost lasts, and how near the
+## click a villager must be. How big the boost is: blood_boost().
 const BLOOD_SECONDS := 30.0
-const BLOOD_BOOST := 2.0
 const BLOOD_REACH := 9.0
 
 signal research_done(id: String)
-## A spell has been researched at the Shrine (see SpellBook).
+## A villager has tried to walk for Villager.STUCK_SECONDS and got nowhere.
+signal villager_stuck(v: Villager)
+## A spell has been researched at a Wizardry tower (see SpellBook).
 signal spell_researched(id: String)
-## Kinky Fey Stuff is done: the fey are about (births twice as fast).
+## Kinky Fey Stuff: the villager and the pixie have gone in, and the fey
+## are about (births twice as fast).
 signal fey_birthing
 ## Bless or Condemn has come with the creature's growth.
 signal spell_unlocked(id: String)
@@ -117,10 +124,11 @@ var fey_until := 0.0
 var _trysts := {}
 ## Finished research: id -> true.
 var researched := {}
-## The research under way at the Blacksmiths ("smith") and the Wizardry
-## towers ("wizard"): each a list of {"id": ..., "t": seconds done}, as
-## many at once as there are buildings of that kind.
-var research_jobs := {"smith": [], "wizard": []}
+## The research under way at the Blacksmiths ("smith"), the Wizardry
+## towers ("wizard") and the Necromancer towers ("necro"): each a list of
+## {"id": ..., "t": seconds done}, as many at once as there are buildings
+## of that kind.
+var research_jobs := {"smith": [], "wizard": [], "necro": []}
 ## Spells researched at the Shrine: id -> true.
 var spells_known := {}
 ## The spell bar: each slot's spell id, or "" (0-9 the first row, cast with
@@ -128,15 +136,19 @@ var spells_known := {}
 ## Shift). A spell learned goes where the player had it last game
 ## (SpellLayout), or else in the last spot, after the others.
 var spell_slots: Array[String] = []
-## The spells being researched at the Shrines: a list of {"id": ...,
-## "t": seconds done}, one for each Shrine at most.
+## The spells being researched at the Wizardry towers: a list of
+## {"id": ..., "t": seconds done}, one for each tower at most.
 var spell_jobs: Array = []
 ## True once Wheelbarrows are researched: loads three times as big.
 var barrows := false
 ## How many villagers the player has set to each job (Villager.pin): the
 ## lumberjacks, miners, farmers and builders. Everyone else is an
-## unassigned worker, who gathers whatever is most needed (JOB_SHARE) and
-## helps on building sites when the builders are too few.
+## unassigned worker, who helps on building sites when the builders are too
+## few, and otherwise, each time it brings a load home, goes after whatever
+## the village has least of: lumber, stone or food (reaping ripe wheat;
+## only farmers sow). Farmers reap before they sow, every field gets a
+## farmer before any field gets a second, and everyone takes what they
+## gathered to the nearest place that stores it.
 var quota := {"lumber": 0, "stone": 0, "food": 0, "build": 0}
 ## How many workers are on each gathering job (food includes the farmers).
 var gatherers := {"lumber": 0, "stone": 0, "food": 0}
@@ -151,7 +163,7 @@ var _flow := {}
 var _history_timer := 0.0
 ## Seconds with no food, and towards the next death from hunger.
 var hungry_for := 0.0
-## Magicko comes in BLOOD_BOOST times as fast until Game.now passes this.
+## Magicko comes in blood_boost() times as fast until Game.now passes this.
 var blood_until := 0.0
 
 var _assign_timer := 0.0
@@ -161,6 +173,8 @@ var _army_timer := 0.0
 var _plant_due := 0.0
 var _planting := {}
 var _starve_timer := 0.0
+## How many times a villager getting stuck has been said.
+var _stuck_reports := 0
 ## When the out-of-food warning last floated up over the Storehouse.
 var _food_warned_at := -INF
 ## Training building -> {"v": the trainee, "t": seconds trained, "role": ...}
@@ -309,6 +323,15 @@ func free_wizards() -> int:
 	return maxi(0, n - promised)
 
 
+## A villager is stuck (see Villager._watch_stuck()): said at most
+## STUCK_REPORTS times a game.
+func report_stuck(v: Villager) -> void:
+	if _stuck_reports >= STUCK_REPORTS:
+		return
+	_stuck_reports += 1
+	villager_stuck.emit(v)
+
+
 ## Blood Sacrifice cast by the creature: any one of the workers.
 func sacrifice_someone() -> bool:
 	var all := people()
@@ -351,8 +374,17 @@ func blood_active() -> bool:
 	return Game.now < blood_until
 
 
-## Blood Sacrifice: kills the villager of yours nearest to `pos` and doubles
-## the magicko income for BLOOD_SECONDS. False if nobody is near enough.
+## How many times as fast magicko comes in while Blood Sacrifice runs:
+## Balance "blood_sacrifice_boost", or "blood_sacrifice_upgraded_boost"
+## once the Necromancer tower's upgrade is researched.
+func blood_boost() -> float:
+	return Balance.num("blood_sacrifice_upgraded_boost" if has_research("blood_x3") else "blood_sacrifice_boost")
+
+
+## Blood Sacrifice: kills the villager of yours nearest to `pos` and speeds
+## up the magicko income (blood_boost()) for BLOOD_SECONDS. A second one
+## while it runs does not stack: the time starts again, no more. False if
+## nobody is near enough.
 func sacrifice(pos: Vector3) -> bool:
 	var victim: Villager = null
 	var best := BLOOD_REACH
@@ -364,7 +396,7 @@ func sacrifice(pos: Vector3) -> bool:
 	if victim == null:
 		return false
 	victim.sacrifice()
-	blood_until = maxf(blood_until, Game.now) + BLOOD_SECONDS
+	blood_until = Game.now + BLOOD_SECONDS
 	return true
 
 
@@ -533,7 +565,7 @@ func _update_research(delta: float) -> void:
 			research_done.emit(id)
 
 
-# --- Spells researched at the Shrine (the Singing rocks) ------------------------
+# --- Spells researched at the Wizardry tower ------------------------------------
 
 ## True if spell `id` can be cast: it has been researched (or, for Bless
 ## and Condemn, has come with the creature's growth).
@@ -541,19 +573,19 @@ func knows_spell(id: String) -> bool:
 	return spells_known.has(id)
 
 
-## Starts researching spell `id` at a Shrine. Returns why it can't, or
-## "" if it began. One spell for each Shrine at a time, paid for up front.
+## Starts researching spell `id` at a Wizardry tower. Returns why it can't,
+## or "" if it began. One spell for each tower at a time, paid for up front.
 func start_spell_research(id: String) -> String:
 	if knows_spell(id):
 		return "You know that spell already."
 	if not SpellBook.needs_research(id):
 		return "That spell comes as your creature grows."
-	if shrines().is_empty():
-		return "Spells are researched at the %s: build one first." % BuildingCatalog.role_name("shrine")
+	if research_slots("wizard") <= 0:
+		return "Spells are researched at the %s: build one first." % BuildingCatalog.role_name("wizard")
 	if not spell_job(id).is_empty():
 		return "That spell is being researched."
-	if spell_jobs.size() >= shrines().size():
-		return "Every %s is busy: build another to research more spells at once." % BuildingCatalog.role_name("shrine")
+	if spell_jobs.size() >= research_slots("wizard"):
+		return "Every %s is busy: build another to research more spells at once." % BuildingCatalog.role_name("wizard")
 	var cost := spell_research_cost()
 	var short := shortfall(cost)
 	if short != "":
@@ -591,9 +623,9 @@ func spell_research_progress(id: String) -> float:
 	return 0.0
 
 
-## Research goes on at the Shrines, one spell for each that stands.
+## Research goes on at the Wizardry towers, one spell for each that stands.
 func _update_spell_research(delta: float) -> void:
-	var slots := shrines().size()
+	var slots := research_slots("wizard")
 	for job: Dictionary in spell_jobs.duplicate():
 		if slots <= 0:
 			break
@@ -713,8 +745,9 @@ func start_tryst(v: Villager, pixie: Node3D) -> void:
 	_trysts[v] = {"t": 0.0, "pixie": pixie}
 
 
-## At the building: in they go (out of sight); after the time is up out
-## comes the villager, its eyes no longer glowing, and the fey are about.
+## At the building: in they go (out of sight), and at once the fey are
+## about (births come faster for Balance "fey_birth_seconds"); after the
+## tryst is over out comes the villager, its eyes no longer glowing.
 func _tryst(v: Villager, delta: float) -> void:
 	var entry: Dictionary = _trysts.get(v, {})
 	if entry.is_empty():
@@ -724,6 +757,8 @@ func _tryst(v: Villager, delta: float) -> void:
 		v.visible = false
 		if is_instance_valid(entry.pixie):
 			(entry.pixie as Node3D).queue_free()
+		fey_until = Game.now + Balance.num("fey_birth_seconds")
+		fey_birthing.emit()
 	entry.t += delta
 	if entry.t < Balance.num("fey_tryst_seconds"):
 		return
@@ -731,9 +766,7 @@ func _tryst(v: Villager, delta: float) -> void:
 	v.visible = true
 	v.clear_eye_glow()
 	v.clear_job()
-	fey_until = Game.now + Balance.num("fey_birth_seconds")
 	Game.effects.spawn_dust(v.global_position, 0.6)
-	fey_birthing.emit()
 
 
 ## Every spell, researched at once (the dev menu).
@@ -818,6 +851,18 @@ func drop_point(from: Vector3, kind := "") -> Vector3:
 			out = out.normalized() if out.length_squared() > 0.01 else Vector3.RIGHT
 			best = b.global_position + out * (b.footprint + 0.6)
 	return best
+
+
+## Food gathered per worker per minute: the dev menu's food rate, and
+## Balance "windmill_food_rate" more while the village has a Windmill
+## standing (one is enough; more add nothing).
+func food_rate() -> float:
+	var rate: float = Game.settings.food_rate
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		var b := node as Destructible
+		if b != null and not b.destroyed and b.get_meta("kind", "") == "windmill":
+			return rate + Balance.num("windmill_food_rate")
+	return rate
 
 
 func can_afford(cost: Dictionary) -> bool:
@@ -1026,7 +1071,7 @@ func _process(delta: float) -> void:
 	if not founded:
 		return
 	var grown := adults() - wizards()
-	var boost := BLOOD_BOOST if blood_active() else 1.0
+	var boost := blood_boost() if blood_active() else 1.0
 	# (The fey make twice as much: Balance "fey_magicko" times as much.)
 	var fey_extra := fey_adults() * (Balance.num("fey_magicko") - 1.0)
 	give("magicko", ((grown + fey_extra) * Game.settings.magicko_rate + wizards() * WIZARD_MAGICKO) / 60.0 * delta * boost)
@@ -1054,6 +1099,28 @@ func _process(delta: float) -> void:
 	_plan_planting(delta)
 
 
+## The dev menu's Advance time: `seconds` go by at once for births (as
+## many as there is room and food for), children growing up, research and
+## training.
+func advance(seconds: float) -> void:
+	var boost := Balance.num("fey_birth_boost") if Game.now < fey_until else 1.0
+	var every := maxf(Game.settings.birth_seconds, 0.01)
+	birth_progress += seconds * boost
+	var born := 0
+	while birth_progress >= every and population() < housing() and amount("food") > 0 and born < 500:
+		birth_progress -= every
+		_spawn_child()
+		born += 1
+	birth_progress = minf(birth_progress, every)
+	for v in people():
+		if v.child:
+			v._grow(seconds)
+	_update_research(seconds)
+	_update_spell_research(seconds)
+	for b in _training:
+		_training[b].t += seconds
+
+
 func _eat(delta: float) -> void:
 	var eaten := food_upkeep() / 60.0 * delta
 	give("food", -eaten)
@@ -1070,9 +1137,12 @@ func _eat(delta: float) -> void:
 		_float_over_storehouse(Texts.line("out_of_food" if hungry_for < STARVE_AFTER else "starving"))
 	if hungry_for < STARVE_AFTER:
 		return
+	var per_minute: float = Game.settings.get("starve_per_minute", 6.0)
+	if per_minute <= 0.0:
+		return
 	_starve_timer -= delta
 	if _starve_timer <= 0.0:
-		_starve_timer = STARVE_EVERY
+		_starve_timer = 60.0 / per_minute
 		var all := people()
 		if not all.is_empty():
 			all[randi() % all.size()].starve()
@@ -1169,10 +1239,11 @@ func work(v: Villager, delta: float) -> void:
 				Sapling.plant(v.global_position + ahead * 0.9)
 				v.clear_job()
 		"food":
-			v.gather("food", Game.settings.food_rate / 60.0 * delta * tool_bonus("food") * Balance.num("farmer_speed"))
+			v.gather("food", food_rate() / 60.0 * delta * tool_bonus("food") * Balance.num("farmer_speed"))
 		"farm":
 			var field := v.job_target as CropField
-			if field == null or not field.needs_work():
+			# (Only farmers sow.)
+			if field == null or not field.needs_work() or (v.pin != "food" and not field.is_ripe()):
 				v.clear_job()
 			else:
 				var reaped := field.add_work(delta * tool_bonus("food") * Balance.num("farmer_speed"))
@@ -1271,30 +1342,39 @@ func _assign_jobs() -> void:
 			if counts.has(was):
 				counts[was] -= 1
 			counts[v.pin] += 1
-	# Fields that want sowing or reaping come next: farmers move to them
-	# first, then unassigned workers.
+	# The farmers go to the fields: ripe ones first (they reap before they
+	# sow), and every field gets one before any gets a second.
+	var fields: Array[CropField] = []
 	for node in get_tree().get_nodes_in_group("fields"):
 		var field := node as CropField
-		if not field.needs_work():
-			continue
-		var have: int = farmers.get(field, 0)
-		while have < field.wanted_workers():
-			var v := _spare_worker(workers)
-			if v == null:
-				break
-			if counts.has(v.job):
-				counts[v.job] -= 1
-			v.assign_job("farm", field.work_spot(), field)
-			farming += 1
-			have += 1
-	# Unassigned workers share out the gathering by themselves.
+		if field != null and field.needs_work():
+			fields.append(field)
+	fields.sort_custom(func(a: CropField, b: CropField) -> bool: return a.is_ripe() and not b.is_ripe())
+	for pass_k in 2:
+		for field in fields:
+			var want := 1 if pass_k == 0 else field.wanted_workers()
+			var have: int = farmers.get(field, 0)
+			while have < want:
+				var v := _spare_farmer(workers, field, farmers)
+				if v == null:
+					break
+				if counts.has(v.job):
+					counts[v.job] -= 1
+				elif v.job == "farm" and is_instance_valid(v.job_target):
+					farmers[v.job_target] = maxi(0, farmers.get(v.job_target, 1) - 1)
+					per_target[v.job_target] = maxi(0, per_target.get(v.job_target, 1) - 1)
+					farming -= 1
+				v.assign_job("farm", field.work_spot(), field)
+				farming += 1
+				have += 1
+				farmers[field] = have
+				per_target[field] = per_target.get(field, 0) + 1
+	# Unassigned workers go after whatever the village has least of.
+	var kinds: Array = ["lumber", "stone", "food"]
+	kinds.sort_custom(func(a: String, b: String) -> bool: return resources.get(a, 0.0) < resources.get(b, 0.0))
 	for v in workers:
 		if v.job != "" or v.pin != "":
 			continue
-		var kinds: Array = JOB_SHARE.keys()
-		# Most-needed job first.
-		kinds.sort_custom(func(a: String, b: String) -> bool:
-			return JOB_SHARE[a] * workers.size() - counts[a] > JOB_SHARE[b] * workers.size() - counts[b])
 		for kind: String in kinds:
 			if _give_job(v, kind, per_target):
 				counts[kind] += 1
@@ -1322,16 +1402,23 @@ func _next_builder(workers: Array[Villager], at: Vector3, _desperate: bool) -> V
 	return null
 
 
-## A worker that can be moved to a field: a farmer who is foraging, then
-## unassigned workers (idle first, then foragers, then the rest).
-func _spare_worker(workers: Array[Villager]) -> Villager:
+## A farmer that can be moved to `field`: one with nothing to do (or
+## foraging), or, for ripe wheat, one sowing a field that has another
+## farmer on it (reaping comes first). Null if there is none.
+func _spare_farmer(workers: Array[Villager], field: CropField, farmers: Dictionary) -> Villager:
 	for v in workers:
-		if v.pin == "food" and v.job == "food":
+		if v.pin == "food" and (v.job == "" or v.job == "food"):
 			return v
-	for wanted: String in ["", "food", "lumber", "stone"]:
-		for v in workers:
-			if v.pin == "" and v.job == wanted:
-				return v
+	if not field.is_ripe():
+		return null
+	for v in workers:
+		var sowing: CropField = (v.job_target as CropField) if v.job == "farm" else null
+		if v.pin == "food" and sowing != null and sowing != field and not sowing.is_ripe() and farmers.get(sowing, 0) > 1:
+			return v
+	for v in workers:
+		var sowing: CropField = (v.job_target as CropField) if v.job == "farm" else null
+		if v.pin == "food" and sowing != null and sowing != field and not sowing.is_ripe():
+			return v
 	return null
 
 
@@ -1428,22 +1515,24 @@ func _nearest_wizard(to: Vector3) -> Villager:
 func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
 	match kind:
 		"food":
-			# Food comes only from crop fields: sowing or reaping the one
-			# that has the fewest hands on it (nothing while all are growing).
+			# Food comes only from crop fields: ripe wheat first, the field
+			# with the fewest hands on it (then the nearest). Only farmers
+			# sow; nothing while all are growing.
 			var best: CropField = null
-			var fewest := 1 << 30
+			var best_score := INF
 			for node in get_tree().get_nodes_in_group("fields"):
 				var field := node as CropField
-				if field == null or not field.needs_work():
+				if field == null or not field.needs_work() or (not field.is_ripe() and v.pin != "food"):
 					continue
 				var on: int = per_target.get(field, 0)
-				if on < fewest:
-					fewest = on
+				var score := (0.0 if field.is_ripe() else 1.0e6) + on * 1.0e3 + field.global_position.distance_to(v.global_position)
+				if score < best_score:
+					best_score = score
 					best = field
 			if best == null:
 				return false
 			v.assign_job("farm", best.work_spot(), best)
-			per_target[best] = fewest + 1
+			per_target[best] = per_target.get(best, 0) + 1
 			return true
 		"lumber", "stone":
 			var target := _nearest_free(v.global_position, "trees" if kind == "lumber" else "rocks", per_target)
@@ -1472,6 +1561,9 @@ func _nearest_free(from: Vector3, group: String, per_target: Dictionary) -> Node
 			continue
 		var tree := n as Destructible
 		if tree and (tree.burning or tree.destroyed):
+			continue
+		# (Somewhere a villager could not get to lately.)
+		if Game.now < float(n.get_meta("blocked_until", -INF)):
 			continue
 		var score := n.global_position.distance_to(from) + d * 0.5
 		if score < best_d:

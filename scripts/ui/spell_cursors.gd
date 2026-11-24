@@ -20,6 +20,21 @@ static func image(id: String) -> Image:
 	return _made[id]
 
 
+## The same sign in grey: the pointer outside the village's influence,
+## where spells cannot be cast.
+static func grey_image(id: String) -> Image:
+	var key := id + "_grey"
+	if not _made.has(key):
+		var img := (image(id) as Image).duplicate() as Image
+		for y in img.get_height():
+			for x in img.get_width():
+				var c := img.get_pixel(x, y)
+				var v := c.r * 0.3 + c.g * 0.59 + c.b * 0.11
+				img.set_pixel(x, y, Color(v, v, v, c.a))
+		_made[key] = img
+	return _made[key]
+
+
 static func hotspot() -> Vector2:
 	return Vector2(SIZE, SIZE) * 0.5
 

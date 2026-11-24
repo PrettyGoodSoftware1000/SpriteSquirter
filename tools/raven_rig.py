@@ -34,9 +34,11 @@ What it changes from Meshy's rig:
                 to the shoulder, the arm and even the fingers. The +X side
                 is now mirrored onto the -X side, bones and skin weights
                 both (the mesh is symmetric to about a millimetre).
-    Wings       a "wing" bone (no skin of its own) carries both wing chains
-                at the shoulder, so the game can beat the wings without
-                swinging the arms, which hang from the same joint.
+    Wings       a "wing" bone (no skin of its own) at the shoulder carries
+                the wing, so the game can beat the wings without swinging
+                the arms, which hang from the same joint. Each wing is a fan
+                of ten bones (see "Wings" below), which the game opens out
+                wide to fly.
     Legs        the thighs hang from the pelvis (Meshy hung them from the
                 middle of the spine).
 
@@ -382,6 +384,57 @@ for v in me.vertices:
         set_weights(v.index, ws)
 log("finger points", sum(len(members[r]) for r in new_w))
 
+# --- Wings: a fan of bones ---------------------------------------------------------
+# Meshy's outer wing chain ran down the wing's outer edge, so the wing could
+# only swing as one stiff piece. It is replaced by a wing built like a
+# bird's: an upper arm and a forearm along the leading edge to the wrist,
+# three primary feathers fanning from the wrist (two bones each, so their
+# tips can trail a wingbeat) and two secondaries hanging from the arm. The
+# game opens the fan to fly (see creature.gd, "wing_spread"). Meshy's inner
+# chain (the feathers hanging down the back of the arm) stays. Points are
+# (x, z) on the +X wing; each bone lies in the middle of the wing's
+# thickness there.
+OLD_WING = ["wing_outer1_r", "wingtip_r", "wing_outer3_r"]
+WING_POINTS = {
+    "shoulder": None,           # the wing's root (Meshy's wing joint)
+    "elbow": (0.80, 1.28), "wrist": (1.00, 1.05),
+    "prim1": (1.07, 0.55), "prim2": (0.93, 0.20), "prim3": (0.80, 0.20),
+    "sec1": (0.62, 0.62), "sec2": (0.72, 0.50),
+}
+# name: (head, tail, parent, connected); "mid:a:b" is halfway from a to b.
+WING_BONES = [
+    ("wing_arm1", "shoulder", "elbow", "wing", False),
+    ("wing_arm2", "elbow", "wrist", "wing_arm1", True),
+    ("wing_prim1a", "wrist", "mid:wrist:prim1", "wing_arm2", False),
+    ("wing_prim1b", "mid:wrist:prim1", "prim1", "wing_prim1a", True),
+    ("wing_prim2a", "wrist", "mid:wrist:prim2", "wing_arm2", False),
+    ("wing_prim2b", "mid:wrist:prim2", "prim2", "wing_prim2a", True),
+    ("wing_prim3a", "wrist", "mid:wrist:prim3", "wing_arm2", False),
+    ("wing_prim3b", "mid:wrist:prim3", "prim3", "wing_prim3a", True),
+    ("wing_sec1", "mid:shoulder:elbow", "sec1", "wing_arm1", False),
+    ("wing_sec2", "elbow", "sec2", "wing_arm2", False),
+]
+wing_verts = [v.index for v in me.vertices if v.co.x > 0.0
+              and sum(weights_of(v).get(n, 0.0) for n in OLD_WING) > 0.0]
+WING_POINTS["shoulder"] = tuple(arm.data.bones["wing_root_r"].head_local.xz)
+
+
+def on_wing(xz):
+    near = [me.vertices[i].co for i in wing_verts
+            if (Vector((me.vertices[i].co.x, me.vertices[i].co.z)) - Vector(xz)).length < 0.06]
+    y = sum(c.y for c in near) / len(near) if near else arm.data.bones["wing_root_r"].head_local.y
+    return Vector((xz[0], y, xz[1]))
+
+
+def wing_point(key):
+    if key.startswith("mid:"):
+        a, b = key.split(":")[1:]
+        return (wing_point(a) + wing_point(b)) * 0.5
+    return on_wing(WING_POINTS[key])
+
+
+log("wing points", len(wing_verts))
+
 # --- Bones: wings, legs, and the -X side mirrored from the +X ----------------------
 bpy.ops.object.mode_set(mode='EDIT')
 eb = arm.data.edit_bones
@@ -399,9 +452,18 @@ wing.tail = root.head + (eb["wing_outer1_r"].head - root.head).normalized() * 0.
 wing.align_roll(Vector((0, -1, 0)))
 wing.parent = root
 wing.use_deform = False
-for n in ("wing_inner1_r", "wing_outer1_r"):
-    eb[n].use_connect = False
-    eb[n].parent = wing
+eb["wing_inner1_r"].use_connect = False
+eb["wing_inner1_r"].parent = wing
+for n in OLD_WING:
+    eb.remove(eb[n])
+for name, head, tail, parent, connected in WING_BONES:
+    b = eb.new(name + "_r")
+    b.head, b.tail = wing_point(head), wing_point(tail)
+    # (X across the wing, Z out of its face: the fan opens about Z.)
+    b.align_roll(Vector((0, -1, 0)))
+    b.parent = eb[parent + "_r"]
+    b.use_connect = connected
+    b.use_deform = True
 
 
 def flip(n):
@@ -423,6 +485,27 @@ for n, (m, b) in made.items():
         m.use_connect = b.use_connect
 bpy.ops.object.mode_set(mode='OBJECT')
 log("bones", len(arm.data.bones))
+
+# The wing's skin: what Meshy's outer chain held is shared among the new
+# bones, most to the nearest (by the fourth power of the distance), so the
+# feathers between two bones fan out between them.
+def segment_distance(p, h, t):
+    d = t - h
+    u = min(max((p - h).dot(d) / max(d.length_squared, 1e-9), 0.0), 1.0)
+    return (p - (h + d * u)).length
+
+
+segments = [(name + "_r", arm.data.bones[name + "_r"].head_local, arm.data.bones[name + "_r"].tail_local)
+            for name, *_ in WING_BONES]
+for i in wing_verts:
+    v = me.vertices[i]
+    ws = weights_of(v)
+    share = sum(ws.pop(n, 0.0) for n in OLD_WING)
+    near = sorted(((1.0 / (segment_distance(v.co, h, t) + 0.01) ** 4, n) for n, h, t in segments), reverse=True)[:3]
+    total = sum(w for w, n in near)
+    for w, n in near:
+        ws[n] = ws.get(n, 0.0) + share * w / total
+    set_weights(i, ws)
 
 # Skin weights on the -X side: the +X side's, mirrored.
 plus = [v.index for v in me.vertices if v.co.x >= 0.0]

@@ -42,7 +42,9 @@ extends Node3D
 ## The raven flies (see _should_hurry): on any journey longer than Balance
 ## "raven_fly_distance", over ground that climbs steeply, and to get out of
 ## a fight. In the air nothing on the ground can reach it and it treads on
-## nothing. When its mind makes it run from a fight, it flies.
+## nothing. When its mind makes it run from a fight, it flies. It walks
+## while it carries something (a load of wood, stone or food it is taking
+## home): nobody flies or runs with a load.
 ##
 ## The squirrel runs on all fours where the raven would fly: half as fast
 ## again, and no slope slows it. Both use up stamina, and must stop when it
@@ -100,12 +102,18 @@ const SPECIES := {
 		"own_skin": true, "painted_face": true, "ankle_from_rig": true,
 		# Under the beak, in the head bone's space.
 		"mouth_at": Vector3(0.0, -1.0, 1.1),
-		# The arms hang as the model was made; the hands have fingers.
-		"arm": Vector3(-0.2, -0.98, -0.1), "elbow": 0.0, "fingers": true,
-		# The wings are spread at rest, flat side forwards. To fly they
-		# swing out and down by `wing_open` within their plane, and the
-		# long feathers hanging from their outer edge out by `tip_open`.
-		"wing_normal": Vector3(0.0, 0.0, 1.0), "wing_open": 0.3, "tip_open": 0.5,
+		# The arms hang as the model was made, and swing a third as much
+		# as the others' when it walks; the hands have fingers.
+		"arm": Vector3(-0.2, -0.98, -0.1), "elbow": 0.0, "fingers": true, "arm_swing": 0.35,
+		# The wings hang half open at rest, a fan of bones each (see
+		# tools/raven_rig.py). To fly the fan opens out flat and wide: each
+		# bone turns out by this much (radians, within the wing's plane;
+		# the arm rises to level and the primaries spread from the wrist),
+		# and the wing beats up and down from the shoulder, the primaries'
+		# tips trailing each beat.
+		"wing_spread": {"wing_arm1": 0.44, "wing_arm2": 0.35, "wing_prim1a": 0.65, "wing_prim2a": 0.52,
+			"wing_prim3a": 0.31, "wing_sec1": 0.17},
+		"wing_trail": ["wing_prim1b", "wing_prim2b", "wing_prim3b"],
 	},
 }
 
@@ -833,7 +841,8 @@ func _should_hurry(pos: Vector3, ordered := false) -> bool:
 	var how := haste()
 	if how == "" or flying or running or _tired or hiding:
 		return false
-	if knocked_out or Game.now < snared_until or (how == "run" and is_instance_valid(carrying)):
+	# (With a load in its arms it walks: it cannot fly or run with it.)
+	if knocked_out or Game.now < snared_until or is_instance_valid(carrying):
 		return false
 	var d := _flat(pos, global_position)
 	if d < SHORT_HOP:
@@ -855,8 +864,11 @@ func _should_hurry(pos: Vector3, ordered := false) -> bool:
 	return false
 
 
-## Takes to the air, or drops to all fours and runs.
+## Takes to the air, or drops to all fours and runs (never with a load in
+## its arms: it walks that home).
 func _hurry() -> void:
+	if is_instance_valid(carrying):
+		return
 	if haste() == "fly":
 		_take_off()
 		return
@@ -1868,8 +1880,9 @@ func _update_body(delta: float) -> void:
 	var fwd := Vector3(sin(heading), 0.0, cos(heading))
 	var stride := (_foot_pos(0) - _foot_pos(1)).dot(fwd)
 	# (The nervous one wrings its paws.)
-	var swing_targets: Array[float] = [stride * 0.16 / size + sin(_time * 7.0) * 0.08 * nervous,
-		-stride * 0.16 / size + sin(_time * 7.0 + 2.1) * 0.08 * nervous]
+	var arm_swing := 0.16 * float(_spec.get("arm_swing", 1.0))
+	var swing_targets: Array[float] = [stride * arm_swing / size + sin(_time * 7.0) * 0.08 * nervous,
+		-stride * arm_swing / size + sin(_time * 7.0 + 2.1) * 0.08 * nervous]
 	if prone > 0.0:
 		# Both front paws reach and pull together, one a little behind.
 		swing_targets = [lerpf(swing_targets[0], 0.75 * sin(_gallop + 1.6), prone), lerpf(swing_targets[1], 0.75 * sin(_gallop + 2.1), prone)]
@@ -1936,6 +1949,9 @@ func _update_wings(delta: float, aloft: float) -> void:
 	else:
 		_flap += delta * (11.0 if _alert else 2.5)
 		beats = sin(_flap) * (0.3 if _alert else 0.1)
+	if _spec.has("wing_spread"):
+		_spread_wings(beats + lift, aloft)
+		return
 	var normal: Vector3 = _spec.get("wing_normal", Vector3.BACK)
 	var open: float = float(_spec.get("wing_open", 0.0)) * aloft
 	var tip_open: float = float(_spec.get("tip_open", 0.0)) * aloft
@@ -1949,6 +1965,30 @@ func _update_wings(delta: float, aloft: float) -> void:
 		if _bone.has("wingtip_" + side):
 			var tip := Quaternion(Vector3.UP, s * sin(_flap - 0.9) * 0.3 * aloft) * Quaternion(n, s * tip_open)
 			_skel.set_bone_pose_rotation(_bone["wingtip_" + side], tip)
+
+
+## The raven's fan of wing bones: opened out flat by `aloft` (0 folded as
+## modelled .. 1 flying), beaten up and down by `beat` (radians) from the
+## shoulder, the primaries' tips bending after each beat. (Upright, a turn
+## about UP swings the wing forwards and back; leaning forward to fly makes
+## that up and down. The fan opens about the body's front-to-back axis.)
+func _spread_wings(beat: float, aloft: float) -> void:
+	var spread: Dictionary = _spec.wing_spread
+	for k in 2:
+		var s := _side(k)
+		var side := "_l" if k == 0 else "_r"
+		_skel.set_bone_pose_rotation(_bone["wing" + side], Quaternion(Vector3.UP, s * beat))
+		for bone: String in spread:
+			if _bone.has(bone + side):
+				_skel.set_bone_pose_rotation(_bone[bone + side], Quaternion(Vector3.BACK, s * float(spread[bone]) * aloft))
+		for bone: String in _spec.get("wing_trail", []):
+			if not _bone.has(bone + side):
+				continue
+			# Bent out of the wing's face, about the axis across the feather.
+			var base := bone.trim_suffix("b") + "a" + side
+			var along: Vector3 = _rest[bone + side] - _rest[base]
+			var across := Vector3.BACK.cross(along).normalized()
+			_skel.set_bone_pose_rotation(_bone[bone + side], Quaternion(across, sin(_flap - 1.0) * 0.3 * aloft))
 
 
 func _update_legs() -> void:

@@ -1614,9 +1614,12 @@ func advance_time(seconds: float) -> void:
 		return
 	var minutes := seconds / 60.0
 	for res: String in ["lumber", "stone", "food", "magicko", "animus"]:
-		var change := village.last_minute(res) * minutes
+		# Magicko: what the village makes a minute now. The rest: what came
+		# in over the last minute. (What this adds is not income, or the
+		# next press would count it and add more each time.)
+		var change := (village.magicko_per_minute() if res == "magicko" else float(village.last_minute(res))) * minutes
 		if change > 0.0:
-			village.give(res, change)
+			village.give(res, change, false)
 		elif change < 0.0:
 			village.resources[res] = maxf(village.resources[res] + change, 1.0 if res == "food" else 0.0)
 	if village.amount("food") < 1:

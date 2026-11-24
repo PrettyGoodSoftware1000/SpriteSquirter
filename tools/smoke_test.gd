@@ -23,6 +23,10 @@ func _run() -> void:
 	var game := Game
 	Engine.time_scale = 8.0
 	game.settings.birth_seconds = 5.0
+	# The test's checks were made with villagers making 30 magicko a minute
+	# (now 0.5: the village soon runs dry, and the creature makes blood
+	# sacrifices of the villagers the other checks need).
+	game.settings.magicko_rate = 30.0
 	# The test's timings were made with a 24-minute day and night.
 	game.settings.day_minutes = 16.0
 	game.settings.night_minutes = 8.0
@@ -1408,9 +1412,15 @@ func _run() -> void:
 	var day_was := play.day_cycle.time + play.day_cycle.day
 	var born_before := village.population()
 	village.resources.food = 200.0
+	var magicko_rate_now := village.last_minute("magicko")
+	var magicko_before: float = village.resources.magicko
+	var expected_magicko := village.magicko_per_minute() * PlayMode.ADVANCE_SECONDS / 60.0
 	play.advance_time(PlayMode.ADVANCE_SECONDS)
 	_check(play.day_cycle.time + play.day_cycle.day > day_was and (village.population() > born_before or village.population() >= village.housing())
 		and village.amount("food") >= 1, "the dev menu's Advance time moves the clock on, and the births come")
+	_check(absf(village.resources.magicko - magicko_before - expected_magicko) < 1.0 and village.last_minute("magicko") <= magicko_rate_now + 1,
+		"Advance time gives the magicko of the minutes skipped, and does not count it as income (%.1f given, %.1f expected; rate %d -> %d)" % [
+		village.resources.magicko - magicko_before, expected_magicko, magicko_rate_now, village.last_minute("magicko")])
 	# Nobody walks through a building unless they are going into it.
 	var walled: Destructible = null
 	for node in get_tree().get_nodes_in_group("player_buildings"):
@@ -1773,9 +1783,15 @@ func _run() -> void:
 	if is_instance_valid(lurker):
 		lurker.queue_free()
 
-	# Magicko: 1 every 2 seconds from a villager, 5 from a wizard.
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.magicko_rate, 30.0) and is_equal_approx(Balance.DEFAULTS["wizard_magicko"], 150.0),
-		"a villager makes 1 magicko every 2 seconds, a wizard 5")
+	# Magicko: 1 every 2 minutes from a villager, wizard_magicko from a wizard.
+	var settings_were: Dictionary = Game.settings.duplicate()
+	Game.settings.magicko_rate = Game.DEFAULT_SETTINGS.magicko_rate
+	var maker_rate := village.magicko_per_minute()
+	var makers := village.adults() - village.wizards()
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.magicko_rate, 0.5) and (village.blood_active() or village.fey_adults() > 0
+		or is_equal_approx(maker_rate, makers * 0.5 + village.wizards() * Balance.num("wizard_magicko"))),
+		"a villager makes 1 magicko every 2 minutes, a wizard wizard_magicko a minute (%.1f a minute from %d villagers)" % [maker_rate, makers])
+	Game.settings = settings_were
 	# Defending the village: goblins marching near a Storehouse.
 	_check(beast.mind.personality("defensive") > Balance.num("raven_defensive_personality"), "the tortoise is the most defensive of the town")
 	beast.has_target = false
@@ -2227,6 +2243,14 @@ func _run() -> void:
 	await _wait(1.0)
 	_check(hop_to != raven.global_position and not raven.flying, "the raven walks a short way on the flat")
 	await _wait(8.0)
+	# With a load in its arms it walks, however far.
+	var far_off := raven.global_position + Vector3(Balance.num("raven_fly_distance") * 3.0, 0, 0)
+	var would_fly := raven._should_hurry(far_off, true)
+	var load := Node3D.new()
+	game.world_root.add_child(load)
+	raven.carry(load)
+	_check(would_fly and not raven._should_hurry(far_off, true), "the raven walks home with a load instead of flying")
+	raven.drop_load()
 	# A long way is flown.
 	var flight_to := raven.global_position
 	for k in 24:

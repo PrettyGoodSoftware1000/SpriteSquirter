@@ -69,7 +69,7 @@ const SETTING_SLIDERS := [
 	["stone_rate", "Stone rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["food_rate", "Food rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["birth_seconds", "Birth timer", 5.0, 300.0, 5.0, "s"],
-	["magicko_rate", "Magicko rate", 0.0, 120.0, 1.0, "/villager/min"],
+	["magicko_rate", "Magicko rate", 0.0, 20.0, 0.1, "/villager/min"],
 	["goblin_rate", "Goblin Spawn Rate", 0.0, 20.0, 0.5, "/cave/min"],
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],

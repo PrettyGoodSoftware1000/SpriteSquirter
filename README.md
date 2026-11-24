@@ -167,7 +167,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    unassigned Workers. More buildings train side by side. A grey
    bar fills over the count while recruits train. Lower the number and
    warriors or wizards go straight back to work; they have to train again
-   to return. **Wizards** make 5 magicko every 2 seconds each (`wizard_magicko`, 150 a minute; a villager makes 1 every 2 seconds) and throw tiny
+   to return. **Wizards** make 5 magicko every 2 seconds each (`wizard_magicko`, 150 a minute; a villager makes 1 every 2 minutes, the dev menu's Magicko rate) and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
    sometimes setting them alight. Once **Bows** are researched an Archers
    count appears: each Town guard allows 2 **archers** (22½ seconds each),
@@ -241,7 +241,8 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    climbs steeply, and whenever you send it out of a fight. In the air it
    is two and a half times as fast, treads on nothing and cannot be reached from
    the ground. When it runs from a battle (see Actions in context below)
-   it flies. Shorter trips on the flat it walks. Each starts at 15% of its full size and grows for 30 minutes,
+   it flies. Shorter trips on the flat it walks, and so does any trip with
+   a load in its arms (wood, stone or food it is taking home). Each starts at 15% of its full size and grows for 30 minutes,
    getting faster, stronger and tougher as it does (a small one cannot pick
    goblins up or flatten buildings, and stays out of raids unless you send
    it). Growing takes **animus**: it grows a tenth of the way at a time,

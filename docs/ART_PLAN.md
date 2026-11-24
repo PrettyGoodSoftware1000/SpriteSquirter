@@ -302,18 +302,34 @@ above the toes, three toes forward and one back).
   -X side, bones and skin weights both (the mesh is symmetric to about a
   millimetre, 3 cm at worst).
 - ✅ (0.51) **Wings**: a `wing_l/r` bone (no skin of its own) at the
-  shoulder carries both wing chains (`wing_inner1..3`, `wing_outer1`,
-  `wingtip`, `wing_outer3`), so the wings beat without swinging the arms,
+  shoulder carries the wing's bones (0.51: Meshy's two chains; 0.52: the
+  fan below), so the wings beat without swinging the arms,
   which hang from the same joint. The thighs hang from the pelvis (Meshy
   hung them from the middle of the spine).
 - ✅ (0.51) **In the game**: the raven wears its own texture (no cel
   shading or outline, like the balrog), with no drawn face or jaw. The
   game's code animates it like the others: legs by IK (its "foot" is the
   long bone above the toes, so its ankle is that bone's joint, 2.3 m up),
-  arms hanging as modelled, wings beating about the body in flight and
-  spreading out and down, the hanging outer feathers swinging out. The
+  arms hanging as modelled, wings opening out and beating in flight (see
+  0.52 below). The
   fingers clench round what it holds or carries, spread when it strikes
   or stomps or is alert, and otherwise flex a little.
+- ✅ (0.52) **Wings that open**: the owner wanted the wings spread wide
+  to fly and flapping up and down. Meshy's outer chain ran down the
+  wing's outer edge, so the wing could only swing as one stiff piece. Each
+  wing is now a fan of ten bones built like a bird's: `wing_arm1` and
+  `wing_arm2` along the leading edge from the shoulder to the wrist,
+  primaries `wing_prim1a/b`, `wing_prim2a/b`, `wing_prim3a/b` fanning from
+  the wrist (two bones each, so their tips trail a wingbeat), secondaries
+  `wing_sec1` and `wing_sec2` hanging from the arm; Meshy's inner chain
+  (`wing_inner1..3`, down the back of the arm) stays. The skin Meshy's
+  outer chain held is shared among the new bones by distance, so the
+  feathers between two bones fan out between them. In flight the game
+  opens the fan (`wing_spread` in creature.gd: the arm rises level, the
+  primaries spread from the wrist) and beats the wing up and down from
+  the shoulder, the primaries' tips bending after each beat.
+- ✅ (0.52) The arms swing a third as much as the other creatures' when it
+  walks (`arm_swing`).
 - Not yet: the toes are Meshy's (one bone chain for the three front toes);
   a jaw for the beak; the raven's own walk, hop and wingbeat clips (see
   below).

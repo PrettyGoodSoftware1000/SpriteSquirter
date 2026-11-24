@@ -1157,6 +1157,17 @@ func shrines() -> Array[Destructible]:
 
 
 ## 0..1 of the way to the next birth (0 while no child can be born).
+## Magicko the village makes a minute: Game.settings.magicko_rate from each
+## grown-up villager (the fey Balance "fey_magicko" times as much), Balance
+## "wizard_magicko" from each wizard, all blood_boost() times as much while a
+## Blood Sacrifice lasts. (Magic trees give theirs themselves.)
+func magicko_per_minute() -> float:
+	var grown := adults() - wizards()
+	var fey_extra := fey_adults() * (Balance.num("fey_magicko") - 1.0)
+	var boost := blood_boost() if blood_active() else 1.0
+	return ((grown + fey_extra) * Game.settings.magicko_rate + wizards() * Balance.num("wizard_magicko")) * boost
+
+
 func birth_share() -> float:
 	if next_birth_in() < 0.0:
 		return 0.0
@@ -1173,11 +1184,7 @@ func next_birth_in() -> float:
 func _process(delta: float) -> void:
 	if not founded:
 		return
-	var grown := adults() - wizards()
-	var boost := blood_boost() if blood_active() else 1.0
-	# (The fey make twice as much: Balance "fey_magicko" times as much.)
-	var fey_extra := fey_adults() * (Balance.num("fey_magicko") - 1.0)
-	give("magicko", ((grown + fey_extra) * Game.settings.magicko_rate + wizards() * Balance.num("wizard_magicko")) / 60.0 * delta * boost)
+	give("magicko", magicko_per_minute() / 60.0 * delta)
 	# Animus: Balance "animus_per_minute" to begin with, and more for every
 	# Shrine the village has built (not the ones its site came with).
 	give("animus", (Balance.num("animus_per_minute") + built_shrines() * Balance.num("animus_per_shrine")) / 60.0 * delta)

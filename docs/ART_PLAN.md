@@ -330,6 +330,11 @@ above the toes, three toes forward and one back).
   the shoulder, the primaries' tips bending after each beat.
 - ✅ (0.52) The arms swing a third as much as the other creatures' when it
   walks (`arm_swing`).
+- ✅ (0.53) A stride a quarter longer than the others' (`stride`), the
+  swinging foot reaching forwards toes first (`step_tilt`; the others tip
+  their toes down, which on the raven's long foot pointed its toes back),
+  and the wings bounce with its steps: each footfall makes them dip, and
+  they spring back past where they were and settle, the primaries most.
 - Not yet: the toes are Meshy's (one bone chain for the three front toes);
   a jaw for the beak; the raven's own walk, hop and wingbeat clips (see
   below).

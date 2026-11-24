@@ -167,7 +167,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    unassigned Workers. More buildings train side by side. A grey
    bar fills over the count while recruits train. Lower the number and
    warriors or wizards go straight back to work; they have to train again
-   to return. **Wizards** make 5 magicko every 2 seconds each (`wizard_magicko`, 150 a minute; a villager makes 1 every 2 minutes, the dev menu's Magicko rate) and throw tiny
+   to return. **Wizards** make 5 magicko every 2 minutes each (`wizard_magicko`, 2.5 a minute; a villager makes 1 every 2 minutes, the dev menu's Magicko rate) and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
    sometimes setting them alight. Once **Bows** are researched an Archers
    count appears: each Town guard allows 2 **archers** (22½ seconds each),

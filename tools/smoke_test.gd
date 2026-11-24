@@ -1848,10 +1848,11 @@ func _run() -> void:
 	singed.process_mode = Node.PROCESS_MODE_DISABLED
 	var singed_hp := singed.hp
 	_check(play.cast_buff("aura") == "" and beast.buff_on("aura"), "Flaming Aura is cast for 1 animus")
-	# (Kept beside the creature, wherever it walks.)
-	for k in 6:
+	# (Kept beside the creature, wherever it walks, for three seconds: two
+	# ticks at the least, however the second falls.)
+	for k in 10:
 		singed.global_position = beast.global_position + Vector3(4, 0, 0)
-		await _wait(0.4)
+		await _wait(0.3)
 	_check(singed.hp <= singed_hp - Balance.num("aura_damage") * 1.5, "enemies close by take fire damage every second (%d lost)" % roundi(singed_hp - singed.hp))
 	beast._buffs.clear()
 	singed.queue_free()
@@ -2350,6 +2351,10 @@ func _run() -> void:
 		_check(not balrog.raiding, "a growing balrog stays at its cave during a raid")
 		play.raids.end_raid()
 		balrog._fire_ready_at = 0.0
+		# (The raven lands first: the balrog never aims at it in the air.)
+		raven.has_target = false
+		raven.flying = false
+		raven._alt = 0.0
 		raven.place(balrog.global_position + Vector3(0, 0, 26), 0.0)
 		balrog._try_fireball()
 		_check(_fireballs() == 0, "a small balrog cannot cast fireball")

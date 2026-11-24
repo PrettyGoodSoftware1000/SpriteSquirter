@@ -105,6 +105,10 @@ const SPECIES := {
 		# The arms hang as the model was made, and swing a third as much
 		# as the others' when it walks; the hands have fingers.
 		"arm": Vector3(-0.2, -0.98, -0.1), "elbow": 0.0, "fingers": true, "arm_swing": 0.35,
+		# Long strides (a quarter longer than the others'), and the foot
+		# reaches forwards as it swings, toes first (the others' tip their
+		# toes down).
+		"stride": 1.25, "step_tilt": -0.2,
 		# The wings hang half open at rest, a fan of bones each (see
 		# tools/raven_rig.py). To fly the fan opens out flat and wide: each
 		# bone turns out by this much (radians, within the wing's plane;
@@ -156,6 +160,16 @@ enum Action { NONE, STOMP, GRAB, STRIKE }
 @export var turn_speed := 1.2
 @export var step_distance := 1.6
 @export var step_time := 0.7
+## How far a stepping foot tips (radians, at the top of the step; the toes
+## go down), unless the species says otherwise ("step_tilt").
+const STEP_TILT := 0.45
+## The raven's wings bounce with its steps: a spring (radians) that each
+## footfall knocks down, and how stiff and how damped it is.
+const WING_BOUNCE_KICK := 0.9
+const WING_BOUNCE_STIFF := 70.0
+const WING_BOUNCE_DAMP := 7.0
+var _wing_bob := 0.0
+var _wing_bob_v := 0.0
 @export var step_height := 0.9
 
 ## "tortoise" or "squirrel". Set before adding to the tree.
@@ -1285,12 +1299,13 @@ func _update_feet(delta: float) -> void:
 		if _action != Action.NONE:
 			continue
 		var other := 1 - k
-		var threshold := (step_distance if speed > 0.2 else 0.35) * size
+		var stride: float = _spec.get("stride", 1.0)
+		var threshold := (step_distance * stride if speed > 0.2 else 0.35) * size
 		if not _stepping[other] and dists[k] > threshold and dists[k] >= dists[other]:
 			_stepping[k] = true
 			_step_t[k] = 0.0
 			_step_from[k] = _plant[k]
-			var land := homes[k] + fwd * speed * _current_step_time() * 0.8
+			var land := homes[k] + fwd * speed * _current_step_time() * 0.8 * stride
 			if not Game.terrain.is_inside(land.x, land.z):
 				land = homes[k]
 			land.y = Game.terrain.get_height(land.x, land.z)
@@ -1334,6 +1349,8 @@ func _side(k: int) -> float:
 
 
 func _on_footfall(pos: Vector3) -> void:
+	# (The raven's wings dip with the jolt; see _spread_wings().)
+	_wing_bob_v -= WING_BOUNCE_KICK
 	Game.effects.spawn_dust(pos, 1.4 * size)
 	Game.shake(0.35 * size, pos)
 	for node in get_tree().get_nodes_in_group("destructibles"):
@@ -1950,7 +1967,7 @@ func _update_wings(delta: float, aloft: float) -> void:
 		_flap += delta * (11.0 if _alert else 2.5)
 		beats = sin(_flap) * (0.3 if _alert else 0.1)
 	if _spec.has("wing_spread"):
-		_spread_wings(beats + lift, aloft)
+		_spread_wings(beats + lift, aloft, delta)
 		return
 	var normal: Vector3 = _spec.get("wing_normal", Vector3.BACK)
 	var open: float = float(_spec.get("wing_open", 0.0)) * aloft
@@ -1972,15 +1989,23 @@ func _update_wings(delta: float, aloft: float) -> void:
 ## shoulder, the primaries' tips bending after each beat. (Upright, a turn
 ## about UP swings the wing forwards and back; leaning forward to fly makes
 ## that up and down. The fan opens about the body's front-to-back axis.)
-func _spread_wings(beat: float, aloft: float) -> void:
+## On the ground the wings bounce with its steps: each footfall makes them
+## dip, and they spring back up past where they were and settle, the outer
+## feathers after the arm.
+func _spread_wings(beat: float, aloft: float, delta: float) -> void:
 	var spread: Dictionary = _spec.wing_spread
+	_wing_bob_v += (-WING_BOUNCE_STIFF * _wing_bob - WING_BOUNCE_DAMP * _wing_bob_v) * delta
+	_wing_bob += _wing_bob_v * delta
+	var bob := _wing_bob * (1.0 - aloft)
 	for k in 2:
 		var s := _side(k)
 		var side := "_l" if k == 0 else "_r"
-		_skel.set_bone_pose_rotation(_bone["wing" + side], Quaternion(Vector3.UP, s * beat))
+		_skel.set_bone_pose_rotation(_bone["wing" + side], Quaternion(Vector3.UP, s * beat) * Quaternion(Vector3.BACK, s * bob * 0.5))
 		for bone: String in spread:
 			if _bone.has(bone + side):
-				_skel.set_bone_pose_rotation(_bone[bone + side], Quaternion(Vector3.BACK, s * float(spread[bone]) * aloft))
+				# (The arm and the primaries flex with the bounce too.)
+				var flex := bob * (0.6 if bone.begins_with("wing_prim") else 0.3)
+				_skel.set_bone_pose_rotation(_bone[bone + side], Quaternion(Vector3.BACK, s * (float(spread[bone]) * aloft + flex)))
 		for bone: String in _spec.get("wing_trail", []):
 			if not _bone.has(bone + side):
 				continue
@@ -2021,7 +2046,7 @@ func _update_legs() -> void:
 		var normal := to_skel.basis * Game.terrain.get_normal(sole.x, sole.z)
 		var foot_basis := Basis(Quaternion(Vector3.UP, normal.normalized()))
 		if _stepping[k]:
-			foot_basis = foot_basis * Basis(Vector3.RIGHT, sin(_step_t[k] * PI) * 0.45)
+			foot_basis = foot_basis * Basis(Vector3.RIGHT, sin(_step_t[k] * PI) * float(_spec.get("step_tilt", STEP_TILT)))
 		if aloft > 0.0:
 			# Toes hang.
 			foot_basis = Basis(Quaternion(foot_basis).slerp(Quaternion(pelvis.basis * Basis(Vector3.RIGHT, 0.6)), aloft))

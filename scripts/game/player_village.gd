@@ -70,7 +70,7 @@ const WARRIORS_PER_GUARD := 4
 const ARCHERS_PER_GUARD := 2
 const WIZARDS_PER_ROCKS := 2
 ## Magicko each wizard makes per minute.
-## Magicko a wizard makes a minute (5 every 2 seconds): Balance "wizard_magicko".
+## Magicko a wizard makes a minute (5 every 2 minutes): Balance "wizard_magicko".
 ## Food eaten per minute.
 const FOOD_PER_VILLAGER := 1.0
 const FOOD_PER_WARRIOR := 3.0

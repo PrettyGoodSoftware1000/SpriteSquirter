@@ -15,7 +15,7 @@ const DEFAULTS := {
 	"buff_research_first": 5.0, "buff_research_step": 5.0, "buff_research_seconds": 480.0,
 	"defensive_weight": 3.0, "defend_range": 200.0,
 	"tortoise_defensive_personality": 1.6, "squirrel_defensive_personality": 0.9, "raven_defensive_personality": 0.8,
-	"wizard_magicko": 150.0, "crop_tend_bonus": 0.25, "crop_tend_most": 1.0,
+	"wizard_magicko": 2.5, "crop_tend_bonus": 0.25, "crop_tend_most": 1.0,
 	"food_warning_seconds": 45.0, "crop_grow_seconds": 200.0,
 	"villager_health": 30.0, "villager_damage": 6.0, "villager_attack_seconds": 1.0,
 	"warrior_health": 120.0, "warrior_damage": 12.0, "sharper_swords_bonus": 1.5,

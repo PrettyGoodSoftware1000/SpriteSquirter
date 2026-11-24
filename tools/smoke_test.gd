@@ -1597,18 +1597,18 @@ func _run() -> void:
 		if BuildingCatalog.role(node.get_meta("kind", "")) == "store":
 			store_at = (node as Node3D).global_position
 			break
-	var marcher_at := store_at + Vector3(30, 0, 30)
-	var marcher := WorldPopulator.spawn_villager(game.world_root, game.terrain, marcher_at, 0.5, true)
-	marcher.process_mode = Node.PROCESS_MODE_DISABLED
-	marcher.raiding = true
-	_check(beast.mind.marching_on_stores() == marcher, "goblins marching within 200 m of a Storehouse are seen")
+	var raider_near_at := store_at + Vector3(30, 0, 30)
+	var raider_near := WorldPopulator.spawn_villager(game.world_root, game.terrain, raider_near_at, 0.5, true)
+	raider_near.process_mode = Node.PROCESS_MODE_DISABLED
+	raider_near.raiding = true
+	_check(beast.mind.marching_on_stores() == raider_near, "goblins marching within 200 m of a Storehouse are seen")
 	Balance.values["defensive_weight"] = 1000.0
 	beast.mind._defend_timer = 0.0
 	_check(beast.mind._consider_defending() and beast.attack_moving, "the creature sets off to attack them")
 	Balance.values["defensive_weight"] = Balance.DEFAULTS["defensive_weight"]
 	beast.attack_moving = false
 	beast.has_target = false
-	marcher.queue_free()
+	raider_near.queue_free()
 	# Creature buffs, researched at the Shrines.
 	_check(village.buff_research_cost().get("animus", 0) == roundi(Balance.num("buff_research_first")), "the first buff costs 5 animus to research")
 	village.give("animus", 100.0)

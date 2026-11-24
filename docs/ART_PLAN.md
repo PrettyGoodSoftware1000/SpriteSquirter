@@ -207,6 +207,22 @@ game yet.
     two. Some stretch is left where the upper arm swings ~90 degrees at the
     shoulder: linear skinning (what Godot uses) cannot hold that fully; a
     shoulder helper bone or corrective shapes would be the next step.
+- ✅ (0.43) **Slash fixes** from the owner's notes on 0.42:
+  - The elbows bent upward in the follow-throughs (frames ~29 and ~49):
+    the arms are now solved as hinges, the upper arm placed by both its
+    direction and the plane its elbow bends in, with one steady elbow
+    direction (out, back and down) that never lines up with the arm.
+  - A sudden twist from frame 8 to 9: the left wind-up's path passed right
+    by its own shoulder, where a small move of the hand swings the arm a
+    long way. Both wind-ups now arc out, clear of the shoulders, the arm
+    eases in from its hanging pose, the wrist limit no longer flips, and
+    a key without a claw direction eases the hand back instead of
+    snapping. Above 15 degrees a frame is now only the swipes themselves.
+  - Holes at the shoulders and back: 0.42's deleted armpit triangles are
+    back (their weights are blended instead), and a weld step gives
+    touching points the same weights, so the mesh's separate pieces never
+    pull apart (0.42 had 172 cracks at the waist from the chain fix; now
+    none in any frame).
 
 ## The other giants
 

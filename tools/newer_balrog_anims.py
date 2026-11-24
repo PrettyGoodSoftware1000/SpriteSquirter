@@ -67,6 +67,18 @@ def pixels(name):
     return a.reshape(h, w, 4), w, h
 
 
+def set_weights(i, weights):
+    """Gives point i these weights (at most 4, as glTF keeps, summing to 1)."""
+    vg = mesh_obj.vertex_groups
+    m = mesh_obj.data
+    top = sorted(((b, w) for b, w in weights.items() if w > 0.005), key=lambda kv: -kv[1])[:4]
+    total = sum(w for _, w in top) or 1.0
+    for g in list(m.vertices[i].groups):
+        vg[g.group].remove([i])
+    for b, w in top:
+        vg[b].add([i], w / total, 'REPLACE')
+
+
 # --- The chain fix ------------------------------------------------------------------
 # Chain faces: shiny (metal map), silver rather than gold (little colour),
 # at belt height, and skinned to a thigh or the tail.
@@ -201,28 +213,70 @@ smooth_shoulders()
 
 # --- Arm webbing ---------------------------------------------------------------------
 # A few triangles join the inner arm straight to the torso (the model was
-# made with its arms near its sides): one corner follows the arm and
-# another the body, so any swing of the arm tears them. They sit hidden in
-# the armpits and are removed.
-def remove_webbing():
-    import bmesh
+# made with its arms near its sides): one corner followed the arm and
+# another the body, so any swing of the arm tore them. (0.42 deleted them,
+# which left holes at the shoulders and back.) Now their corners share
+# blended weights, so they stretch a little instead of tearing.
+def blend_webbing():
     names = {g.index: g.name for g in mesh_obj.vertex_groups}
     arms = [{"Bone_033", "Bone_032", "Bone_031", "Bone_030"}, {"Bone_028", "Bone_027", "Bone_026", "Bone_025"}]
     m = mesh_obj.data
+    weights = [{names[g.group]: g.weight for g in v.groups} for v in m.vertices]
     def arm_w(i, bones):
-        return sum(g.weight for g in m.vertices[i].groups if names[g.group] in bones)
-    doomed = [p.index for p in m.polygons
-              if any(max(arm_w(i, b) for i in p.vertices) - min(arm_w(i, b) for i in p.vertices) > 0.45 for b in arms)]
-    bm = bmesh.new()
-    bm.from_mesh(m)
-    bm.faces.ensure_lookup_table()
-    bmesh.ops.delete(bm, geom=[bm.faces[i] for i in doomed], context='FACES')
-    bm.to_mesh(m)
-    bm.free()
-    print("WEBBING: %d triangles removed" % len(doomed))
+        return sum(w for b, w in weights[i].items() if b in bones)
+    webs = [p for p in m.polygons
+            if any(max(arm_w(i, b) for i in p.vertices) - min(arm_w(i, b) for i in p.vertices) > 0.45 for b in arms)]
+    sums = {}
+    for p in webs:
+        avg = {}
+        for i in p.vertices:
+            for b, w in weights[i].items():
+                avg[b] = avg.get(b, 0.0) + w / len(p.vertices)
+        for i in p.vertices:
+            acc = sums.setdefault(i, [{}, 0])
+            for b, w in avg.items():
+                acc[0][b] = acc[0].get(b, 0.0) + w
+            acc[1] += 1
+    for i, (acc, n) in sums.items():
+        # Half the point's own weights, half the faces' blend.
+        mix = {b: 0.5 * weights[i].get(b, 0.0) + 0.5 * acc.get(b, 0.0) / n for b in set(acc) | set(weights[i])}
+        set_weights(i, mix)
+    print("WEBBING: %d triangles blended (%d points)" % (len(webs), len(sums)))
 
 
-remove_webbing()
+blend_webbing()
+
+
+# --- Welding ------------------------------------------------------------------------
+# The mesh is many separate pieces whose edges lie on top of each other.
+# Touching points must have the same weights, or the pieces pull apart and
+# open cracks (the 0.41 chain fix did that at the waist). Each group of
+# touching points gets their average.
+def weld():
+    from collections import defaultdict
+    m = mesh_obj.data
+    names = {g.index: g.name for g in mesh_obj.vertex_groups}
+    spots = defaultdict(list)
+    for v in m.vertices:
+        spots[tuple(round(c / 1e-4) for c in v.co)].append(v.index)
+    welded = 0
+    for group in spots.values():
+        if len(group) < 2:
+            continue
+        ws = [{names[g.group]: g.weight for g in m.vertices[i].groups} for i in group]
+        if all(w == ws[0] for w in ws[1:]):
+            continue
+        avg = {}
+        for w in ws:
+            for b, x in w.items():
+                avg[b] = avg.get(b, 0.0) + x / len(ws)
+        for i in group:
+            set_weights(i, avg)
+        welded += 1
+    print("WELD: %d groups of touching points given the same weights" % welded)
+
+
+weld()
 
 # The textures: use the PNGs Godot extracted next to the .glb instead of
 # packing 55 MB of them into the .blend.
@@ -266,21 +320,18 @@ def rotate_world(n, q):
 
 def aim(n, child, target, weight=1.0, max_angle=None):
     """Swings bone n (shortest turn) so bone `child`'s head moves to target,
-    turning it at most `max_angle` (radians) from its rest pose."""
+    turning it at most `max_angle` (radians) from where it is (the bones
+    this is used on are still in their rest pose then)."""
     h = hw(n)
     a, b = hw(child) - h, target - h
     if a.length < 1e-6 or b.length < 1e-6:
         return
     q = a.normalized().rotation_difference(b.normalized())
+    if max_angle is not None and q.angle > max_angle:
+        # Turn less, the same way (a clamp that recomputed its axis could
+        # flip it, which flicked the right hand 83 degrees in one frame).
+        weight *= max_angle / q.angle
     q = Quaternion().slerp(q, weight)
-    if max_angle is not None:
-        pb = PB[n]
-        rest = (MW @ (pb.parent.matrix if pb.parent else Matrix()) @ (pb.parent.bone.matrix_local.inverted() if pb.parent else Matrix()) @ pb.bone.matrix_local).to_quaternion()
-        now = (MW @ pb.matrix).to_quaternion()
-        after = q @ now
-        off = after @ rest.inverted()
-        if off.angle > max_angle:
-            q = Quaternion(off.axis, max_angle) @ rest @ now.inverted()
     rotate_world(n, q)
 
 
@@ -363,6 +414,36 @@ def two_bone(upper, lower, end, target, pole, weight=1.0, max_reach=0.999, min_r
     mid = s + dn * (l1 * cos_a) + p * (l1 * math.sqrt(max(0.0, 1 - cos_a * cos_a)))
     aim(upper, lower, mid)
     aim(lower, end, s + dn * dist)
+
+
+def hinge_arm(upper, lower, end, target, pole, weight=1.0, max_reach=0.95, min_reach=0.85):
+    """Like two_bone, for an arm, without flips: the upper arm is turned so
+    both its direction and the plane its elbow bends in match the solved
+    pose (the shortest turn could spin the arm round its own length, and put
+    the elbow on the wrong side), then the forearm bends about the elbow's
+    hinge only."""
+    if weight <= 1e-4:
+        return
+    s, e, w = hw(upper), hw(lower), hw(end)
+    l1, l2 = (e - s).length, (w - e).length
+    d = target - s
+    dist = max(min(d.length, (l1 + l2) * max_reach), (l1 + l2) * min_reach)
+    dn = d.normalized()
+    cos_a = max(-1.0, min(1.0, (l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist)))
+    p = pole - dn * pole.dot(dn)
+    p.normalize()
+    mid = s + dn * (l1 * cos_a) + p * (l1 * math.sqrt(max(0.0, 1 - cos_a * cos_a)))
+    hand = s + dn * dist
+
+    def frame(a, b):
+        x = a.normalized()
+        y = a.cross(b).normalized()
+        return Matrix((x, y, x.cross(y))).transposed()
+
+    turn = frame(mid - s, hand - mid) @ frame(e - s, w - e).inverted()
+    # (Blended in by weight, so the arm eases from its hanging pose.)
+    rotate_world(upper, Quaternion().slerp(turn.to_quaternion(), weight))
+    aim(lower, end, hand, weight)
 
 
 def place_leg(side, fet, tip, hock):
@@ -499,20 +580,24 @@ _ = None
 # (0.43: kept in front of the body and below the horns, the twist and the
 # head's hold eased: the first version wrung the neck, swung the arm across
 # the chest and locked it straight, which stretched the shoulders up to 5x.)
+# (0.43: the wind-ups arc out, clear of the shoulders, and every elbow hint
+# points down and out; two pointed up, which bent
+# the elbow upward in the follow-throughs.)
 SLASH = [
     # t    twist  lean   tip   drop   L hand                 L elbow          L claw              Lw   R hand                 R elbow           R claw              Rw
     (0.00,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3),  _,                  0.0, _,                     (-1, 0.2, -0.3),  _,                  0.0),
-    (0.45,  0.24, -0.04, -0.05, 0.01, (0.52, 0.06, 1.36),    (1, 0.2, -0.3),  (0.3, 0.4, 0.85),   1.0, (-0.40, -0.32, 0.92), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
-    (0.62,  0.27, -0.05, -0.06, 0.01, (0.54, 0.08, 1.40),    (1, 0.2, -0.3),  (0.3, 0.3, 0.9),    1.0, (-0.40, -0.33, 0.93), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
-    (0.73,  0.08, 0.12,  -0.02, 0.03, (0.50, -0.44, 1.20),   (1, 0.0, 0.3),   (-0.2, -0.8, 0.3),  1.0, (-0.48, -0.12, 0.94), (-1, 0.3, -0.3),  _,                  0.5),
-    (0.81, -0.20, 0.24,  0.03, 0.05,  (0.12, -0.64, 0.98),   (0.8, 0.0, 0.5), (-0.7, -0.6, -0.2), 1.0, (-0.55, 0.0, 1.05),   (-1, 0.3, -0.2),  (-0.2, 0.4, 0.6),   0.8),
-    (0.96, -0.30, 0.26,  0.05, 0.05,  (-0.12, -0.58, 0.82),  (0.6, 0.2, 0.8), (-0.5, -0.3, -0.8), 1.0, (-0.54, 0.05, 1.30),  (-1, 0.2, -0.2),  (-0.3, 0.4, 0.85),  1.0),
-    (1.14, -0.27, -0.02, 0.05, 0.01,  (0.40, -0.32, 0.92),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.54, 0.08, 1.40),  (-1, 0.2, -0.3),  (-0.3, 0.3, 0.9),   1.0),
-    (1.24, -0.28, -0.03, 0.06, 0.01,  (0.40, -0.33, 0.93),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.55, 0.09, 1.41),  (-1, 0.2, -0.3),  (-0.3, 0.3, 0.9),   1.0),
-    (1.35, -0.08, 0.12,  0.02, 0.03,  (0.48, -0.12, 0.94),   (1, 0.3, -0.3),  _,                  0.5, (-0.50, -0.44, 1.20), (-1, 0.0, 0.3),   (0.2, -0.8, 0.3),   1.0),
-    (1.43,  0.20, 0.24, -0.03, 0.05,  (0.55, 0.0, 1.05),     (1, 0.3, -0.2),  _,                  0.4, (-0.12, -0.64, 0.98), (-0.8, 0.0, 0.5), (0.7, -0.6, -0.2),  1.0),
-    (1.60,  0.30, 0.26, -0.05, 0.05,  (0.5, 0.0, 0.95),      (1, 0.3, -0.2),  _,                  0.3, (0.12, -0.58, 0.82),  (-0.6, 0.2, 0.8), (0.5, -0.3, -0.8),  1.0),
-    (2.05,  0.10, 0.10, -0.02, 0.02,  _,                     (1, 0.2, -0.3),  _,                  0.0, (-0.25, -0.40, 0.84), (-0.8, 0.3, 0.2), (0.2, -0.3, -1.0),  0.5),
+    (0.25,  0.12, -0.02, -0.025, 0.005, (0.70, -0.04, 1.02),  (1, 0.25, -0.4), (0.3, 0.2, 0.9),    0.8, (-0.48, -0.25, 0.86), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.3),
+    (0.45,  0.24, -0.04, -0.05, 0.01, (0.60, 0.12, 1.45),    (1, 0.3, -0.5),  (0.3, 0.4, 0.85),   1.0, (-0.40, -0.32, 0.92), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
+    (0.62,  0.27, -0.05, -0.06, 0.01, (0.54, 0.08, 1.40),    (1, 0.3, -0.5),  (0.3, 0.3, 0.9),    1.0, (-0.40, -0.33, 0.93), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
+    (0.73,  0.08, 0.12,  -0.02, 0.03, (0.50, -0.44, 1.20),   (1, 0.1, -0.4),  (-0.2, -0.8, 0.3),  1.0, (-0.48, -0.12, 0.94), (-1, 0.3, -0.3),  _,                  0.5),
+    (0.81, -0.20, 0.24,  0.03, 0.05,  (0.12, -0.64, 0.98),   (0.8, 0.2, -0.6), (-0.7, -0.6, -0.2), 1.0, (-0.55, 0.0, 1.05),   (-1, 0.3, -0.2),  (-0.2, 0.4, 0.6),   0.8),
+    (0.96, -0.30, 0.26,  0.05, 0.05,  (-0.12, -0.58, 0.82),  (0.6, 0.4, -0.8), (-0.5, -0.3, -0.8), 1.0, (-0.54, 0.05, 1.30),  (-1, 0.2, -0.2),  (-0.3, 0.4, 0.85),  1.0),
+    (1.14, -0.27, -0.02, 0.05, 0.01,  (0.40, -0.32, 0.92),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.54, 0.08, 1.40),  (-1, 0.3, -0.5),  (-0.3, 0.3, 0.9),   1.0),
+    (1.24, -0.28, -0.03, 0.06, 0.01,  (0.40, -0.33, 0.93),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.55, 0.09, 1.41),  (-1, 0.3, -0.5),  (-0.3, 0.3, 0.9),   1.0),
+    (1.35, -0.08, 0.12,  0.02, 0.03,  (0.48, -0.12, 0.94),   (1, 0.3, -0.3),  _,                  0.5, (-0.50, -0.44, 1.20), (-1, 0.1, -0.4),  (0.2, -0.8, 0.3),   1.0),
+    (1.43,  0.20, 0.24, -0.03, 0.05,  (0.55, 0.0, 1.05),     (1, 0.3, -0.2),  _,                  0.4, (-0.12, -0.64, 0.98), (-0.8, 0.2, -0.6), (0.7, -0.6, -0.2),  1.0),
+    (1.60,  0.30, 0.26, -0.05, 0.05,  (0.5, 0.0, 0.95),      (1, 0.3, -0.2),  _,                  0.3, (0.12, -0.58, 0.82),  (-0.6, 0.4, -0.8), (0.5, -0.3, -0.8),  1.0),
+    (2.05,  0.10, 0.10, -0.02, 0.02,  _,                     (1, 0.2, -0.3),  _,                  0.0, (-0.25, -0.40, 0.84), (-0.8, 0.3, -0.4), (0.2, -0.3, -1.0),  0.5),
     (2.60,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3),  _,                  0.0, _,                     (-1, 0.2, -0.3),  _,                  0.0),
 ]
 SLASH_LEN = SLASH[-1][0]
@@ -553,11 +638,14 @@ def slash_at(t):
         return catmull(*pts, uu)
 
     def direction(col):
+        """Where the claw points, and how much (a key without a direction
+        lets the hand ease back to its natural angle, rather than snap)."""
         ca, cb = a[col], b[col]
         if ca is None and cb is None:
             return None
+        strength = (1.0 if ca is not None else 0.0) * (1 - uu) + (1.0 if cb is not None else 0.0) * uu
         ca, cb = Vector(ca if ca is not None else cb), Vector(cb if cb is not None else ca)
-        return ca.normalized().lerp(cb.normalized(), uu)
+        return ca.normalized().lerp(cb.normalized(), uu), strength
 
     return dict(twist=lerp(1), lean=lerp(2), tip=lerp(3), drop=lerp(4),
                 L=(hand(5, "L"), Vector(a[6]).lerp(Vector(b[6]), uu), direction(7), lerp(8)),
@@ -591,11 +679,17 @@ def pose_slash(t):
         aim(a[0], a[1], hw(a[1]).lerp(target, 0.35), 0.35 * w, max_angle=0.35)
         # The elbow stays between 85% and 95% of the arm's length: never
         # locked straight, never folded tight (both tear the skin).
-        two_bone(a[1], a[2], a[3], target, pole, w, max_reach=0.95, min_reach=0.85)
+        # One steady elbow direction, out, back and down, for every pose:
+        # never along the arm (an elbow hint pointing the way the arm
+        # reaches leaves the elbow free to flip sides, which jerked the arm
+        # round at frames 9 and 25), and never up. (The table's elbow
+        # column is kept for reference but no longer used.)
+        hinge_arm(a[1], a[2], a[3], target, Vector((0.5 * sgn, 0.7, -0.5)), w)
         if claw is not None and w > 1e-3:
+            claw, strength = claw
             h = hw(a[3])
             reach = (hw(a[4]) - h).length
-            aim(a[3], a[4], h + claw.normalized() * reach, w, max_angle=0.7)
+            aim(a[3], a[4], h + claw.normalized() * reach, w * strength, max_angle=0.7)
     # Wings trail the torso's turn and swing back past it; the tail
     # counterbalances, later still. No flapping.
     turning = p["twist"] - late["twist"]

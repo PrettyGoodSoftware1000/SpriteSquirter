@@ -223,6 +223,18 @@ game yet.
     touching points the same weights, so the mesh's separate pieces never
     pull apart (0.42 had 172 cracks at the waist from the chain fix; now
     none in any frame).
+- ✅ (0.44) **Slash fixes** from the owner's notes on 0.43:
+  - The arm went inside the chest (frames ~25 and ~49): the swipes end
+    further forward and cross the body less, elbows point out and down
+    (away from the body), and the arm solver keeps elbow, forearm and
+    wrist at least 0.36 m from the spine line (the chest reaches ~0.30),
+    pushing the hand out if needed.
+  - Extra fingers (13-26, 43): the hands are locked to the forearms (no
+    wrist bend or twist, in the slash and the walks); bending the wrist
+    left finger points behind.
+  - Chest-to-armpit stretch at the wind-ups (18, 35): the claws rise to
+    about chin height, out to the side rather than back, and the
+    collarbone carries half of each reach (down ~25% at those frames).
 
 ## The other giants
 

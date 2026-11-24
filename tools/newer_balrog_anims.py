@@ -426,14 +426,31 @@ def hinge_arm(upper, lower, end, target, pole, weight=1.0, max_reach=0.95, min_r
         return
     s, e, w = hw(upper), hw(lower), hw(end)
     l1, l2 = (e - s).length, (w - e).length
-    d = target - s
-    dist = max(min(d.length, (l1 + l2) * max_reach), (l1 + l2) * min_reach)
-    dn = d.normalized()
-    cos_a = max(-1.0, min(1.0, (l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist)))
-    p = pole - dn * pole.dot(dn)
-    p.normalize()
-    mid = s + dn * (l1 * cos_a) + p * (l1 * math.sqrt(max(0.0, 1 - cos_a * cos_a)))
-    hand = s + dn * dist
+
+    def solve(target):
+        d = target - s
+        dist = max(min(d.length, (l1 + l2) * max_reach), (l1 + l2) * min_reach)
+        dn = d.normalized()
+        cos_a = max(-1.0, min(1.0, (l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist)))
+        p = pole(dn) if callable(pole) else pole
+        p = p - dn * p.dot(dn)
+        p.normalize()
+        return s + dn * (l1 * cos_a) + p * (l1 * math.sqrt(max(0.0, 1 - cos_a * cos_a))), s + dn * dist
+
+    mid, hand = solve(target)
+    # Clear of the body: if the elbow or forearm comes too close to the
+    # torso, the hand is pushed out (sideways from the spine) and solved
+    # again, so there is always a gap between arm and chest.
+    for _ in range(4):
+        worst, push = 0.0, None
+        for pt in (mid, mid.lerp(hand, 0.5), hand):
+            short, away = torso_clearance(pt)
+            if short > worst:
+                worst, push = short, away
+        if push is None:
+            break
+        target = target + push * (worst + 0.01)
+        mid, hand = solve(target)
 
     def frame(a, b):
         x = a.normalized()
@@ -444,6 +461,35 @@ def hinge_arm(upper, lower, end, target, pole, weight=1.0, max_reach=0.95, min_r
     # (Blended in by weight, so the arm eases from its hanging pose.)
     rotate_world(upper, Quaternion().slerp(turn.to_quaternion(), weight))
     aim(lower, end, hand, weight)
+
+
+# The torso, for keeping the arms clear of it: a line up the spine (it
+# moves with the body), and how far from it the arms must stay. The chest
+# reaches about 0.3 m from that line; ARM_CLEARANCE leaves a gap of ~5 cm.
+ARM_CLEARANCE = 0.36
+
+
+def torso_clearance(pt):
+    """How far pt is inside the clearance round the torso (0 if clear), and
+    the way out (sideways from the spine)."""
+    a, b = hw("Bone_003"), hw("Bone_010")
+    axis = (b - a).normalized()
+    along = max(0.0, min((b - a).length, (pt - a).dot(axis)))
+    off = pt - (a + axis * along)
+    off -= axis * off.dot(axis)
+    if off.length >= ARM_CLEARANCE:
+        return 0.0, None
+    return ARM_CLEARANCE - off.length, off.normalized() if off.length > 1e-6 else Vector((1, 0, 0))
+
+
+def elbow_way(sgn):
+    """Which way an elbow points: out and down. Away from the body when the
+    arm is in front or across it, down when the arm is raised, and in none
+    of the slash's poses along the arm (where the elbow could flip). (A
+    switch between "out" and "back and down" swung the elbow round as the
+    arm moved, and pointed it forward in the wind-ups, stretching the
+    armpits.)"""
+    return Vector((0.6 * sgn, 0.15, -0.8)).normalized()
 
 
 def place_leg(side, fet, tip, hock):
@@ -551,7 +597,7 @@ def pose_walk(W, t):
         a = ARMS[side]
         rotate_world(a[1], qx(0.2 * sgn * math.cos(2 * math.pi * (t - 0.1))))
         rotate_world(a[2], qx(0.12 * sgn * math.cos(2 * math.pi * (t - 0.2)) - 0.04))
-        rotate_world(a[3], qx(0.08 * sgn * math.cos(2 * math.pi * (t - 0.28))))
+        # (The hands stay locked to the forearms.)
     # Wings: no flapping. Each footfall's jolt runs out along them: they
     # dip a little after the body drops and spring back, the tips last.
     for side, sgn in (("R", -1), ("L", 1)):
@@ -580,6 +626,8 @@ _ = None
 # (0.43: kept in front of the body and below the horns, the twist and the
 # head's hold eased: the first version wrung the neck, swung the arm across
 # the chest and locked it straight, which stretched the shoulders up to 5x.)
+# (0.44: the wind-ups are lower and out to the side, not back (pulling the
+# arm back stretched the chest toward the armpit), and the swipes end further forward, crossing the body less.)
 # (0.43: the wind-ups arc out, clear of the shoulders, and every elbow hint
 # points down and out; two pointed up, which bent
 # the elbow upward in the follow-throughs.)
@@ -587,17 +635,17 @@ SLASH = [
     # t    twist  lean   tip   drop   L hand                 L elbow          L claw              Lw   R hand                 R elbow           R claw              Rw
     (0.00,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3),  _,                  0.0, _,                     (-1, 0.2, -0.3),  _,                  0.0),
     (0.25,  0.12, -0.02, -0.025, 0.005, (0.70, -0.04, 1.02),  (1, 0.25, -0.4), (0.3, 0.2, 0.9),    0.8, (-0.48, -0.25, 0.86), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.3),
-    (0.45,  0.24, -0.04, -0.05, 0.01, (0.60, 0.12, 1.45),    (1, 0.3, -0.5),  (0.3, 0.4, 0.85),   1.0, (-0.40, -0.32, 0.92), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
-    (0.62,  0.27, -0.05, -0.06, 0.01, (0.54, 0.08, 1.40),    (1, 0.3, -0.5),  (0.3, 0.3, 0.9),    1.0, (-0.40, -0.33, 0.93), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
-    (0.73,  0.08, 0.12,  -0.02, 0.03, (0.50, -0.44, 1.20),   (1, 0.1, -0.4),  (-0.2, -0.8, 0.3),  1.0, (-0.48, -0.12, 0.94), (-1, 0.3, -0.3),  _,                  0.5),
-    (0.81, -0.20, 0.24,  0.03, 0.05,  (0.12, -0.64, 0.98),   (0.8, 0.2, -0.6), (-0.7, -0.6, -0.2), 1.0, (-0.55, 0.0, 1.05),   (-1, 0.3, -0.2),  (-0.2, 0.4, 0.6),   0.8),
-    (0.96, -0.30, 0.26,  0.05, 0.05,  (-0.12, -0.58, 0.82),  (0.6, 0.4, -0.8), (-0.5, -0.3, -0.8), 1.0, (-0.54, 0.05, 1.30),  (-1, 0.2, -0.2),  (-0.3, 0.4, 0.85),  1.0),
-    (1.14, -0.27, -0.02, 0.05, 0.01,  (0.40, -0.32, 0.92),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.54, 0.08, 1.40),  (-1, 0.3, -0.5),  (-0.3, 0.3, 0.9),   1.0),
-    (1.24, -0.28, -0.03, 0.06, 0.01,  (0.40, -0.33, 0.93),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.55, 0.09, 1.41),  (-1, 0.3, -0.5),  (-0.3, 0.3, 0.9),   1.0),
-    (1.35, -0.08, 0.12,  0.02, 0.03,  (0.48, -0.12, 0.94),   (1, 0.3, -0.3),  _,                  0.5, (-0.50, -0.44, 1.20), (-1, 0.1, -0.4),  (0.2, -0.8, 0.3),   1.0),
-    (1.43,  0.20, 0.24, -0.03, 0.05,  (0.55, 0.0, 1.05),     (1, 0.3, -0.2),  _,                  0.4, (-0.12, -0.64, 0.98), (-0.8, 0.2, -0.6), (0.7, -0.6, -0.2),  1.0),
-    (1.60,  0.30, 0.26, -0.05, 0.05,  (0.5, 0.0, 0.95),      (1, 0.3, -0.2),  _,                  0.3, (0.12, -0.58, 0.82),  (-0.6, 0.4, -0.8), (0.5, -0.3, -0.8),  1.0),
-    (2.05,  0.10, 0.10, -0.02, 0.02,  _,                     (1, 0.2, -0.3),  _,                  0.0, (-0.25, -0.40, 0.84), (-0.8, 0.3, -0.4), (0.2, -0.3, -1.0),  0.5),
+    (0.45,  0.24, -0.04, -0.05, 0.01, (0.72, 0.02, 1.24),    (1, 0.3, -0.5),  (0.3, 0.4, 0.85),   1.0, (-0.40, -0.32, 0.92), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
+    (0.62,  0.27, -0.05, -0.06, 0.01, (0.73, 0.04, 1.26),    (1, 0.3, -0.5),  (0.3, 0.3, 0.9),    1.0, (-0.40, -0.33, 0.93), (-1, 0.2, -0.5),  (0.2, -0.8, -0.3),  0.5),
+    (0.73,  0.08, 0.12,  -0.02, 0.03, (0.50, -0.44, 1.20),   (1, 0.1, -0.4),  (-0.2, -0.8, 0.3),  1.0, (-0.56, -0.08, 0.98), (-1, 0.3, -0.3),  _,                  0.65),
+    (0.81, -0.20, 0.24,  0.03, 0.05,  (0.22, -0.72, 1.00),   (0.8, 0.2, -0.6), (-0.7, -0.6, -0.2), 1.0, (-0.62, -0.04, 1.00),   (-1, 0.3, -0.2),  (-0.2, 0.4, 0.6),   0.75),
+    (0.96, -0.30, 0.26,  0.05, 0.05,  (0.02, -0.72, 0.86),  (0.6, 0.4, -0.8), (-0.5, -0.3, -0.8), 1.0, (-0.72, 0.00, 1.14),  (-1, 0.2, -0.2),  (-0.3, 0.4, 0.85),  1.0),
+    (1.14, -0.27, -0.02, 0.05, 0.01,  (0.40, -0.32, 0.92),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.72, 0.02, 1.24),  (-1, 0.3, -0.5),  (-0.3, 0.3, 0.9),   1.0),
+    (1.24, -0.28, -0.03, 0.06, 0.01,  (0.40, -0.33, 0.93),   (1, 0.2, -0.5),  (-0.2, -0.8, -0.3), 0.5, (-0.73, 0.04, 1.26),  (-1, 0.3, -0.5),  (-0.3, 0.3, 0.9),   1.0),
+    (1.35, -0.08, 0.12,  0.02, 0.03,  (0.52, -0.10, 0.96),   (1, 0.3, -0.3),  _,                  0.45, (-0.50, -0.44, 1.20), (-1, 0.1, -0.4),  (0.2, -0.8, 0.3),   1.0),
+    (1.43,  0.20, 0.24, -0.03, 0.05,  (0.55, -0.05, 1.0),    (1, 0.3, -0.2),  _,                  0.4, (-0.22, -0.72, 1.00), (-0.8, 0.2, -0.6), (0.7, -0.6, -0.2),  1.0),
+    (1.60,  0.30, 0.26, -0.05, 0.05,  (0.5, 0.0, 0.95),      (1, 0.3, -0.2),  _,                  0.3, (-0.02, -0.72, 0.86),  (-0.6, 0.4, -0.8), (0.5, -0.3, -0.8),  1.0),
+    (2.05,  0.10, 0.10, -0.02, 0.02,  _,                     (1, 0.2, -0.3),  _,                  0.0, (-0.35, -0.45, 0.84), (-0.8, 0.3, -0.4), (0.2, -0.3, -1.0),  0.5),
     (2.60,  0.00, 0.00,  0.00, 0.00,  _,                     (1, 0.2, -0.3),  _,                  0.0, _,                     (-1, 0.2, -0.3),  _,                  0.0),
 ]
 SLASH_LEN = SLASH[-1][0]
@@ -675,21 +723,18 @@ def pose_slash(t):
         a = ARMS[side]
         sgn = 1 if side == "L" else -1
         # The collarbone takes a share of each reach (the shoulder comes
-        # forward and up with the arm), so the shoulder joint turns less.
-        aim(a[0], a[1], hw(a[1]).lerp(target, 0.35), 0.35 * w, max_angle=0.35)
+        # forward and up with the arm), so the shoulder joint turns less
+        # and the skin from chest to armpit stretches less.
+        aim(a[0], a[1], hw(a[1]).lerp(target, 0.5), 0.5 * w, max_angle=0.45)
         # The elbow stays between 85% and 95% of the arm's length: never
         # locked straight, never folded tight (both tear the skin).
-        # One steady elbow direction, out, back and down, for every pose:
-        # never along the arm (an elbow hint pointing the way the arm
-        # reaches leaves the elbow free to flip sides, which jerked the arm
-        # round at frames 9 and 25), and never up. (The table's elbow
-        # column is kept for reference but no longer used.)
-        hinge_arm(a[1], a[2], a[3], target, Vector((0.5 * sgn, 0.7, -0.5)), w)
-        if claw is not None and w > 1e-3:
-            claw, strength = claw
-            h = hw(a[3])
-            reach = (hw(a[4]) - h).length
-            aim(a[3], a[4], h + claw.normalized() * reach, w * strength, max_angle=0.7)
+        # The elbow points away from the body when the arm is in front, back
+        # and down when it reaches out to the side, never up, never along
+        # the arm (where it could flip). The arm keeps clear of the chest.
+        # (The table's elbow column is kept for reference but not used.)
+        hinge_arm(a[1], a[2], a[3], target, elbow_way(sgn), w)
+        # The hands stay locked to the forearms: bending the wrists left
+        # fingers behind ("extra fingers"). (The claw column is not used.)
     # Wings trail the torso's turn and swing back past it; the tail
     # counterbalances, later still. No flapping.
     turning = p["twist"] - late["twist"]

@@ -72,11 +72,13 @@ func _run() -> void:
 	_check(first_people == roundi(Balance.num("start_villagers")), "the village starts with 20 villagers (%d)" % first_people)
 	_check(not get_tree().get_nodes_in_group("player_buildings").is_empty(), "village site buildings join the player")
 	var free_store := false
+	# (Whichever model Names.txt gives the Storehouse's job.)
+	var store_kind := BuildingCatalog.kind_for_role("store", "store")
 	for b in get_tree().get_nodes_in_group("player_buildings"):
-		if b.get_meta("kind", "") == "store" and (b as Node3D).global_position.distance_to(village.center) < 45.0:
+		if b.get_meta("kind", "") == store_kind and (b as Node3D).global_position.distance_to(village.center) < 45.0:
 			free_store = true
 	_check(free_store, "a free Storehouse stands at the start location")
-	_check(BuildingCatalog.housing("store") == roundi(Balance.num("storehouse_housing")), "a Storehouse houses storehouse_housing (%d)" % BuildingCatalog.housing("store"))
+	_check(BuildingCatalog.housing(store_kind) == roundi(Balance.num("storehouse_housing")), "a Storehouse houses storehouse_housing (%d)" % BuildingCatalog.housing(store_kind))
 	# What the village can store, and what came in over the last minute.
 	var lumber_cap := village.capacity("lumber")
 	village.give("lumber", 5000.0)
@@ -739,7 +741,7 @@ func _run() -> void:
 		site2.queue_free()
 	village.change_quota("build", -1)
 	await _wait(1.0)
-	_check(BuildingCatalog.find("store").name == "Stacked houses" and BuildingCatalog.role("store") == "store"
+	_check(BuildingCatalog.find("store").name == "Stacked houses" and BuildingCatalog.role(store_kind) == "store"
 		and BuildingCatalog.find("moon_tower").gameplay == "Wizardry tower" and BuildingCatalog.find("tall_house").gameplay == "Town guard"
 		and BuildingCatalog.find("singing_rocks").gameplay == "Shrine" and BuildingCatalog.find("windmill").gameplay == "Granary"
 		and BuildingCatalog.find("necro_tower").name == "Skull tower"
@@ -751,10 +753,10 @@ func _run() -> void:
 	_check(play.hud._build_previews.size() == BuildingCatalog.BUILDINGS.size() - 2, "the build menu shows a picture of each building (%d)" % play.hud._build_previews.size())
 	Game.dev_menu = true
 	play.hud.set_dev_visible(true)
-	_check((play.hud._build_buttons["store"] as Button).tooltip_text.contains("Stacked houses"), "with the dev menu open, the build menu tells the model's name")
+	_check((play.hud._build_buttons[store_kind] as Button).tooltip_text.contains(BuildingCatalog.find(store_kind).name), "with the dev menu open, the build menu tells the model's name")
 	Game.dev_menu = false
 	play.hud.set_dev_visible(false)
-	_check((play.hud._build_buttons["store"] as Button).tooltip_text == "", "and not otherwise")
+	_check((play.hud._build_buttons[store_kind] as Button).tooltip_text == "", "and not otherwise")
 	play.hud.show_build_menu(false)
 	var all_near := true
 	for v in get_tree().get_nodes_in_group("villagers"):

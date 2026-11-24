@@ -93,7 +93,7 @@ class Details:
 # --- Entry points -----------------------------------------------------------
 
 const VILLAGE_KINDS := ["treehouse", "lookout_treehouse", "twin_treehouse", "great_treehouse", "crystal_tower", "moon_tower", "mushroom_house",
-	"singing_rocks", "store", "windmill"]
+	"singing_rocks", "store", "store_house", "windmill"]
 
 
 ## A random building that villagers build.
@@ -120,6 +120,8 @@ static func create(kind: String, rng: RandomNumberGenerator) -> Destructible:
 			top = _build_singing_rocks(b, rng)
 		"store":
 			top = _build_store(b, rng)
+		"store_house":
+			top = _build_store_house(b, rng)
 		"windmill":
 			top = _build_windmill(b, rng)
 		"blacksmith":
@@ -639,6 +641,33 @@ static func _build_store(b: Destructible, rng: RandomNumberGenerator) -> float:
 	board.add_tube(PackedVector3Array([Vector3(0, 2.0, 1.6), Vector3(0, 3.3, 2.15)]), PackedFloat32Array([0.09, 0.07]), 5)
 	_part(b, board.commit(), Art.paint("planks", 0.5))
 	return top
+
+
+# --- Store house (a Meshy model) -----------------------------------------------
+
+## The owner's Meshy storehouse (assets/buildings/StoreHouse.glb), in its
+## own painted material (no cel shading or outline), about 14 m tall.
+const STORE_HOUSE_MODEL := "res://assets/buildings/StoreHouse.glb"
+const STORE_HOUSE_HEIGHT := 14.0
+
+
+static func _build_store_house(b: Destructible, rng: RandomNumberGenerator) -> float:
+	var scene := (load(STORE_HOUSE_MODEL) as PackedScene).instantiate() as Node3D
+	var source := scene.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	var box := source.mesh.get_aabb()
+	var scale := STORE_HOUSE_HEIGHT / maxf(box.size.y, 0.001)
+	var mi := MeshInstance3D.new()
+	mi.mesh = source.mesh
+	mi.material_override = source.get_active_material(0)
+	mi.scale = Vector3.ONE * scale
+	# (Not every one faces the same way.)
+	mi.rotation.y = rng.randf_range(-0.3, 0.3)
+	mi.position.y = -box.position.y * scale - 0.3
+	mi.set_meta("debris", true)
+	b.add_child(mi)
+	scene.free()
+	b.footprint = maxf(box.size.x, box.size.z) * 0.5 * scale
+	return box.size.y * scale - 0.3
 
 
 # --- Windmill -----------------------------------------------------------------

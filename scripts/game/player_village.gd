@@ -208,7 +208,7 @@ func _raise_first_storehouse() -> void:
 	var terrain := Game.terrain
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Game.world_seed + 7
-	var store := BuildingFactory.create("store", rng)
+	var store := BuildingFactory.create(BuildingCatalog.kind_for_role("store", "store"), rng)
 	var spot := center
 	var found_spot := false
 	for ring in 16:

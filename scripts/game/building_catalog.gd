@@ -39,6 +39,7 @@ const ASSETS := [
 	["twin_treehouse", "Twin treehouse"],
 	["great_treehouse", "Great treehouse"],
 	["store", "Stacked houses"],
+	["store_house", "Store house"],
 	["moon_tower", "Moon tower"],
 	["blacksmith", "Blacksmith"],
 	["mushroom_house", "Mushroom cottage"],
@@ -51,7 +52,7 @@ const ASSETS := [
 ## The gameplay names used when Names.txt is missing or leaves an asset out.
 const DEFAULT_GAMEPLAY := {
 	"treehouse": "Home", "lookout_treehouse": "Home", "twin_treehouse": "Home", "great_treehouse": "Home",
-	"store": "Storehouse", "moon_tower": "Wizardry tower", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
+	"store": "Storehouse", "store_house": "Storehouse", "moon_tower": "Wizardry tower", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
 	"singing_rocks": "Shrine", "necro_tower": "Necromancer tower", "windmill": "Granary",
 	"crystal_tower": "Decoration", "tall_house": "Town guard",
 }
@@ -169,6 +170,17 @@ static func role_name(role: String) -> String:
 		if entry.get("role", "") == role:
 			return entry.title
 	return MISSING_NAME
+
+
+## The kind of the first building in Names.txt with `role` (as role_name),
+## or `fallback` if none has it.
+static func kind_for_role(role: String, fallback: String) -> String:
+	if _all.is_empty():
+		apply_balance()
+	for pair: Array in ASSETS:
+		if (_all.get(pair[0], {}) as Dictionary).get("role", "") == role:
+			return pair[0]
+	return fallback
 
 
 static func housing(kind: String) -> int:

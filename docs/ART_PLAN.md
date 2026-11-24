@@ -39,6 +39,13 @@ it up to date as steps are done.
 5. **Buildings** stay much as they are (built in code). Keep: the trees on
    buildings change colour with the colour palette, and rope bridges must
    keep working between treehouses.
+   - (0.48, ArtShift) The owner's Meshy storehouse,
+     `assets/buildings/StoreHouse.glb`, is the new asset **Store house**
+     (kind `store_house`) with the Storehouse job in `Names.txt`; the old
+     **Stacked houses** is kept but has no job (out of the build menu). It
+     wears its own painted texture (no cel shading or outline), about 14 m
+     tall. The village's free first storehouse is whichever asset has the
+     Storehouse job (`BuildingCatalog.kind_for_role()`).
 
 ## How the work is done
 

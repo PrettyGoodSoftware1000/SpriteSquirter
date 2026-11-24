@@ -32,7 +32,8 @@ Treehouse           = Home              = House in a tree
 Lookout treehouse   = Home              = Lookout house
 Twin treehouse      = Home              = Double Treehouse
 Great treehouse     = Home              = Big Old Treehouse
-Stacked houses      = Storehouse        = Storehouse 
+Stacked houses      =                   = Storehouse
+Store house         = Storehouse        = Storehouse
 Moon tower          = Wizardry tower    = Wizardry tower
 Blacksmith          = Blacksmith        = Forger
 Mushroom cottage    = Cottage           = Shroom Home

@@ -21,7 +21,7 @@ archer_post_range = 200%        # archers up on a treehouse or a rope bridge sho
                                 # nothing that fights hand to hand can reach them there, but they fall with their post
 
 wizard_health = 45              # a wizard's health
-wizard_magicko = 150            # magicko a wizard makes a minute (5 every 2 seconds; a villager makes the Magicko rate slider's, 0.5 to begin with)
+wizard_magicko = 5              # magicko a wizard makes a minute (5 every 2 seconds; a villager makes the Magicko rate slider's, 0.5 to begin with)
 wizard_firebolt_damage = 70
 wizard_firebolt_seconds = 1   # time between firebolts
 

@@ -62,6 +62,25 @@ judge well from pictures alone happens.
 7. **Fly, all frames: the head.** It is meant to stay level while the body
    rises and dips; check it does not nod.
 
+## The attack (0.60)
+
+`raven_walk.glb` / `.blend` also have an **Attack** clip: the left claw, 55
+frames at 30 fps (1.8 s), after the balrog's claw slash but with a shallower
+wind-up. Video: `raven_review/raven_attack.mp4`. In the test environment,
+"New raven" then "Attack".
+
+| Frames | What happens |
+|---|---|
+| 1-10 | The left arm rises up and out (slightly ahead of the shoulder, not back); the left wing lifts up and back out of its way; the torso turns away |
+| 10-16 | A moment's hold at the top, the fingers open |
+| 16-26 | The swipe: down and across the chest, gathering speed; the torso whips round and leans into it, the hips drop; it strikes at frame 26 |
+| 26-31 | Follow-through, the claw closing |
+| 31-55 | Back to rest, slowing to a stop |
+
+Worth a check: frames 16-26 (the swipe: fast enough, or too fast?), frames
+1-16 (does the wing clear the raised arm?), and frame 26 (the strike). The
+wrist does not twist; the arm never straightens past 90% of its length.
+
 ## Joint limits
 
 Every hinge closes only one way and never opens past straight: the elbows,

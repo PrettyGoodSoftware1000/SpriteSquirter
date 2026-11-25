@@ -2688,6 +2688,11 @@ func _run() -> void:
 		await _wait(2.0)
 		var walking: bool = env._nr_walk.visible and not env._nr_fly.visible and env._nr_speed > 0.5 \
 			and env._nr_walk_player != null and env._nr_walk_player.is_playing() and env._nr_walk_player.current_animation == "Walk"
+		env._new_raven("attack")
+		await _wait(0.5)
+		var attacking: bool = env._nr_state == "attack" and env._nr_walk_player.current_animation == "Attack"
+		await _wait(2.5)
+		_check(attacking and env._nr_state == "stand", "the new raven swipes with its left claw (its Attack clip) and stands again")
 		env._new_raven("rise")
 		await _wait(TestEnvironment.NEW_RAVEN_LIFT_SECONDS + 1.0)
 		var flying: bool = env._nr_fly.visible and not env._nr_walk.visible and env._nr_state == "fly" and env._nr_height > 10.0 \

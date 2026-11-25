@@ -28,7 +28,8 @@ extends Node3D
 ## game yet): two models, one on the ground (raven_walk.glb) and one in the
 ## air (raven_fly.glb), each with its own clip (made by tools/raven_new_*.py).
 ## "Walk" walks it round a circle, its Walk clip played as fast as it really
-## goes so the feet do not slide; "Take off" changes it for the flying model
+## goes so the feet do not slide; "Attack" stops it for a swipe of its left
+## claw (its Attack clip); "Take off" changes it for the flying model
 ## as it leaves the ground, which flies round with its Fly clip; "Land"
 ## brings it down and changes it back as its feet touch. They stand
 ## on flat ground the size of a small island (Terrain.generate_flat(), not
@@ -598,7 +599,7 @@ func _build_ui() -> void:
 	var nr_row := HBoxContainer.new()
 	nr_row.add_theme_constant_override("separation", 6)
 	box.add_child(nr_row)
-	for pair: Array in [["Walk", "walk"], ["Stand", "stand"], ["Take off", "rise"], ["Land", "fall"]]:
+	for pair: Array in [["Walk", "walk"], ["Stand", "stand"], ["Attack", "attack"], ["Take off", "rise"], ["Land", "fall"]]:
 		var b := _button(pair[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.disabled = not ResourceLoader.exists(NEW_RAVEN_WALK) or not ResourceLoader.exists(NEW_RAVEN_FLY)
@@ -695,6 +696,15 @@ func _new_raven(order: String) -> void:
 		"walk", "stand":
 			if _nr_state in ["walk", "stand"]:
 				_nr_state = order
+		"attack":
+			# It stops, swipes with its left claw once, and stands.
+			if _nr_state in ["walk", "stand"] and _nr_walk_player != null and _nr_walk_player.has_animation("Attack"):
+				_nr_state = "attack"
+				_nr_walk_player.play("Attack", 0.25)
+				_nr_walk_player.animation_finished.connect(func(_name: StringName) -> void:
+					if _nr_state == "attack":
+						_nr_state = "stand"
+						_nr_walk_player.play("Walk", 0.3), CONNECT_ONE_SHOT)
 		"rise":
 			if _nr_state in ["walk", "stand"]:
 				_nr_state = "rise"
@@ -747,12 +757,15 @@ func _update_new_raven(delta: float) -> void:
 	_nr.position = Vector3(at.x, _nr_height, at.z)
 	_nr.rotation.y = atan2(ahead.x, ahead.z)
 	if _nr_walk_player != null:
-		# The walk clip runs as fast as the raven walks.
-		_nr_walk_player.speed_scale = _nr_speed / (NEW_RAVEN_CLIP_SPEED * NEW_RAVEN_SCALE) if _nr_walk.visible else 1.0
+		# The walk clip runs as fast as the raven walks (the attack at its own pace).
+		if _nr_state == "attack" or not _nr_walk.visible:
+			_nr_walk_player.speed_scale = 1.0
+		else:
+			_nr_walk_player.speed_scale = _nr_speed / (NEW_RAVEN_CLIP_SPEED * NEW_RAVEN_SCALE)
 	if _follow:
 		Game.camera_rig.focus.x = _nr.position.x
 		Game.camera_rig.focus.z = _nr.position.z
-	_nr_info.text = "%s   %.1f m/s   %.1f m up" % [{"stand": "Standing", "walk": "Walking", "rise": "Taking off",
+	_nr_info.text = "%s   %.1f m/s   %.1f m up" % [{"stand": "Standing", "walk": "Walking", "attack": "Attacking", "rise": "Taking off",
 		"fly": "Flying", "fall": "Landing"}.get(_nr_state, ""), _nr_speed, _nr_height]
 
 

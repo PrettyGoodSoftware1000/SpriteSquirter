@@ -417,6 +417,14 @@ from one model to the other as it takes off and lands. The originals (about
   joints) was forced to bend as far again; now every hinge's limits always
   allow the model's own pose, so the toes keep the model's flight position.
 
+- (0.60) The flier's sheen matches the walker's (`tools/raven_fly_look.py`:
+  its roughness and metallic mapped onto the walker's, in its material; the
+  colours as they were). In `raven_fly.blend` only (not yet in the game's
+  `raven_fly.glb`); rebuilding the flier undoes it, so run that script again
+  after `raven_new_anim.py` makes the flier.
+- (0.60) An **Attack** clip on the walking raven: the left claw, after the
+  balrog's slash (see the review notes).
+
 Review notes, with the frames worth a check: `docs/raven_new_review.md`
 (pictures in `docs/raven_review/`). The test environment shows them ("New
 raven"). Not yet: the raven in the game (it still uses `raven.glb` and its

@@ -135,11 +135,19 @@ func uproot() -> void:
 	destroyed = true
 	set_process(false)
 	_unblock_paths()
-	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings"]:
+	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings", "neutral_buildings"]:
 		remove_from_group(group)
+	_leave_village()
 	for child in get_children():
 		if child is StaticBody3D:
 			child.queue_free()
+
+
+## A neutral village's building leaves its village's group too.
+func _leave_village() -> void:
+	var of: Variant = get_meta("village") if has_meta("village") else null
+	if of != null and is_instance_valid(of):
+		remove_from_group((of as PlayerVillage).buildings_group)
 
 
 ## Chopped down for lumber: falls apart quietly, without scaring anyone.
@@ -159,8 +167,9 @@ func shatter(from: Vector3, force: float, quiet := false) -> void:
 		return
 	destroyed = true
 	_unblock_paths()
-	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings"]:
+	for group in ["destructibles", "grounded", "buildings", "trees", "player_buildings", "neutral_buildings"]:
 		remove_from_group(group)
+	_leave_village()
 	for f in _fires:
 		if is_instance_valid(f):
 			f.reparent(Game.fire, true)

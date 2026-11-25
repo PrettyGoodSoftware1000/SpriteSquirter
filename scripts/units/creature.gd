@@ -193,6 +193,9 @@ var hp := 0.0
 var knocked_out := false
 ## True for the goblins' giant, which fights the village and not for it.
 var hostile := false
+## Set in the test environment: the giant this one fights, whatever side
+## either is on (see TestEnvironment). Null in the game.
+var duel_foe: Creature
 ## In the air (the raven), from take-off until its feet are down again.
 var flying := false
 ## On all fours and going fast (the squirrel).
@@ -400,6 +403,8 @@ func _burst_out() -> void:
 ## The other giant: the Balrog for the player's creature, and the other
 ## way about. Null if there is none to fight just now.
 func _rival() -> Creature:
+	if duel_foe != null:
+		return duel_foe if is_instance_valid(duel_foe) and not duel_foe.knocked_out else null
 	for node in get_tree().get_nodes_in_group("balrogs"):
 		var b := node as Creature
 		if not b.knocked_out:
@@ -407,9 +412,10 @@ func _rival() -> Creature:
 	return null
 
 
-## True if this giant is out to hurt the village right now (the Balrog).
+## True if this giant is out to hurt the village right now (the Balrog),
+## or, in a test fight, its foe.
 func is_threat() -> bool:
-	return false
+	return is_instance_valid(duel_foe) and not knocked_out
 
 
 # --- Stamina and magicko ------------------------------------------------------

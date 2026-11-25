@@ -41,18 +41,25 @@ The first import takes a few seconds while Godot builds its cache in `.godot/`.
 
 The main menu offers a **random island** (Small 192 m, Medium 384 m or
 Large 768 m square; the islands are about 170, 350 and 700 m across), your
-**saved maps**, and the **map editor**. Menus and text scale with the window
-size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
+**saved maps**, and the **map editor**. The version is shown under the
+title. Menus and text scale with the window size (2.4 times bigger at
+3840 x 2160 than at 1600 x 900). The main menu also sets how many
+**neutral villages** there will be (see below), and its **Dev menu**
+button (or ~) opens the gameplay sliders, so they can be set before a game
+starts; they carry over into it.
 
-1. **Choose a start location.** Numbered banners mark them; click one. On a
-   random island each banner is an existing village, which becomes yours. On
-   a map from the editor you start with no buildings. Either way the
-   village starts with 20 villagers, and 100 each of lumber, stone, food
-   and magicko (`start_...` in `balancing.txt`).
+1. **Choose a start location.** Numbered banners mark them; click one. A
+   random island is just its start locations and one goblin cave: nothing
+   is built anywhere, and your first **Storehouse** goes up free where you
+   click. A map from the editor is the same. The village starts with 20
+   villagers, and 100 each of lumber, stone, food and magicko (`start_...`
+   in `balancing.txt`). While you choose, a box under the message sets how
+   many neutral villages take other start locations.
 2. **Your villagers work by themselves.** Grown-ups fell trees (lumber),
    break up boulders (stone) and farm wheat fields (food: there is no other
    way to get it, so draw a field early), and every
-   grown-up adds a trickle of magicko. Workers carry each load to the
+   grown-up adds a trickle of magicko (1 a minute: everyone born in your
+   village is a **worshiper** of your creature). Workers carry each load to the
    nearest **Storehouse** (food may go to a **Granary** too; with no
    Storehouse, to the middle of the village); it only counts once it
    arrives. Each Storehouse holds 300 each of lumber, stone, food and
@@ -167,7 +174,7 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    unassigned Workers. More buildings train side by side. A grey
    bar fills over the count while recruits train. Lower the number and
    warriors or wizards go straight back to work; they have to train again
-   to return. **Wizards** make 5 magicko every 2 minutes each (`wizard_magicko`, 2.5 a minute; a villager makes 1 every 2 minutes, the dev menu's Magicko rate) and throw tiny
+   to return. **Wizards** make 5 magicko every 2 minutes each (`wizard_magicko`, 2.5 a minute; a worshiper makes 1 a minute, the dev menu's Magicko rate) and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
    sometimes setting them alight. Once **Bows** are researched an Archers
    count appears: each Town guard allows 2 **archers** (22½ seconds each),
@@ -195,8 +202,9 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
    through it every goblin leaves its cave and marches on your village,
    swimming rivers on the way. They attack villagers first, then buildings,
    and go home in the morning. Every cave that was there when the game
-   began keeps spawning goblins (2 a minute; the dev menu's goblin
-   spawn), and every goblin building finished near a cave adds
+   began keeps spawning goblins (1 a minute, the dev menu's goblin
+   spawn, and 2 more for every neutral village there was at the start),
+   and every goblin building finished near a cave adds
    `goblin_rate_per_building` a minute more there. Only their buildings
    make them spawn faster; the nights alone do not.
    **Ogres and giant bats come from goblin buildings.** Every **war hut**
@@ -449,6 +457,48 @@ size (2.4 times bigger at 3840 x 2160 than at 1600 x 900).
 
 Days turn from dawn to daytime, evening and night.
 
+## Neutral villages
+
+Before a game starts (on the main menu, or while choosing your start
+location) you pick how many **neutral villages** there are: at most one
+fewer than the map has start locations. They take start locations you did
+not pick, at random. Each starts as yours does, with a free Storehouse and
+as many villagers, and then lives on its own: its people gather, eat, have
+children, build and fight off goblins for their own village.
+
+- **What they build** comes from a build order file in the
+  `NeutralVillages` folder: `Neutral_Build_Order_1.txt`, and any
+  `Neutral_Build_Order_2.txt`, `_3.txt` and so on put there later (each
+  village picks one at random when the game starts). The top of the file
+  lists every building (asset name and gameplay name) with the most of it a
+  village builds; below `[Build order]` come the buildings it builds first,
+  one a line, in order. After the last it builds at random, up to the most
+  of each. It skips one it is already at the most of, or has waited 5
+  minutes for.
+- **Their people:** 5 workers always (`neutral_keep_workers`; they build,
+  and gather what the village has least of), as many warriors, archers
+  and wizards as their buildings can train (they have bows from the
+  start), and a third of everyone else on each of lumber, stone and food.
+- **Worshipers.** Their people do not worship your creature at first. While
+  your creature is in their village, one is won over every 5 minutes
+  (`convert_minutes`); when it casts rain, or a spell at the goblins there,
+  or gathers near them, 1 or 2 more are won over at once
+  (`convert_on_help_min` and `_max`). Worshipers make you magicko like
+  your own villagers. At most 80% of a village can be won over peacefully
+  (`worshipers_most`). Point at a neutral village's Storehouse to see how
+  many worship the creature.
+- **Taking over.** Once 75% of a neutral village worship your creature
+  (`takeover_share`), it is yours: its buildings, people, army, stores and
+  the ground round it. It is yours at once, too, when everyone left in it
+  worships the creature, or when everyone in it is dead and its buildings
+  still stand.
+- **Goblins.** Every neutral village there is at the start makes the
+  goblins stronger: 2 more goblins a minute at every starting cave
+  (`neutral_goblin_spawn`) and 40% faster building
+  (`neutral_goblin_build_speed`). The goblins raid them too (each raider
+  picks your village or one of theirs). If they kill everyone in a neutral
+  village and knock everything down, a goblin cave opens where it stood.
+
 ## Controls
 
 In the game, press **Esc** and **Show controls** for this list.
@@ -484,18 +534,20 @@ In the game, press **Esc** and **Show controls** for this list.
 
 ### Dev menu (~)
 
-The version number is shown at the top of the dev menu.
+The version number is shown at the top of the dev menu. The main menu has
+the gameplay sliders too (its Dev menu button, or ~), so they can be set
+before a game starts.
 
 | Control | Action |
 |---|---|
-| Day length | Minutes for a whole day and night (10 by default: two thirds day, one third night; the 12-hour clock always runs dawn at 6:00 am to nightfall at 10:00 pm) |
+| Day length / Night length | Minutes of daylight (5 by default) and of night (3 by default); the 12-hour clock always runs dawn at 6:00 am to nightfall at 10:00 pm |
 | Lumber / Stone / Food rate | Units each worker gathers per minute |
 | Birth timer | Seconds between new villagers |
-| Magicko rate | Magicko each grown-up worker adds per minute (wizards make 5) |
-| Goblin Spawn Rate | Goblins each starting cave spawns per minute before its buildings add more (each finished goblin building adds `goblin_rate_per_building`). 0 by default. **Goblin population bounce back**: with fewer than 5 goblins left, the caves spawn 5 a minute until there are 6 (`goblin_bounce_...` in `balancing.txt`) |
+| Magicko rate | Magicko each grown-up worshiper adds per minute (1 by default; wizards make `wizard_magicko`) |
+| Goblin Spawn Rate | Goblins each starting cave spawns per minute before its buildings add more (each finished goblin building adds `goblin_rate_per_building`, and every neutral village at the start `neutral_goblin_spawn`). 1 by default. **Goblin population bounce back**: with fewer than 5 goblins left, the caves spawn 5 a minute until there are 6 (`goblin_bounce_...` in `balancing.txt`) |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
-| Goblin build speed | How many times as fast the goblins start and finish buildings (1 by default) |
+| Goblin build speed | How many times as fast the goblins start and finish buildings (1.5 by default; every neutral village at the start adds `neutral_goblin_build_speed`) |
 | Construction rate | How many times as fast your buildings go up |
 | Training time | Multiplies every training time |
 | Starting influence / Influence per person | How far the village's influence reaches at first, and how much further for every villager |
@@ -561,6 +613,17 @@ uphill, and nobody can walk up or down the grey rock slopes
 giant bats fly over them. Villagers and goblins plan
 their way to keep off steep ground and round cliffs and water, unless
 there is no other way.
+
+## Test environment
+
+**Test environment** on the main menu shows a model on its own under studio
+lights (the newer balrog test model and its clips), and the game's own
+**giants** with the game's own animation: the tortoise, the squirrel, the
+raven and the balrog. A giant's button puts it on the floor on its own;
+pick two under **Fight** and press **Fight!** and they square up and fight
+until one is down (the line under them shows their health). **Walk
+somewhere** sends them off, and **Giant size** grows or shrinks them.
+WASD pans, Q / E turn, the wheel zooms; Esc goes back to the menu.
 
 ## Balancing
 
@@ -651,7 +714,11 @@ scripts/
   core/map_data.gd         Saving, loading and listing map files
   game/play_mode.gd        The game: start choice, spells, building placement, dev tools
   game/player_village.gd   Resources, villager jobs, carrying, births, housing, food,
-                           training warriors and wizards
+                           training warriors and wizards (the player's village, and
+                           the base of the neutral ones)
+  game/neutral_village.gd  A neutral village: its build order, its people, worshipers, takeover
+  game/build_order.gd      Reads the build order files in NeutralVillages/
+NeutralVillages/           The owner's build orders for neutral villages (Neutral_Build_Order_1.txt, ...)
   game/construction_site.gd  A building going up (the villagers', or the goblins')
   world/rope_bridge.gd       A rope bridge between two treehouses, and the way over it
   world/path_grid.gd         Routes over the island that keep off slopes, cliffs, water and buildings

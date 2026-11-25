@@ -21,7 +21,7 @@ archer_post_range = 200%        # archers up on a treehouse or a rope bridge sho
                                 # nothing that fights hand to hand can reach them there, but they fall with their post
 
 wizard_health = 45              # a wizard's health
-wizard_magicko = 2.5            # magicko a wizard makes a minute (5 every 2 minutes; a villager makes the Magicko rate slider's, 0.5 to begin with)
+wizard_magicko = 2.5            # magicko a wizard makes a minute (5 every 2 minutes; a worshiper makes the Magicko rate slider's, 1 to begin with)
 wizard_firebolt_damage = 70
 wizard_firebolt_seconds = 1   # time between firebolts
 
@@ -476,4 +476,23 @@ raven_spellcaster_personality = 200%         # a natural spellcaster
 raven_observant_personality = 110%
 raven_knowledgeSeeker_personality = 150%     # curious
 
-
+# --- Neutral villages ----------------------------------------------------------
+# Neutral villages take some of the other start locations (the player picks
+# how many before the game starts). Each builds what a file in the
+# NeutralVillages folder says, keeps neutral_keep_workers workers, trains as
+# many warriors, archers and wizards as its buildings allow, and puts a
+# third of the rest on each of lumber, stone and food.
+neutral_goblin_spawn = 2            # every neutral village there is at the start adds this many goblins a minute at each starting cave
+neutral_goblin_build_speed = 40%    # and makes the goblins build this much faster
+neutral_keep_workers = 5            # workers a neutral village always keeps (they build, and gather what it has least of)
+neutral_field_size = 12             # metres on a side of the wheat fields a neutral village lays out
+neutral_build_seconds = 4           # how often a neutral village looks at its build order
+# Worshipers. Everyone born in the player's own village worships the
+# creature, and makes the player magicko (the Magicko rate slider); so do
+# the neutral villagers the creature wins over.
+convert_minutes = 5                 # one neutral villager is won over for every this many minutes the creature spends in their village
+convert_on_help_min = 1             # a helpful spell (rain, or one at the goblins there) or gathering near them wins over this many more at once...
+convert_on_help_max = 2             # ...up to this many
+neutral_help_reach = 20             # metres beyond a neutral village's influence that they still see the creature helping
+takeover_share = 75%                # the player takes over a neutral village once this share of its people worship the creature
+worshipers_most = 80%               # the most of a neutral village that can be won over peacefully

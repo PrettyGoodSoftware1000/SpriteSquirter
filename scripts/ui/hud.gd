@@ -45,6 +45,8 @@ signal time_advance_requested
 signal resurrect_requested
 ## The creature's portrait was clicked (to pay for its growth).
 signal grow_requested
+## While picking a start: one more (+1) or one fewer (-1) neutral village.
+signal neutral_count_changed(change: int)
 ## One of the creature's bars was double-clicked (to find it).
 signal creature_focus_requested
 
@@ -177,6 +179,9 @@ var _tip_panel: PanelContainer
 var _tip: Label
 var _root: Control
 var _blood := false
+## While picking a start: how many neutral villages there will be.
+var _neutral_panel: PanelContainer
+var _neutral_label: Label
 var _drop_timer := 0.0
 
 
@@ -1077,6 +1082,31 @@ func _build_prompt(root: Control) -> void:
 	_prompt.add_theme_font_size_override("font_size", 17)
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt_panel.add_child(_prompt)
+	_neutral_panel = PanelContainer.new()
+	_neutral_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_neutral_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_neutral_panel.position.y = 180
+	_neutral_panel.visible = false
+	root.add_child(_neutral_panel)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	_neutral_panel.add_child(row)
+	var fewer := _button("  -  ")
+	fewer.pressed.connect(func() -> void: neutral_count_changed.emit(-1))
+	row.add_child(fewer)
+	_neutral_label = Label.new()
+	_neutral_label.add_theme_font_size_override("font_size", 15)
+	row.add_child(_neutral_label)
+	var more := _button("  +  ")
+	more.pressed.connect(func() -> void: neutral_count_changed.emit(1))
+	row.add_child(more)
+
+
+## While picking a start: shows how many neutral villages there will be
+## (of at most `most`), or hides it with a `most` below 0.
+func show_neutral_count(count: int, most: int) -> void:
+	_neutral_panel.visible = most >= 0
+	_neutral_label.text = "Neutral villages: %d   (at most %d)" % [count, most]
 
 
 func _build_dev_menu(root: Control) -> void:

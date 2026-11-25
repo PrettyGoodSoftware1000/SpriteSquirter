@@ -99,6 +99,10 @@ const DEFAULTS := {
 	"balrogs": 1.0, "balrog_health": 2000.0, "balrog_speed": 2.3, "balrog_guard_radius": 40.0,
 	"balrog_fireball_size": 0.5, "balrog_fireball_seconds": 20.0, "balrog_fireball_power": 0.5,
 	"balrog_building_damage": 40.0, "balrog_respawn_minutes": 10.0, "balrog_bones": 12.0,
+	"neutral_goblin_spawn": 2.0, "neutral_goblin_build_speed": 0.4, "neutral_keep_workers": 5.0,
+	"convert_minutes": 5.0, "convert_on_help_min": 1.0, "convert_on_help_max": 2.0,
+	"takeover_share": 0.75, "worshipers_most": 0.8, "neutral_help_reach": 20.0,
+	"neutral_field_size": 12.0, "neutral_build_seconds": 4.0,
 }
 
 static var values := {}

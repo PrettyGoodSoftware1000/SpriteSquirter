@@ -1,0 +1,52 @@
+# Neutral village build order 1
+#
+# Neutral villages build from a file like this one. Every file in this
+# folder called Neutral_Build_Order_1.txt, Neutral_Build_Order_2.txt,
+# Neutral_Build_Order_3.txt and so on is one build order; each neutral
+# village picks one of them at random when the game starts.
+#
+# Lines that start with # are notes.
+#
+# --- What it may build, and the most of each ---------------------------------
+# One building a line:   Asset name (Gameplay name) = most
+# The asset name is the model and never changes. The gameplay name in
+# brackets is only a reminder of what the model does (Names.txt decides
+# that). The most counts everything of that kind the village has,
+# including the Storehouse it starts with. A building left out, or set
+# to 0, is never built.
+
+Treehouse (Home) = 2
+Lookout treehouse (Home) = 1
+Twin treehouse (Home) = 1
+Great treehouse (Home) = 1
+Stacked houses (no gameplay name) = 0
+Store house (Storehouse) = 2
+Moon tower (Wizardry tower) = 1
+Blacksmith (Blacksmith) = 1
+Mushroom cottage (Cottage) = 2
+Singing rocks (Shrine) = 1
+Skull tower (Necromancer tower) = 0        # costs bones, which neutral villages never get
+Windmill (Granary) = 1
+Crystal tower (Decoration) = 1
+Tall house (Town guard) = 2
+Wheat field (Wheat field) = 4
+
+# --- What it builds first, in order ---------------------------------------------
+# One building a line (its asset name), first to last. It builds them one at
+# a time, as soon as it can afford each. After the last one it builds at
+# random, up to the most of each above. A building it is already at the
+# most of is skipped, and so is one it has waited 5 minutes for.
+
+[Build order]
+Wheat field
+Wheat field
+Treehouse
+Tall house
+Mushroom cottage
+Wheat field
+Windmill
+Blacksmith
+Tall house
+Treehouse
+Moon tower
+Great treehouse

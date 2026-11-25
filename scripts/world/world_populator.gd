@@ -14,22 +14,28 @@ const CAVE_CLEARING := 22.0
 
 
 ## A complete random world. Returns {"starts": PackedVector2Array, "caves":
-## Array} where each start is a village site (the player picks one) and
-## every building and villager remembers its site in the "site" meta.
+## Array}: the start locations (the player picks one and its Storehouse
+## goes up there; neutral villages take others) and one goblin cave, with
+## its goblins but no huts. Nothing is built anywhere else.
+## (With Game.built_up_islands, as before 0.54: every start is a village of
+## buildings and people, each remembering its site in the "site" meta, and
+## there are one to three goblin camps with huts.)
 static func populate(parent: Node3D, terrain: Terrain, world_seed: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed + 1234
-	_place_villages(parent, terrain, rng)
+	var built_up := Game.built_up_islands
+	if built_up:
+		_place_villages(parent, terrain, rng)
 	var avoid: Array[Vector3] = []
 	for site in terrain.village_sites:
 		var r: float = site.radius
 		avoid.append(Vector3(site.pos.x, site.pos.y, r + 3.0))
 	var caves: Array = []
-	# One cave on a small island, two on a medium one, three on a large one.
-	for k in clampi(roundi(Terrain.SCALE), 1, 3):
+	# One cave (built up: one on a small island, two on a medium one, three on a large one).
+	for k in clampi(roundi(Terrain.SCALE), 1, 3) if built_up else 1:
 		var spot := _find_cave_spot(terrain, rng, caves)
 		var facing := atan2(-spot.x, -spot.y)
-		place_cave(parent, terrain, spot, facing, rng, true, true)
+		place_cave(parent, terrain, spot, facing, rng, built_up, true)
 		caves.append({"pos": spot, "facing": facing})
 		avoid.append(Vector3(spot.x, spot.y, CAVE_CLEARING))
 	avoid.append_array(_place_rocks(parent, terrain, rng, avoid))
@@ -157,10 +163,12 @@ static func place_cave(parent: Node3D, terrain: Terrain, spot: Vector2, facing: 
 	return cave
 
 
-## Set `owned` for the player's villagers and `child` for a newborn.
+## Set `owned` for the player's villagers, `of` for a neutral village's,
+## and `child` for a newborn.
 static func spawn_villager(parent: Node3D, terrain: Terrain, home: Vector3, radius: float, goblin := false,
-		owned := false, child := false, fey := false) -> Villager:
+		owned := false, child := false, fey := false, of: PlayerVillage = null) -> Villager:
 	var v := Villager.new()
+	v.village = of
 	v.fey = fey
 	v.goblin = goblin
 	v.owned = owned

@@ -8,17 +8,17 @@ extends Node
 
 ## Gameplay numbers the dev menu (~) can change while playing.
 const DEFAULT_SETTINGS := {
-	"day_minutes": 10.0, # length of the daylight (dawn to midnight)
-	"night_minutes": 8.0, # length of the night (midnight to dawn)
+	"day_minutes": 5.0, # length of the daylight (dawn to midnight)
+	"night_minutes": 3.0, # length of the night (midnight to dawn)
 	"lumber_rate": 6.0, # per worker per minute
 	"stone_rate": 4.0, # per worker per minute
 	"food_rate": 10.0, # per worker per minute
 	"birth_seconds": 30.0, # time between new villagers
-	"magicko_rate": 0.5, # per grown-up villager per minute (1 every 2 minutes)
-	"goblin_rate": 0.0, # Goblin Spawn Rate: goblins per starting cave per minute, before its buildings add more
+	"magicko_rate": 1.0, # per worshiper per minute
+	"goblin_rate": 1.0, # Goblin Spawn Rate: goblins per starting cave per minute, before its buildings add more
 	"creature_food": 20.0, # food a full-grown creature eats per minute
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size
-	"goblin_build_speed": 1.0, # how many times as fast the goblins start and finish buildings
+	"goblin_build_speed": 1.5, # how many times as fast the goblins start and finish buildings
 	"sapling_rate": 2.0, # saplings the village plants a minute (balancing.txt saplings_per_minute)
 	"villager_detail": 300.0, # metres from the camera within which villagers are drawn in full detail (300: always)
 	"construction_rate": 1.0, # how many times as fast the village's buildings go up
@@ -43,6 +43,15 @@ var palette_index: int = 0
 var grass_level: int = 0
 ## Whether the dev menu (~) is open.
 var dev_menu := false
+## How many neutral villages the player asked for (main menu, or while
+## picking a start): each takes one of the other start locations, up to one
+## fewer than there are (see NeutralVillage).
+var neutral_villages := 1
+## Random islands as they were before 0.54: a village of buildings and
+## people at every start location, and one to three goblin camps with huts.
+## Only the smoke test turns it on; a random island is otherwise bare start
+## locations and one cave.
+var built_up_islands := false
 ## mode: "menu", "play" or "editor". map_path: a saved map, or "" for a
 ## world made from world_seed. size: map size for a world made from a seed.
 ## map_data: a map held in memory instead of a file (the editor uses it to

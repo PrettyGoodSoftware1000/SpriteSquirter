@@ -113,7 +113,7 @@ func add_work(villager_seconds: float) -> void:
 	if progress >= 1.0:
 		return
 	if goblin:
-		villager_seconds *= Game.settings.goblin_build_speed
+		villager_seconds *= GoblinRaids.build_speed()
 	else:
 		villager_seconds *= Game.settings.construction_rate
 	progress = minf(1.0, progress + villager_seconds / work_needed)
@@ -161,7 +161,14 @@ func _complete() -> void:
 	get_parent().add_child(b)
 	b.global_position = global_position
 	b.rotation.y = rotation.y
-	b.add_to_group("goblin_buildings" if goblin else "player_buildings")
+	# (A neutral village's building is its own: see PlayerVillage.owns().)
+	var of: Variant = get_meta("village") if has_meta("village") else null
+	if goblin:
+		b.add_to_group("goblin_buildings")
+	elif of != null and is_instance_valid(of):
+		(of as PlayerVillage).adopt(b)
+	else:
+		b.add_to_group("player_buildings")
 	b.set_meta("kind", kind)
 	if bridge == null:
 		Game.terrain.add_bare(b.global_position, footprint + 1.5, 0.9)

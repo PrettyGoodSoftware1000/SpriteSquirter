@@ -11,8 +11,13 @@ extends RefCounted
 ##   village    resources, research and spells (known, under way, the
 ##              spell bar), what the player asked for, births, the boosts
 ##   day, raids the clock, and the goblins' nights and building
+##   neutrals   each neutral village: its name, middle, resources, what it
+##              is training, its build order file and how far through it is
 ##   buildings  every building: kind, look, place, turn, health, and whose
+##              (a neutral village's: "neutral" and which one)
 ##   bridges, sites, fields, people, others, goblins, creature, balrogs
+##              (a neutral village's people, sites and fields say which
+##              village; its people whether they worship the creature)
 ## Positions are [x, y, z]. Loading builds the island again from the save
 ## and puts everything back. Saplings, skeletons, the dead, fires and
 ## things in flight are not saved.
@@ -95,6 +100,9 @@ static func collect(play: PlayMode) -> Dictionary:
 	var caves: Array[Node3D] = []
 	for node in tree.get_nodes_in_group("caves"):
 		caves.append(node as Node3D)
+	var taken: Array = []
+	for c in v.taken_centres:
+		taken.append(_vec(c))
 	var data := {
 		"version": VERSION,
 		"game_version": str(ProjectSettings.get_setting("application/config/version", "")),
@@ -108,13 +116,27 @@ static func collect(play: PlayMode) -> Dictionary:
 			"birth_progress": v.birth_progress, "hungry_for": v.hungry_for, "stored": v._stored.duplicate(),
 			"fey_left": maxf(0.0, v.fey_until - Game.now), "blood_left": maxf(0.0, v.blood_until - Game.now),
 			"stuck_reports": v._stuck_reports,
+			"taken_centres": taken,
 		},
+		"neutrals": [], "neutral_start": GoblinRaids.neutral_start,
 		"cooldowns": play._cooldowns.duplicate(),
 		"day": {"time": play.day_cycle.time, "day": play.day_cycle.day},
 		"raids": {"nights": play.raids.nights, "build_timer": play.raids._build_timer, "balrog_timer": play.raids._balrog_timer,
 			"kinds_left": Array(play.raids._kinds_left)},
 		"buildings": [], "bridges": [], "sites": [], "fields": [], "people": [], "others": [], "goblins": [], "balrogs": [],
 	}
+	# The neutral villages (their buildings, people and so on say which).
+	var neutral_of := {}
+	for nv in play.neutrals:
+		if not is_instance_valid(nv) or not nv.founded:
+			continue
+		neutral_of[nv] = (data.neutrals as Array).size()
+		(data.neutrals as Array).append({"title": nv.title, "center": _vec(nv.center), "resources": nv.resources.duplicate(),
+			"wanted": nv.wanted.duplicate(), "birth_progress": nv.birth_progress, "hungry_for": nv.hungry_for,
+			"order": nv.order.path if nv.order != null else "", "next": nv._next, "waited": nv._waited, "seen": nv._seen})
+	var which := func(node: Node) -> int:
+		var of: Variant = node.get_meta("village") if node.has_meta("village") else null
+		return neutral_of.get(of, -1) if of != null and is_instance_valid(of) else -1
 	# Buildings (and, for bridges, which two they join).
 	var index := {}
 	for node in tree.get_nodes_in_group("buildings"):
@@ -123,6 +145,9 @@ static func collect(play: PlayMode) -> Dictionary:
 			continue
 		var side := "player" if b.is_in_group("player_buildings") else ("goblin" if b.is_in_group("goblin_buildings") else "none")
 		var entry := {"kind": b.get_meta("kind", ""), "pos": _vec(b.global_position), "rot": b.rotation.y, "hp": b.hp, "side": side}
+		if which.call(b) >= 0:
+			entry["side"] = "neutral"
+			entry["village"] = which.call(b)
 		if b.has_meta("look_state"):
 			entry["look"] = str(b.get_meta("look_state"))
 		if b.has_meta("cave"):
@@ -147,11 +172,13 @@ static func collect(play: PlayMode) -> Dictionary:
 			entry["ends"] = [index[site.ends[0]], index[site.ends[1]]]
 		if site.has_meta("cave"):
 			entry["cave"] = caves.find(site.get_meta("cave"))
+		if which.call(site) >= 0:
+			entry["village"] = which.call(site)
 		(data.sites as Array).append(entry)
 	for node in tree.get_nodes_in_group("fields"):
 		var field := node as CropField
 		(data.fields as Array).append({"pos": _vec(field.global_position), "rot": field.rotation.y, "size": [field.size.x, field.size.y],
-			"stage": int(field.stage), "progress": field.progress, "sprouted": field.sprouted})
+			"stage": int(field.stage), "progress": field.progress, "sprouted": field.sprouted, "village": which.call(field)})
 	# People: the village's, the other villages', and the goblins.
 	for node in tree.get_nodes_in_group("villagers"):
 		var p := node as Villager
@@ -162,12 +189,15 @@ static func collect(play: PlayMode) -> Dictionary:
 			entry["ogre"] = p.ogre
 			entry["archer"] = p.archer
 			(data.goblins as Array).append(entry)
-		elif p.owned:
+		elif p.member():
 			entry["child"] = p.child
 			entry["age"] = p._age
 			entry["fey"] = p.fey
 			entry["pin"] = p.pin
 			entry["role"] = _role(p)
+			if not p.owned:
+				entry["village"] = neutral_of.get(p.village, -1)
+				entry["worshiper"] = p.worshiper
 			(data.people as Array).append(entry)
 		else:
 			entry["child"] = p.child
@@ -334,6 +364,32 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 	v.fey_until = Game.now + float(vd.get("fey_left", 0.0))
 	v.blood_until = Game.now + float(vd.get("blood_left", 0.0))
 	v._stuck_reports = int(vd.get("stuck_reports", 0))
+	for c: Array in vd.get("taken_centres", []):
+		v.taken_centres.append(_v3(c))
+	# The neutral villages (their buildings and people come below).
+	var neutrals: Array[NeutralVillage] = []
+	for nd: Dictionary in d.get("neutrals", []):
+		var nv := play.add_neutral(str(nd.get("title", "Neutral village")))
+		nv.founded = true
+		nv.center = _v3(nd.center)
+		for res: String in nd.get("resources", {}):
+			nv.resources[res] = float(nd.resources[res])
+		for role: String in nd.get("wanted", {}):
+			if nv.wanted.has(role):
+				nv.wanted[role] = int(nd.wanted[role])
+		nv.birth_progress = float(nd.get("birth_progress", 0.0))
+		nv.hungry_for = float(nd.get("hungry_for", 0.0))
+		var order_path := str(nd.get("order", ""))
+		if order_path != "" and FileAccess.file_exists(order_path):
+			nv.order = BuildOrder.read(order_path)
+		nv._next = int(nd.get("next", 0))
+		nv._waited = float(nd.get("waited", 0.0))
+		nv._seen = float(nd.get("seen", 0.0))
+		neutrals.append(nv)
+	GoblinRaids.neutral_start = int(d.get("neutral_start", neutrals.size()))
+	var neutral_at := func(k: Variant) -> NeutralVillage:
+		var i := int(k) if k != null else -1
+		return neutrals[i] if i >= 0 and i < neutrals.size() else null
 	var cooldowns: Array = d.get("cooldowns", [])
 	for k in mini(cooldowns.size(), play._cooldowns.size()):
 		play._cooldowns[k] = float(cooldowns[k])
@@ -364,6 +420,10 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 				node.add_to_group("player_buildings")
 			"goblin":
 				node.add_to_group("goblin_buildings")
+			"neutral":
+				var nv: NeutralVillage = neutral_at.call(b.get("village", -1))
+				if nv != null:
+					nv.adopt(node)
 		if b.has("cave"):
 			var cave: Node3D = cave_of.call(int(b.cave))
 			if cave != null:
@@ -386,6 +446,9 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 			site.spec = {"length": float(s.spec.length), "ya": float(s.spec.ya), "yb": float(s.spec.yb)}
 			site.ends = [made[int(s.ends[0])], made[int(s.ends[1])]]
 		site.setup(str(s.kind), int(s.look), cost, bool(s.goblin))
+		var site_village: NeutralVillage = neutral_at.call(s.get("village", -1))
+		if site_village != null:
+			site.set_meta("village", site_village)
 		if s.has("cave"):
 			var cave: Node3D = cave_of.call(int(s.cave))
 			if cave != null:
@@ -401,6 +464,9 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 	for f: Dictionary in d.get("fields", []):
 		var field := CropField.new()
 		field.setup(Vector2(f.size[0], f.size[1]))
+		var field_village: NeutralVillage = neutral_at.call(f.get("village", -1))
+		if field_village != null:
+			field.set_meta("village", field_village)
 		field.position = _v3(f.pos)
 		field.rotation.y = float(f.rot)
 		root.add_child(field)
@@ -412,22 +478,29 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 	# The village's people.
 	for p: Dictionary in d.get("people", []):
 		var at := _v3(p.pos)
-		var person := WorldPopulator.spawn_villager(root, terrain, at, 0.01, false, true, bool(p.child), bool(p.fey))
+		var of: NeutralVillage = neutral_at.call(p.get("village", -1))
+		var person: Villager
+		if of != null:
+			person = of.spawn_person(at, 0.01, bool(p.child), bool(p.fey))
+			person.worshiper = bool(p.get("worshiper", false))
+		else:
+			person = WorldPopulator.spawn_villager(root, terrain, at, 0.01, false, true, bool(p.child), bool(p.fey))
+		var home_village: PlayerVillage = of if of != null else v
 		person.global_position = Vector3(at.x, terrain.get_height(at.x, at.z), at.z)
-		person.home = v.center
+		person.home = home_village.center
 		person.home_radius = PlayerVillage.HOME_RADIUS
 		if bool(p.child):
 			person._age = float(p.get("age", 0.0))
 			person._grow(0.0)
 		person.pin = str(p.get("pin", ""))
 		var role := str(p.get("role", ""))
-		var post := _nearest_with_role(tree, at, "necro" if role == "necromancer" else ("wizard" if role == "wizard" else "guard"))
-		var post_at := post.global_position if post != null else v.center
+		var post := _nearest_with_role(tree, at, "necro" if role == "necromancer" else ("wizard" if role == "wizard" else "guard"), home_village.buildings_group)
+		var post_at := post.global_position if post != null else home_village.center
 		match role:
 			"warrior":
 				person.guard = post
 				person.become_soldier(post_at)
-				if v.has_research("swords"):
+				if home_village.has_research("swords"):
 					person.sharpen()
 			"archer":
 				person.guard = post
@@ -505,9 +578,9 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 	Game.camera_rig.set_zoom(75.0)
 
 
-static func _nearest_with_role(tree: SceneTree, at: Vector3, role: String) -> Destructible:
+static func _nearest_with_role(tree: SceneTree, at: Vector3, role: String, group := "player_buildings") -> Destructible:
 	var best: Destructible = null
-	for node in tree.get_nodes_in_group("player_buildings"):
+	for node in tree.get_nodes_in_group(group):
 		var b := node as Destructible
 		if b != null and not b.destroyed and BuildingCatalog.role(b.get_meta("kind", "")) == role:
 			if best == null or b.global_position.distance_to(at) < best.global_position.distance_to(at):

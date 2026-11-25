@@ -149,6 +149,14 @@ func _ready() -> void:
 	_sparks.position = Vector3(0, 5.5, 0)
 
 
+## Stands the balrog at `pos` (its post), facing `facing`, with no cave
+## (the test environment).
+func stand_at(pos: Vector3, facing: float) -> void:
+	_post = pos
+	_goal = pos
+	place(pos, facing)
+
+
 ## Puts the balrog at its post in front of `at`.
 func settle(at: Node3D) -> void:
 	cave = at
@@ -171,6 +179,8 @@ func _top_speed() -> float:
 
 
 func _rival() -> Creature:
+	if duel_foe != null:
+		return duel_foe if is_instance_valid(duel_foe) and not duel_foe.knocked_out else null
 	var beast := Game.creature
 	return beast if is_instance_valid(beast) and not beast.knocked_out else null
 
@@ -178,6 +188,8 @@ func _rival() -> Creature:
 func is_threat() -> bool:
 	if knocked_out:
 		return false
+	if is_instance_valid(duel_foe):
+		return true
 	var village := Game.village
 	return raiding or (is_instance_valid(village) and village.founded
 		and _flat(global_position, village.center) < PlayerVillage.INTRUDER_RADIUS + 10.0)
@@ -466,6 +478,8 @@ func _march() -> void:
 
 ## True if something at `pos`, `d` metres away, is worth walking over to.
 func _worth_chasing(pos: Vector3, d: float) -> bool:
+	if is_instance_valid(duel_foe):
+		return true
 	if raiding:
 		return d < RAID_SIGHT
 	return _flat(pos, _post) < Balance.num("balrog_guard_radius")

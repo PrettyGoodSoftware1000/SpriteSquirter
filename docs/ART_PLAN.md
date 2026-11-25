@@ -143,6 +143,13 @@ shading or outline, under studio lights (key with shadows, fill, rim) and
 a soft sky, tone mapped (ACES), with the game's camera. It is not in the
 game yet.
 
+Since 0.54 the test environment also has the game's own giants (the
+tortoise, the squirrel, the raven and the balrog, as `Creature` and
+`Balrog` animate them in the game), for checking their animation: one on
+its own, or two set to fight each other (`Creature.duel_foe`), on flat
+ground (`Terrain.generate_flat()`, not drawn) with the game's effects and
+fires. There is a size slider and a "Walk somewhere" button.
+
 - 9,832 triangles, 1.7 m tall, faces +Z. One material with three 4096 x
   4096 maps: colour, normal, and metal/roughness. They import lossless
   (no VRAM compression) so it looks as it does on Meshy. No emission map:

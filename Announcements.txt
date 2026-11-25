@@ -32,6 +32,13 @@ creature_died = The {creature} has died! Bring it back to life at a Shrine for {
 creature_resurrected = The {creature} lives again!
 resurrect_no_shrine = The {creature} can only be brought back to life at a Shrine. Build one first.
 resurrect_no_animus = Bringing the {creature} back to life takes {animus} animus. You have {have}.
+raid_neutral = Midnight: {goblins} goblins are marching on the neutral villages!
+neutral_taken = {village} worships your {creature}: it is yours now!
+neutral_taken_empty = Nobody is left in {village}: its buildings are yours now.
+neutral_fell = The goblins have wiped out {village}. A goblin cave has opened where it stood.
+# (These two float up over a neutral village's Storehouse.)
+villager_converted = A villager here now worships the {creature}
+villagers_converted = {count} villagers here now worship the {creature}
 
 # --- Bless and Condemn, at the top of the screen ---
 judge_prompt = {action}  ({ago} s ago)  Click anywhere to {spell}, or press {key} again to cancel.

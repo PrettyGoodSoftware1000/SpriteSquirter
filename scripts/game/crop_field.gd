@@ -266,7 +266,9 @@ func _reaped() -> void:
 
 ## The village's food rate per worker (with a Windmill's bonus).
 func _food_rate() -> float:
-	return Game.village.food_rate() if is_instance_valid(Game.village) else float(Game.settings.food_rate)
+	var of: Variant = get_meta("village") if has_meta("village") else null
+	var vil: PlayerVillage = of if of != null and is_instance_valid(of) else Game.village
+	return vil.food_rate() if is_instance_valid(vil) else float(Game.settings.food_rate)
 
 
 func _process(delta: float) -> void:

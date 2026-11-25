@@ -14,6 +14,14 @@ extends Node3D
 ##   takes a few seconds to get going and to stop, and leans into it.
 ##   "Claw slash": the left claw, then the right. While it walks only its
 ##   upper body slashes.
+##
+## The game's giants are here too, as they are in the game, with the
+## game's own animation (Creature, Balrog): the tortoise, the squirrel, the
+## raven and the balrog. "Giants" puts one on its own; "Fight" puts two of
+## them face to face, and they fight until one is down. "Walk somewhere"
+## sends them off, and the size slider grows or shrinks them. They stand
+## on flat ground the size of a small island (Terrain.generate_flat(), not
+## drawn: the grey floor shows instead), with the game's effects and fire.
 
 const MODEL := "res://assets/test/NewerBalrog.glb"
 const ANIMS := "res://assets/test/NewerBalrog_anims.glb"
@@ -33,6 +41,11 @@ const WALK_RADIUS := 30.0
 ## Mass: how quickly its speed follows what it wants (per second; lower is
 ## heavier). The speed eases in and out, so it never jerks into motion.
 const MASS_RESPONSE := 1.3
+## The giants that can be put on the floor: name -> Creature kind
+## ("balrog": the Balrog).
+const GIANTS := {"Tortoise": "tortoise", "Squirrel": "squirrel", "Raven": "raven", "Balrog": "balrog"}
+## How far apart two giants start a fight.
+const FIGHT_GAP := 26.0
 ## The bone the upper body leans from, as it speeds up or slows down.
 const LEAN_BONE := "Bone_003"
 ## Bones a slash leaves to the walk while it walks (the hips and legs).
@@ -61,6 +74,11 @@ var _follow := true
 ## The lighting sliders and their starting values, for "Reset lighting".
 var _light_sliders: Array[HSlider] = []
 var _light_defaults: Array[float] = []
+## The game's giants on the floor, and the line that shows their health.
+var _giants: Array[Creature] = []
+var _giant_info: Label
+var _giant_size := 1.0
+var _fight_picks: Array[OptionButton] = []
 var _speed := 0.0
 var _accel := 0.0
 var _heading := 0.0
@@ -70,12 +88,123 @@ var _walk_w := 0.0
 
 
 func _ready() -> void:
+	_build_ground()
 	_build_lighting()
 	_build_floor()
 	_build_model()
 	_build_bone_lines()
 	_build_camera()
 	_build_ui()
+
+
+## What the giants need to stand and fight: flat ground (not drawn), the
+## game's effects (dust, fireballs) and its fires.
+func _build_ground() -> void:
+	Terrain.configure(Terrain.SIZES[0])
+	var effects := Effects.new()
+	effects.name = "Effects"
+	add_child(effects)
+	Game.effects = effects
+	var fire := FireSystem.new()
+	fire.name = "Fires"
+	add_child(fire)
+	Game.fire = fire
+	var ground := Terrain.new()
+	ground.name = "Ground"
+	add_child(ground)
+	ground.generate_flat(0.0)
+	ground.visible = false
+	Game.terrain = ground
+
+
+## Takes every giant off the floor.
+func _clear_giants() -> void:
+	for g in _giants:
+		if is_instance_valid(g):
+			g.queue_free()
+	_giants.clear()
+	Game.creature = null
+
+
+## A giant of `kind` (see GIANTS) at `pos`, facing `facing`, full grown (or
+## as big as the size slider says). It thinks for itself in a fight, but
+## its own pastimes (gathering, spells) are left off.
+func _spawn_giant(kind: String, pos: Vector3, facing: float) -> Creature:
+	var g: Creature
+	if kind == "balrog":
+		g = Balrog.new()
+	else:
+		g = Creature.new()
+		g.kind = kind
+	add_child(g)
+	if g is Balrog:
+		(g as Balrog).stand_at(pos, facing)
+	else:
+		g.place(pos, facing)
+		if Game.creature == null:
+			Game.creature = g
+	g.growth_paid = 10
+	_size_giant(g)
+	if g.mind != null:
+		g.mind.process_mode = Node.PROCESS_MODE_DISABLED
+	_giants.append(g)
+	return g
+
+
+## Grows (or shrinks) giant `g` to the size slider's size.
+func _size_giant(g: Creature) -> void:
+	var minutes: float = maxf(Game.settings.creature_grow_minutes, 0.05)
+	var t := inverse_lerp(Creature.START_SIZE, 1.0, clampf(_giant_size, Creature.START_SIZE, 1.0))
+	g.age = t * minutes * 60.0
+	# (Paid for no further, so it stays that size; the balrog grows on by itself.)
+	g.growth_paid = floori(t * 10.0 + 0.0001)
+	g.hp = g.max_hp
+
+
+## One giant on the floor, on its own (the test model is put away).
+func _show_giant(kind: String) -> void:
+	_clear_giants()
+	_model.visible = false
+	_walking = false
+	_spawn_giant(kind, Vector3(0.0, 0.0, 0.0), 0.0)
+	Game.camera_rig.focus_on(Vector3.ZERO)
+
+
+## Two giants face to face, each the other's foe: they fight until one is down.
+func _start_fight() -> void:
+	_clear_giants()
+	_model.visible = false
+	_walking = false
+	var names := GIANTS.keys()
+	var a := _spawn_giant(GIANTS[names[_fight_picks[0].selected]], Vector3(-FIGHT_GAP * 0.5, 0.0, 0.0), PI * 0.5)
+	var b := _spawn_giant(GIANTS[names[_fight_picks[1].selected]], Vector3(FIGHT_GAP * 0.5, 0.0, 0.0), -PI * 0.5)
+	a.duel_foe = b
+	b.duel_foe = a
+	Game.camera_rig.focus_on(Vector3.ZERO)
+
+
+## Every giant walks off somewhere nearby.
+func _wander_giants() -> void:
+	for g in _giants:
+		if is_instance_valid(g) and not g.knocked_out:
+			var a := randf() * TAU
+			g.move_to(g.global_position + Vector3(cos(a), 0.0, sin(a)) * randf_range(12.0, 30.0))
+
+
+## Back to the test model, with the giants put away.
+func _show_model() -> void:
+	_clear_giants()
+	_model.visible = true
+
+
+func _giants_text() -> String:
+	var lines: PackedStringArray = []
+	for g in _giants:
+		if not is_instance_valid(g):
+			continue
+		var state := "down" if g.knocked_out else ("flying" if g.is_flying() else "%.1f m/s" % g.speed)
+		lines.append("%s: %d / %d health, %s" % [g.species_name(), roundi(g.hp), roundi(g.max_hp), state])
+	return "\n".join(lines)
 
 
 ## The animated mesh from ANIMS, dressed in MODEL's material (ANIMS has
@@ -331,6 +460,61 @@ func _build_ui() -> void:
 	slash.pressed.connect(func() -> void: _slash_t = 0.0)
 	box.add_child(slash)
 
+	box.add_child(_heading_label("Giants (the game's own)"))
+	var giant_row := HBoxContainer.new()
+	giant_row.add_theme_constant_override("separation", 6)
+	box.add_child(giant_row)
+	for label: String in GIANTS:
+		var b := _button(label)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(_show_giant.bind(GIANTS[label]))
+		giant_row.add_child(b)
+	var fight_row := HBoxContainer.new()
+	fight_row.add_theme_constant_override("separation", 6)
+	box.add_child(fight_row)
+	for k in 2:
+		var pick := OptionButton.new()
+		pick.focus_mode = Control.FOCUS_NONE
+		for label: String in GIANTS:
+			pick.add_item(label)
+		pick.selected = 0 if k == 0 else GIANTS.size() - 1
+		pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		fight_row.add_child(pick)
+		_fight_picks.append(pick)
+		if k == 0:
+			var versus := Label.new()
+			versus.text = "vs"
+			fight_row.add_child(versus)
+	var fight := _button("Fight!")
+	fight.pressed.connect(_start_fight)
+	fight_row.add_child(fight)
+	var giant_tools := HBoxContainer.new()
+	giant_tools.add_theme_constant_override("separation", 6)
+	box.add_child(giant_tools)
+	var wander := _button("Walk somewhere")
+	wander.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wander.pressed.connect(_wander_giants)
+	giant_tools.add_child(wander)
+	var model_back := _button("Back to the test model")
+	model_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	model_back.pressed.connect(_show_model)
+	giant_tools.add_child(model_back)
+	var size_grid := GridContainer.new()
+	size_grid.columns = 3
+	size_grid.add_theme_constant_override("h_separation", 8)
+	box.add_child(size_grid)
+	_slider(size_grid, "Giant size", Creature.START_SIZE, 1.0, 1.0, func(v: float) -> void:
+		_giant_size = v
+		for g in _giants:
+			if is_instance_valid(g):
+				_size_giant(g))
+	# (The size slider is not one of the lighting ones Reset puts back.)
+	_light_sliders.pop_back()
+	_light_defaults.pop_back()
+	_giant_info = Label.new()
+	_giant_info.modulate = Color(1, 1, 1, 0.8)
+	box.add_child(_giant_info)
+
 	box.add_child(_heading_label("Lighting"))
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -381,9 +565,20 @@ func _model_info() -> String:
 
 
 func _process(delta: float) -> void:
-	_update_walk(delta)
+	if _model.visible:
+		_update_walk(delta)
 	if _bones.visible:
 		_draw_bones()
+	_giants = _giants.filter(func(g: Creature) -> bool: return is_instance_valid(g))
+	if _giant_info != null:
+		_giant_info.text = _giants_text()
+	if _follow and not _giants.is_empty():
+		var mid := Vector3.ZERO
+		for g in _giants:
+			mid += g.global_position
+		mid /= _giants.size()
+		Game.camera_rig.focus.x = mid.x
+		Game.camera_rig.focus.z = mid.z
 
 
 ## Speed with mass: a critically damped spring, so speeding up and slowing
@@ -466,6 +661,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _back() -> void:
+	_clear_giants()
+	Game.terrain = null
+	Game.effects = null
+	Game.fire = null
 	Game.start("menu", "", Terrain.SIZE)
 
 

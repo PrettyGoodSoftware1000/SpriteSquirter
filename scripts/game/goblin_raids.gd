@@ -36,8 +36,18 @@ extends Node
 ## A goblin that crawls out of a cave is a Goblin Archer one time in four
 ## (Balance "goblin_archer_chance"): it shoots from afar, at the flying
 ## creature and at archers on their posts too.
+##
+## Neutral villages (NeutralVillage) make the goblins stronger: every one
+## there was when the game began adds Balance "neutral_goblin_spawn"
+## goblins a minute at every starting cave, and "neutral_goblin_build_speed"
+## percent to how fast the goblins build (neutral_start). The raids go for
+## them too: each goblin marches on the player's village or on one of the
+## neutral villages, picked at random. A neutral village the goblins wipe
+## out (nobody left, nothing standing) becomes a goblin cave (add_cave()).
 
 signal raid_started(goblins: int, ogres: int)
+## Goblins have set out for the neutral villages (and none for the player's).
+signal neutral_raid_started(goblins: int)
 signal raid_ended
 ## A giant bat has snatched one of the player's villagers.
 signal bat_took
@@ -57,6 +67,8 @@ const PATH_SNAP := 45.0
 var raiding := false
 ## Nights since the game began (counted at nightfall).
 var nights := 0
+## How many neutral villages there were when the game began.
+static var neutral_start := 0
 
 ## Paths painted in the map editor, each from a cave to a start location.
 var paths: Array = []
@@ -89,9 +101,25 @@ func setup(day_cycle: DayCycle) -> void:
 
 
 ## Goblins each starting cave spawns per minute before its buildings add
-## more (there is no growth by the night: only the buildings add).
+## more (there is no growth by the night: only the buildings add), with
+## Balance "neutral_goblin_spawn" more for every neutral village there was
+## at the start.
 func spawn_rate() -> float:
-	return maxf(0.0, Game.settings.goblin_rate)
+	return maxf(0.0, Game.settings.goblin_rate + neutral_start * Balance.num("neutral_goblin_spawn"))
+
+
+## How many times as fast the goblins build: the dev menu's goblin build
+## speed, and Balance "neutral_goblin_build_speed" percent more for every
+## neutral village there was at the start.
+static func build_speed() -> float:
+	return Game.settings.goblin_build_speed * (1.0 + neutral_start * Balance.num("neutral_goblin_build_speed"))
+
+
+## A new cave (where a neutral village was wiped out): it spawns goblins
+## like the caves that were there from the start.
+func add_cave(cave: Node3D) -> void:
+	if not _caves.has(cave):
+		_caves.append(cave)
 
 
 ## Goblins `cave` spawns per minute: spawn_rate(), and more for each
@@ -123,7 +151,7 @@ func _process(delta: float) -> void:
 			_balrog_timer = Balance.num("balrog_respawn_minutes") * 60.0
 			hatch_balrog()
 	_build_timer += delta
-	var every := Balance.num("goblin_build_minutes") * 60.0 / maxf(Game.settings.goblin_build_speed, 0.01)
+	var every := Balance.num("goblin_build_minutes") * 60.0 / maxf(build_speed(), 0.01)
 	if _build_timer >= every:
 		_build_timer = 0.0
 		if start_building() == null and _wants_to_build():
@@ -328,10 +356,14 @@ func _site_ok(p: Vector3, footprint: float) -> bool:
 	var terrain := Game.terrain
 	if not terrain.is_inside(p.x, p.z) or not terrain.is_dry(p.x, p.z) or terrain.get_normal(p.x, p.z).y < 0.9:
 		return false
-	# Well clear of the player's village (and of the creature that guards it).
+	# Well clear of the player's village (and of the creature that guards it),
+	# and of the neutral villages.
 	var village := Game.village
 	if is_instance_valid(village) and village.founded and (village.in_territory(p) or village.center.distance_to(p) < 62.0):
 		return false
+	for node in get_tree().get_nodes_in_group("neutral_villages"):
+		if (node as NeutralVillage).in_territory(p):
+			return false
 	for group in ["buildings", "construction_sites", "goblin_sites"]:
 		for node in get_tree().get_nodes_in_group(group):
 			var b := node as Node3D
@@ -471,16 +503,28 @@ func start_raid() -> void:
 		_fill_hut(hut)
 	var count := 0
 	var ogres := 0
+	var to_neutral := 0
+	# Each goblin goes for the player's village or a neutral one, at random.
+	var targets: Array[PlayerVillage] = [village]
+	for node in get_tree().get_nodes_in_group("neutral_villages"):
+		if (node as NeutralVillage).founded:
+			targets.append(node as PlayerVillage)
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
 		# Builders stay behind to finish what they are building.
 		if g.job == "build" and is_instance_valid(g.job_target):
 			continue
 		var a := randf() * TAU
-		g.start_raid(village.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0), _route_for(g.home))
-		if g.raiding and g.ogre:
+		var goal := targets[randi() % targets.size()]
+		var near := goal.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0)
+		g.start_raid(near, _route_for(g.home) if goal == village else PackedVector3Array())
+		if not g.raiding:
+			continue
+		if goal != village:
+			to_neutral += 1
+		elif g.ogre:
 			ogres += 1
-		elif g.raiding:
+		else:
 			count += 1
 	# A full-grown balrog comes too.
 	marching = 0
@@ -489,8 +533,10 @@ func start_raid() -> void:
 		if balrog.grown() >= 1.0:
 			balrog.start_raid(village.center, _route_for(balrog.global_position))
 			marching += 1
-	raiding = count + ogres + marching > 0
-	if raiding:
+	raiding = count + ogres + marching + to_neutral > 0
+	if raiding and count + ogres + marching == 0:
+		neutral_raid_started.emit(to_neutral)
+	elif raiding:
 		raid_started.emit(count, ogres)
 		if nights < roundi(Balance.num("bats_from_night")):
 			return

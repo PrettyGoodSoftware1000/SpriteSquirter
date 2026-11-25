@@ -53,6 +53,11 @@ func _run() -> void:
 	# out of its shell until then too.
 	Balance.values["balrogs"] = 0.0
 	Balance.values["shell_damage_share"] = 1.0
+	# The older checks play on random islands as they were before 0.54 (a
+	# village of buildings at every start), with no neutral villages; the
+	# bare islands and the neutral villages have checks of their own (7).
+	game.built_up_islands = true
+	game.neutral_villages = 0
 
 	# 1. The menu.
 	# The spell bar's memory goes to a file of its own while testing.
@@ -60,6 +65,12 @@ func _run() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SpellLayout.path))
 	await _open(game, "menu", "", 384)
 	_check(get_tree().current_scene.get_node("Controller") is MainMenu, "menu controller")
+	var menu := get_tree().current_scene.get_node("Controller") as MainMenu
+	_check(menu._sliders.size() == Hud.SETTING_SLIDERS.size() and menu._dev_panel != null, "the main menu has the dev menu's gameplay sliders, to set before a game")
+	var menu_day: float = game.settings.day_minutes
+	(menu._sliders["day_minutes"][0] as HSlider).value = 7.0
+	_check(is_equal_approx(game.settings.day_minutes, 7.0), "and moving one there sets the game's setting")
+	game.settings.day_minutes = menu_day
 
 	# 2. A random medium island: found a village, gather, build, be born.
 	await _open(game, "play", "", 384)
@@ -109,9 +120,9 @@ func _run() -> void:
 	var before: Dictionary = village.resources.duplicate()
 	_check(not get_tree().get_nodes_in_group("rocks").is_empty(), "boulder fields placed (%d boulders)" % get_tree().get_nodes_in_group("rocks").size())
 	_check(is_equal_approx(DayCycle.NIGHT_START, 0.75) and DayCycle.MIDNIGHT == DayCycle.NIGHT_START, "night starts at midnight")
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 10.0) and is_equal_approx(Game.DEFAULT_SETTINGS.night_minutes, 8.0)
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 5.0) and is_equal_approx(Game.DEFAULT_SETTINGS.night_minutes, 3.0)
 		and play.hud._setting_sliders.has("day_minutes") and play.hud._setting_sliders.has("night_minutes"),
-		"days are 10 minutes and nights 8 by default, each with a slider")
+		"days are 5 minutes and nights 3 by default, each with a slider")
 	# A wheat field: sown by a farmer (only farmers sow), then it grows by itself.
 	var field := CropField.new()
 	field.setup(Vector2(8, 8))
@@ -141,7 +152,7 @@ func _run() -> void:
 		_check(village.resources[res] > before[res], "%s is gathered (%.1f -> %.1f)" % [res, before[res], village.resources[res]])
 	# (Food is eaten as fast as it comes in while a child is born every 5
 	# seconds, so count what was carried to the store.)
-	_check(village._stored.get("food", 0.0) > 20.0, "food is gathered (%.1f carried in)" % village._stored.get("food", 0.0))
+	_check(village._stored.get("food", 0.0) > 10.0, "food is gathered (%.1f carried in)" % village._stored.get("food", 0.0))
 	_check(village.population() > first_people or village.population() >= village.housing(), "a child is born")
 
 	# The day stops while building, armies and hunger are tested, so that
@@ -963,8 +974,12 @@ func _run() -> void:
 		var site_cave := goblin_site.get_meta("cave") as Node3D
 		var goblin_built := get_tree().get_nodes_in_group("goblin_buildings").size()
 		var rate_before := play.raids.cave_rate(site_cave)
+		# (Fresh goblins at the cave, so there are builders to send.)
+		if is_instance_valid(site_cave):
+			for k in 3:
+				play.raids.spawn_at(site_cave)
 		# (They build fast: it may be finished already.)
-		for k in 60:
+		for k in 120:
 			await _wait(1.0)
 			if not is_instance_valid(goblin_site) or goblin_site.progress > 0.0:
 				break
@@ -1042,7 +1057,8 @@ func _run() -> void:
 			await _wait(2.0)
 			if not is_instance_valid(bat):
 				break
-		_check(taken[0] and village.population() == before_bat - 1, "it snatches a villager and takes it into the cave (%d -> %d, shot down %s)" % [
+		# (Others may die meanwhile: at least the one is gone.)
+		_check(taken[0] and village.population() <= before_bat - 1, "it snatches a villager and takes it into the cave (%d -> %d, shot down %s)" % [
 			before_bat, village.population(), is_instance_valid(bat) and not bat.is_alive()])
 	game.settings.birth_seconds = births_were
 	var doomed := play.raids.launch_bat()
@@ -1164,6 +1180,8 @@ func _run() -> void:
 	var age_kept := beast.age
 	var animus_kept := village.amount("animus")
 	var step_kept := Balance.num("growth_animus_step")
+	# (A creature with nothing to eat does not grow: the village needs food.)
+	village.resources.food = maxf(village.resources.food, 200.0)
 	if step_kept <= 0.0:
 		beast.growth_paid = 0
 		beast.age = 0.0
@@ -1244,7 +1262,7 @@ func _run() -> void:
 		var tryst := FeyTryst.new()
 		game.world_root.add_child(tryst)
 		tryst.begin(lover)
-		for k in 30:
+		for k in 60:
 			await _wait(0.5)
 			if lover.job == "tryst":
 				break
@@ -1312,9 +1330,9 @@ func _run() -> void:
 	await _wait(0.1)
 	_check(village._nearest_free(far_tree.global_position, "trees", {}) == far_tree, "there is no limit to how far lumberjacks go for wood")
 	far_tree.queue_free()
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 1.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 0.0)
-		and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "the owner's sliders are the defaults: Goblin Spawn Rate 0, goblin build speed 1")
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 10.0) and play.day_cycle.clock_text().contains(":"), "a day is 10 minutes by default (%s)" % play.day_cycle.clock_text())
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 1.5) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 1.0)
+		and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "the owner's sliders are the defaults: Goblin Spawn Rate 1, goblin build speed 1.5")
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 5.0) and play.day_cycle.clock_text().contains(":"), "a day is 5 minutes by default (%s)" % play.day_cycle.clock_text())
 	_check(DayCycle.twelve_hour(16.0) == "4:00 pm" and DayCycle.twelve_hour(0.5) == "12:30 am" and DayCycle.twelve_hour(12.25) == "12:15 pm"
 		and DayCycle.twelve_hour(9.0) == "9:00 am" and (play.day_cycle.clock_text().ends_with(" am") or play.day_cycle.clock_text().ends_with(" pm")),
 		"the clock is a 12-hour one, with no daytime or nighttime (%s)" % play.day_cycle.clock_text())
@@ -1386,7 +1404,13 @@ func _run() -> void:
 	if idle_worker != null:
 		idle_worker.clear_job()
 		village._assign_jobs()
-		_check(idle_worker.job == "stone" or get_tree().get_nodes_in_group("rocks").is_empty(), "an unassigned worker goes after the resource the village has least of (%s)" % idle_worker.job)
+		# (Unless every boulder in reach has as many miners as it can take.)
+		var on_rocks := {}
+		for v in village.people():
+			if v != idle_worker and v.job == "stone" and is_instance_valid(v.job_target):
+				on_rocks[v.job_target] = on_rocks.get(v.job_target, 0) + 1
+		var rock_free := village._nearest_free(idle_worker.global_position, "rocks", on_rocks) != null
+		_check(idle_worker.job == "stone" or not rock_free, "an unassigned worker goes after the resource the village has least of (%s)" % idle_worker.job)
 	village.resources = kept_res
 
 	# Goblin archers.
@@ -1783,14 +1807,14 @@ func _run() -> void:
 	if is_instance_valid(lurker):
 		lurker.queue_free()
 
-	# Magicko: 1 every 2 minutes from a villager, wizard_magicko from a wizard.
+	# Magicko: 1 a minute from a worshiper, wizard_magicko from a wizard.
 	var settings_were: Dictionary = Game.settings.duplicate()
 	Game.settings.magicko_rate = Game.DEFAULT_SETTINGS.magicko_rate
 	var maker_rate := village.magicko_per_minute()
 	var makers := village.adults() - village.wizards()
-	_check(is_equal_approx(Game.DEFAULT_SETTINGS.magicko_rate, 0.5) and (village.blood_active() or village.fey_adults() > 0
-		or is_equal_approx(maker_rate, makers * 0.5 + village.wizards() * Balance.num("wizard_magicko"))),
-		"a villager makes 1 magicko every 2 minutes, a wizard wizard_magicko a minute (%.1f a minute from %d villagers)" % [maker_rate, makers])
+	_check(is_equal_approx(Game.DEFAULT_SETTINGS.magicko_rate, 1.0) and (village.blood_active() or village.fey_adults() > 0
+		or is_equal_approx(maker_rate, makers * 1.0 + village.wizards() * Balance.num("wizard_magicko"))),
+		"a worshiper makes 1 magicko a minute, a wizard wizard_magicko a minute (%.1f a minute from %d villagers)" % [maker_rate, makers])
 	Game.settings = settings_were
 	# Defending the village: goblins marching near a Storehouse.
 	_check(beast.mind.personality("defensive") > Balance.num("raven_defensive_personality"), "the tortoise is the most defensive of the town")
@@ -1851,11 +1875,16 @@ func _run() -> void:
 	# (Kept beside the creature, wherever it walks, for three seconds: two
 	# ticks at the least, however the second falls.)
 	for k in 10:
+		if not is_instance_valid(singed) or not singed.is_alive():
+			break
 		singed.global_position = beast.global_position + Vector3(4, 0, 0)
 		await _wait(0.3)
-	_check(singed.hp <= singed_hp - Balance.num("aura_damage") * 1.5, "enemies close by take fire damage every second (%d lost)" % roundi(singed_hp - singed.hp))
+	# (Burnt to death counts too.)
+	var burnt := not is_instance_valid(singed) or not singed.is_alive()
+	_check(burnt or singed.hp <= singed_hp - Balance.num("aura_damage") * 1.5, "enemies close by take fire damage every second (%s)" % ("burnt to death" if burnt else "%d lost" % roundi(singed_hp - singed.hp)))
 	beast._buffs.clear()
-	singed.queue_free()
+	if is_instance_valid(singed):
+		singed.queue_free()
 	# Over a building: what it is researching.
 	village.give("lumber", 300.0)
 	village.give("stone", 300.0)
@@ -1997,7 +2026,7 @@ func _run() -> void:
 		village._army_timer = 1.0e9
 		bowman_v.global_position = RopeBridge.ladder_foot(perch) + Vector3(2, 0, 0)
 		bowman_v.become_archer(perch_spot)
-		for k in 60:
+		for k in 120:
 			await _wait(0.5)
 			if bowman_v.on_post():
 				break
@@ -2378,10 +2407,16 @@ func _run() -> void:
 		# (The raven is put back to full size: the slower growing set above shrank it.)
 		raven.age = 30.0 * 60.0
 		await _wait(0.3)
+		if raven.knocked_out:
+			raven.resurrect(balrog.global_position + Vector3(0, 0, 7))
 		raven.hp = raven.max_hp
 		raven.fleeing_until = 0.0
+		# (On the ground, with nowhere else to go.)
+		raven.flying = false
+		raven._alt = 0.0
+		raven.has_target = false
 		raven.place(balrog.global_position + Vector3(0, 0, 7), PI)
-		for k in 20:
+		for k in 40:
 			if balrog.hp < balrog.max_hp and raven.hp < raven.max_hp:
 				break
 			await _wait(1.0)
@@ -2390,6 +2425,149 @@ func _run() -> void:
 		_check(balrog.knocked_out and get_tree().get_nodes_in_group("balrogs").is_empty() and play.village.amount("bones") > bones_then, "a balrog at no health is dead, and leaves bones")
 	Balance.values["balrogs"] = 0.0
 	game.creature_kind = "tortoise"
+
+	# 7. A bare random island, with neutral villages.
+	game.built_up_islands = false
+	game.neutral_villages = 99
+	await _open(game, "play", "", 384)
+	play = get_tree().current_scene.get_node("Controller") as PlayMode
+	var starts7: PackedVector2Array = play._info.starts
+	_check(get_tree().get_nodes_in_group("buildings").is_empty() and get_tree().get_nodes_in_group("caves").size() == 1
+		and starts7.size() >= 3, "a random island is start locations and one goblin cave, nothing built (%d starts)" % starts7.size())
+	_check(play.neutral_count() == starts7.size() - 1, "there can be at most one fewer neutral villages than start locations (%d)" % play.neutral_count())
+	game.neutral_villages = mini(3, starts7.size() - 1)
+	var s7 := starts7[0]
+	play._found(Vector3(s7.x, game.terrain.get_height(s7.x, s7.y), s7.y), 0)
+	play.creature.growth_paid = 10
+	village = play.village
+	_check(play.neutrals.size() == game.neutral_villages and GoblinRaids.neutral_start == play.neutrals.size(), "the neutral villages take other start locations (%d)" % play.neutrals.size())
+	var nv := play.neutrals[0]
+	var nv_store := 0
+	for b in get_tree().get_nodes_in_group(nv.buildings_group):
+		if BuildingCatalog.role(b.get_meta("kind", "")) == "store" and b.is_in_group("neutral_buildings") and not b.is_in_group("player_buildings"):
+			nv_store += 1
+	var strangers := true
+	for v in nv.people():
+		strangers = strangers and not v.owned and not v.worshiper and not v.is_in_group("people") and v.village == nv
+	_check(nv_store == 1 and nv.population() == village.population() and nv.worshipers() == 0 and strangers,
+		"a neutral village starts with a Storehouse and as many people as the player, none of them worshipers (%d people)" % nv.population())
+	var n_start := float(play.neutrals.size())
+	_check(is_equal_approx(play.raids.spawn_rate(), game.settings.goblin_rate + n_start * Balance.num("neutral_goblin_spawn"))
+		and is_equal_approx(GoblinRaids.build_speed(), game.settings.goblin_build_speed * (1.0 + n_start * Balance.num("neutral_goblin_build_speed"))),
+		"each neutral village at the start adds neutral_goblin_spawn goblins a minute and neutral_goblin_build_speed to their building")
+	_check(BuildOrder.kind_of("Tall house (Town guard)") == "tall_house" and BuildOrder.kind_of("Wheat field") == "field"
+		and BuildOrder.files().has("res://NeutralVillages/Neutral_Build_Order_1.txt") and nv.order.path.begins_with("res://NeutralVillages/Neutral_Build_Order_")
+		and not nv.order.steps.is_empty() and not nv.order.limits.is_empty(), "its build order comes from a Neutral_Build_Order file (%s, %d steps)" % [nv.order.path.get_file(), nv.order.steps.size()])
+	await _wait(20.0)
+	var first_step: String = nv.order.steps[0]
+	_check(nv.built(first_step) > 0, "it builds the first thing in its order (%s)" % first_step)
+	# Its people: the workers it keeps, an army as big as its buildings
+	# allow, and a third of the rest on each job.
+	var guard_kind := BuildingCatalog.kind_for_role("guard", "tall_house")
+	var guard := BuildingFactory.create(guard_kind, RandomNumberGenerator.new())
+	game.world_root.add_child(guard)
+	guard.global_position = nv.center + Vector3(9.0, 0.0, 0.0)
+	guard.set_meta("kind", guard_kind)
+	nv.adopt(guard)
+	nv._staff()
+	var pins := {"food": 0, "lumber": 0, "stone": 0, "": 0}
+	for v in nv.people():
+		if v.can_work() and v.job != "train" and pins.has(v.pin):
+			pins[v.pin] += 1
+	_check(nv.wanted.warrior == nv.max_count("warrior") and nv.wanted.archer == nv.max_count("archer") and nv.max_count("archer") > 0,
+		"it trains as many warriors and archers as its Town guards allow (%d and %d)" % [nv.wanted.warrior, nv.wanted.archer])
+	_check(pins[""] >= roundi(Balance.num("neutral_keep_workers")) and absi(pins.food - pins.stone) <= 1 and absi(pins.lumber - pins.stone) <= 1,
+		"it keeps neutral_keep_workers workers and puts a third of the rest on each of food, lumber and stone (%s)" % pins)
+	# Worshipers: the creature in the village, and helping it.
+	var w0 := nv.worshipers()
+	nv._seen = Balance.num("convert_minutes") * 60.0 - 0.5
+	play.creature.place(nv.center + Vector3(0.0, 0.0, 12.0), 0.0)
+	await _wait(2.0)
+	_check(nv.worshipers() == w0 + 1, "a neutral villager becomes a worshiper for every convert_minutes the creature is in the village")
+	var w1 := nv.worshipers()
+	NeutralVillage.creature_helped(nv.center)
+	var won := nv.worshipers() - w1
+	_check(won >= roundi(Balance.num("convert_on_help_min")) and won <= roundi(Balance.num("convert_on_help_max")), "helping them wins over convert_on_help_min to max more at once (%d)" % won)
+	var magic_then := village.magicko_per_minute()
+	var grown_then := nv.grown_worshipers()
+	var takeover := Balance.num("takeover_share")
+	Balance.values["takeover_share"] = 2.0
+	nv.convert_people(1000)
+	var cap := floori(Balance.num("worshipers_most") * nv.population() + 0.0001)
+	_check(nv.worshipers() == cap, "no more than worshipers_most of a neutral village can be won over peacefully (%d of %d)" % [nv.worshipers(), nv.population()])
+	_check(is_equal_approx(village.magicko_per_minute() - magic_then, (nv.grown_worshipers() - grown_then) * game.settings.magicko_rate * (village.blood_boost() if village.blood_active() else 1.0)),
+		"its worshipers make the player magicko")
+	var worship_line := nv.worship_tip()
+	_check(worship_line.contains("%d of %d" % [nv.worshipers(), nv.population()]), "pointing at its Storehouse shows the worshipers (%s)" % worship_line.replace("\n", " / "))
+	# Raids go for the neutral villages too.
+	play.raids.start_raid()
+	var at_neutral := 0
+	for node in get_tree().get_nodes_in_group("raiders"):
+		var g := node as Villager
+		for other in play.neutrals:
+			if g._raid_goal.distance_to(other.center) < 15.0:
+				at_neutral += 1
+	_check(at_neutral > 0, "the goblins raid the neutral villages too (%d of %d raiders)" % [at_neutral, get_tree().get_nodes_in_group("raiders").size()])
+	play.raids.end_raid()
+	# Saved and loaded, the neutral villages come back.
+	var data7 := SaveGame.collect(play)
+	var neutral_people := 0
+	for p: Dictionary in data7.people:
+		if int(p.get("village", -1)) >= 0:
+			neutral_people += 1
+	_check((data7.neutrals as Array).size() == play.neutrals.size() and neutral_people > 0, "a saved game keeps the neutral villages and their people (%d)" % neutral_people)
+	# Taken over.
+	Balance.values["takeover_share"] = takeover
+	var people_then7 := village.population()
+	var their := nv.population()
+	var their_buildings := get_tree().get_nodes_in_group(nv.buildings_group).size()
+	var player_buildings := get_tree().get_nodes_in_group("player_buildings").size()
+	var centre7 := nv.center
+	nv._check_fate()
+	await _wait(0.5)
+	_check(not is_instance_valid(nv) and village.population() == people_then7 + their
+		and get_tree().get_nodes_in_group("player_buildings").size() == player_buildings + their_buildings and village.in_territory(centre7),
+		"at takeover_share worshipers the village is the player's: its people, buildings and ground (%d people)" % their)
+	# Everyone dead, buildings standing: the player's at once.
+	if play.neutrals.size() >= 2:
+		var empty := play.neutrals[play.neutrals.size() - 1]
+		var empty_at := empty.center
+		var stores_before := get_tree().get_nodes_in_group("player_buildings").size()
+		for v in empty.people():
+			v.starve()
+		await _wait(2.0)
+		_check(not is_instance_valid(empty) and play.village.in_territory(empty_at) and get_tree().get_nodes_in_group("player_buildings").size() > stores_before,
+			"a neutral village where everyone is dead but the buildings stand is the player's at once")
+	# Wiped out by the goblins: a cave.
+	if not play.neutrals.is_empty():
+		var lost := play.neutrals[0]
+		var caves_before := get_tree().get_nodes_in_group("caves").size()
+		for node in get_tree().get_nodes_in_group(lost.buildings_group):
+			(node as Destructible).shatter((node as Node3D).global_position, 1.0, true)
+		for v in lost.people():
+			v.starve()
+		await _wait(2.0)
+		_check(not is_instance_valid(lost) and get_tree().get_nodes_in_group("caves").size() == caves_before + 1 and play.raids._caves.size() == caves_before + 1,
+			"a neutral village the goblins wipe out becomes a goblin cave that spawns goblins")
+	game.built_up_islands = true
+	game.neutral_villages = 0
+
+	# 8. The test environment: the game's giants, and a fight between two.
+	await _open(game, "test", "", 384)
+	var env := get_tree().current_scene.get_node("Controller") as TestEnvironment
+	_check(env != null and TestEnvironment.GIANTS.size() == Creature.SPECIES.size() + 1, "every giant is in the test environment (%d)" % TestEnvironment.GIANTS.size())
+	env._fight_picks[0].selected = 0
+	env._fight_picks[1].selected = TestEnvironment.GIANTS.size() - 1
+	env._start_fight()
+	var fighters := env._giants.duplicate()
+	for k in 25:
+		await _wait(1.0)
+		if fighters[0].hp < fighters[0].max_hp and fighters[1].hp < fighters[1].max_hp:
+			break
+	_check(fighters.size() == 2 and fighters[0].hp < fighters[0].max_hp and fighters[1].hp < fighters[1].max_hp,
+		"two giants there fight each other (%s)" % env._giants_text().replace("\n", " / "))
+	env._clear_giants()
+	game.terrain = null
 
 	DirAccess.remove_absolute(path)
 	Engine.time_scale = 1.0

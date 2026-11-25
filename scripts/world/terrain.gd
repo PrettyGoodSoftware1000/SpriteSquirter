@@ -242,6 +242,29 @@ func generate(seed_value: int, with_villages := true) -> void:
 	_finish()
 
 
+## Flat dry ground at `height` over the whole map square, with no water,
+## rivers or village sites (the test environment's floor).
+func generate_flat(height := 0.0) -> void:
+	world_seed = 0
+	_edge_noise.seed = 3
+	_edge_noise.frequency = 0.55
+	heights.resize(N * N)
+	heights.fill(height)
+	scorch.resize(N * N)
+	scorch.fill(0.0)
+	bare.resize(N * N)
+	bare.fill(0.0)
+	island.resize(N * N)
+	for j in N:
+		for i in N:
+			var inside := i >= EDGE_MARGIN and j >= EDGE_MARGIN and i <= SIZE - EDGE_MARGIN and j <= SIZE - EDGE_MARGIN
+			island[j * N + i] = 1 if inside else 0
+	rivers.clear()
+	village_sites.clear()
+	_init_layers()
+	_finish()
+
+
 ## Restores a world saved by export_map() (see MapData). Version 1 maps
 ## had no land, water or paint layers, so those are rebuilt from heights.
 func load_map(data: Dictionary) -> void:

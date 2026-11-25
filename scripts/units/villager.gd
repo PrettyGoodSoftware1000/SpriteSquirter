@@ -137,6 +137,14 @@ var goblin := false
 
 ## Set before adding to the scene: belongs to the player's village.
 var owned := false
+## Set before adding to the scene: the neutral village this villager is one
+## of (NeutralVillage), or null. Its people work, fight and are born just
+## as the player's do, for their own village.
+var village: PlayerVillage
+## One of the creature's worshipers: every one of the player's own people,
+## and those of a neutral village it has won over (they make the player
+## magicko, see PlayerVillage.magicko_per_minute()).
+var worshiper := false
 ## Set before adding to the scene: a newborn that grows up over time.
 var child := false
 ## Trained at a Town guard: armoured, stronger, and does not work.
@@ -332,7 +340,10 @@ func _ready() -> void:
 	if ogre:
 		add_to_group("ogres")
 	if owned and not skeleton:
+		worshiper = true
 		add_to_group("people")
+	elif is_instance_valid(village) and not skeleton:
+		add_to_group(village.people_group)
 	_build_body()
 	_timer = randf_range(0.0, 3.0)
 
@@ -1353,7 +1364,7 @@ func _process(delta: float) -> void:
 		return
 	if child:
 		_grow(delta)
-	if owned and not skeleton:
+	if member() and not skeleton:
 		_watch_stuck(delta)
 	if _hit_flash > 0.0:
 		_hit_flash -= delta
@@ -1478,12 +1489,12 @@ func _update_fey(delta: float) -> void:
 
 
 func _enemies_near_village() -> bool:
-	var village := Game.village
-	if not is_instance_valid(village):
+	var vil := my_village()
+	if not is_instance_valid(vil):
 		return false
 	for node in get_tree().get_nodes_in_group("goblins"):
 		var g := node as Villager
-		if g.is_alive() and not g.charmed() and village.in_territory(g.global_position):
+		if g.is_alive() and not g.charmed() and vil.in_territory(g.global_position):
 			return true
 	return false
 
@@ -1587,15 +1598,26 @@ func is_adult() -> bool:
 	return not child
 
 
+## The village this villager works for: its neutral village, or else the
+## player's (goblin builders put up their buildings through it too).
+func my_village() -> PlayerVillage:
+	return village if is_instance_valid(village) else Game.village
+
+
+## True for one of a village's people: the player's, or a neutral village's.
+func member() -> bool:
+	return owned or (is_instance_valid(village) and not goblin)
+
+
 ## True if the villager could start a job right now.
 func can_work() -> bool:
-	return owned and not skeleton and not child and not soldier and not wizard and not archer and state != State.DEAD and state != State.BURNING and state != State.HELD
+	return member() and not skeleton and not child and not soldier and not wizard and not archer and state != State.DEAD and state != State.BURNING and state != State.HELD
 
 
 ## Grown-up villagers of the player's village and goblins fight. Children
 ## and villagers of other villages run instead.
 func can_fight() -> bool:
-	return not child and (goblin or owned)
+	return not child and (goblin or member())
 
 
 func assign_job(kind: String, pos: Vector3, target: Node) -> void:
@@ -1668,8 +1690,8 @@ func _watch_stuck(delta: float) -> void:
 		_stuck_label.modulate = Color(1.0, 0.5, 0.4)
 		_stuck_label.position = Vector3.UP * 2.4
 		add_child(_stuck_label)
-		if is_instance_valid(Game.village):
-			Game.village.report_stuck(self)
+		if is_instance_valid(my_village()):
+			my_village().report_stuck(self)
 
 
 ## True while the villager is at its job and working.
@@ -1683,7 +1705,7 @@ func _update_job(delta: float) -> void:
 			_unload()
 			# An unassigned worker home with a load picks its next work
 			# afresh: whatever the village has least of.
-			if job == "" or (owned and not goblin and pin == "" and job in ["lumber", "stone", "food", "farm"]):
+			if job == "" or (member() and not goblin and pin == "" and job in ["lumber", "stone", "food", "farm"]):
 				clear_job()
 		return
 	if job == "":
@@ -1728,8 +1750,8 @@ func _update_job(delta: float) -> void:
 		var to := target_3d.global_position - global_position
 		rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 8.0))
 	_work_phase += delta * 7.0
-	if is_instance_valid(Game.village):
-		Game.village.work(self, delta)
+	if is_instance_valid(my_village()):
+		my_village().work(self, delta)
 
 
 # --- Carrying -----------------------------------------------------------------
@@ -1741,24 +1763,25 @@ func gather(kind: String, amount: float) -> void:
 		_unload()
 		carry_kind = kind
 	carry += amount
-	var barrows := is_instance_valid(Game.village) and Game.village.barrows
+	var barrows := is_instance_valid(my_village()) and my_village().barrows
 	if carry >= (BARROW_CAPACITY if barrows else CARRY_CAPACITY):
 		_start_delivery()
 
 
 func _start_delivery() -> void:
-	if not is_instance_valid(Game.village):
+	var vil := my_village()
+	if not is_instance_valid(vil):
 		return
 	_delivering = true
 	_working = false
-	_drop_pos = Game.village.drop_point(global_position, carry_kind)
+	_drop_pos = vil.drop_point(global_position, carry_kind)
 	# The load goes home in a wheelbarrow if the village has a Blacksmith to
 	# make them, and on the worker's back if not.
 	if _load == null:
 		_load = MeshInstance3D.new()
 		_load.material_override = Art.cloth()
 		add_child(_load)
-	_pushing = Game.village.barrows and not fey  # (the fey carry theirs by magic)
+	_pushing = vil.barrows and not fey  # (the fey carry theirs by magic)
 	_load.mesh = _gear[("barrow_" if _pushing else "pack_") + carry_kind]
 	_load.visible = true
 	if state == State.IDLE or state == State.WALK:
@@ -1783,8 +1806,8 @@ func carry_pack(kind: String) -> void:
 
 
 func _unload() -> void:
-	if carry > 0.0 and is_instance_valid(Game.village):
-		Game.village.store(carry_kind, carry)
+	if carry > 0.0 and is_instance_valid(my_village()):
+		my_village().store(carry_kind, carry)
 	carry = 0.0
 	_delivering = false
 	if _load:
@@ -1808,7 +1831,7 @@ func become_soldier(post: Vector3) -> void:
 	max_hp = HEALTH * SOLDIER_HEALTH
 	hp = max_hp
 	damage = ATTACK_DAMAGE * SOLDIER_DAMAGE
-	if is_instance_valid(Game.village) and Game.village.has_research("swords"):
+	if is_instance_valid(my_village()) and my_village().has_research("swords"):
 		sharpen()
 	_look = _soldier_looks[randi() % _soldier_looks.size()]
 	_apply_lod(_near)
@@ -1895,7 +1918,8 @@ static func raise_skeleton(body: Villager, master: Villager) -> Villager:
 	var share := Balance.num("skeleton_share")
 	var s := Villager.new()
 	s.skeleton = true
-	s.owned = true
+	s.owned = master.owned
+	s.village = master.village
 	s.archer = body.archer or body.wizard or randf() < 0.35
 	s.max_hp = maxf(1.0, body.max_hp * share)
 	s.damage = body.power() * share
@@ -1916,7 +1940,7 @@ func _look_for_body() -> bool:
 	_minions = _minions.filter(func(s: Villager) -> bool: return is_instance_valid(s) and s.is_alive())
 	if Game.now < _raise_ready or _minions.size() >= roundi(Balance.num("necromancer_skeletons")):
 		return false
-	if not is_instance_valid(Game.village) or Game.village.amount("bones") < roundi(Balance.num("raise_bones")):
+	if not is_instance_valid(my_village()) or my_village().amount("bones") < roundi(Balance.num("raise_bones")):
 		return false
 	var best: Villager = null
 	var best_d := Balance.num("necromancer_raise_sight")
@@ -1961,7 +1985,7 @@ func _update_raise(delta: float) -> void:
 	_raise_timer += delta
 	if _raise_timer < Balance.num("necromancer_raise_seconds"):
 		return
-	if Game.village.spend({"bones": roundi(Balance.num("raise_bones"))}):
+	if my_village().spend({"bones": roundi(Balance.num("raise_bones"))}):
 		_minions.append(Villager.raise_skeleton(body, self))
 		body.queue_free()
 	_raise_ready = Game.now + Balance.num("necromancer_raise_rest")
@@ -2323,8 +2347,8 @@ func become_worker() -> void:
 	_foe = null
 	if state == State.FIGHT:
 		state = State.IDLE
-	if is_instance_valid(Game.village):
-		home = Game.village.center
+	if is_instance_valid(my_village()):
+		home = my_village().center
 		home_radius = PlayerVillage.HOME_RADIUS
 
 
@@ -2405,7 +2429,7 @@ func _think() -> void:
 		if (state == State.IDLE or state == State.WALK) and _find_post():
 			return
 	# Anyone who can shoot always goes for a giant bat first.
-	if owned and (archer or wizard) and not (is_instance_valid(_foe) and _foe is GiantBat and _foe_ok()):
+	if member() and (archer or wizard) and not (is_instance_valid(_foe) and _foe is GiantBat and _foe_ok()):
 		var bat := _nearest_bat(BAT_SIGHT)
 		if bat != null:
 			_engage(bat)
@@ -2424,7 +2448,7 @@ func _think() -> void:
 			continue
 		# An enemy is a raider, or a goblin that has walked into the village.
 		# When one is close, every grown-up nearby turns out to fight it.
-		var close := owned and g.threatens_village()
+		var close := member() and g.threatens(my_village())
 		if not g.raiding and not close:
 			continue
 		var d := _flat_to(g.global_position)
@@ -2451,7 +2475,7 @@ func _think() -> void:
 ## The Balrog, if it is out to hurt the village and this is one of the
 ## village's people. Otherwise null.
 func _fiend() -> Creature:
-	if not owned:
+	if not member():
 		return null
 	for node in get_tree().get_nodes_in_group("balrogs"):
 		var b := node as Creature
@@ -2463,10 +2487,14 @@ func _fiend() -> Creature:
 ## True for a goblin the whole village turns out against: a raider that has
 ## come close, or any goblin that has walked right into the village.
 func threatens_village() -> bool:
-	var village := Game.village
-	if not goblin or not is_instance_valid(village) or not village.founded or state == State.DEAD:
+	return threatens(Game.village)
+
+
+## The same for village `of` (the player's or a neutral one).
+func threatens(of: PlayerVillage) -> bool:
+	if not goblin or not is_instance_valid(of) or not of.founded or state == State.DEAD:
 		return false
-	var d := Vector2(global_position.x - village.center.x, global_position.z - village.center.z).length()
+	var d := Vector2(global_position.x - of.center.x, global_position.z - of.center.z).length()
 	return d < (PlayerVillage.DEFEND_RADIUS if raiding else PlayerVillage.INTRUDER_RADIUS)
 
 
@@ -2502,12 +2530,13 @@ func _nearest_villager(reach: float) -> Villager:
 func _nearest_building(reach: float) -> Destructible:
 	var best: Destructible = null
 	var best_d := reach
-	for node in get_tree().get_nodes_in_group("player_buildings"):
-		var b := node as Destructible
-		var d := _flat_to(b.global_position)
-		if d < best_d and not b.destroyed and not b is RopeBridge:
-			best_d = d
-			best = b
+	for group: String in ["player_buildings", "neutral_buildings"]:
+		for node in get_tree().get_nodes_in_group(group):
+			var b := node as Destructible
+			var d := _flat_to(b.global_position)
+			if d < best_d and not b.destroyed and not b is RopeBridge:
+				best_d = d
+				best = b
 	return best
 
 
@@ -2538,13 +2567,13 @@ func _foe_ok() -> bool:
 		if goblin:
 			# Goblins fight charmed goblins, and charmed goblins fight goblins.
 			return v.charmed() != charmed() if v.goblin else not charmed()
-		return not v.charmed() and (v.raiding or v.threatens_village())
+		return not v.charmed() and (v.raiding or v.threatens(my_village()))
 	if charmed():
 		return false
 	var beast := _foe as Creature
 	if beast:
 		if beast.hostile:
-			return owned and not beast.knocked_out and beast.is_threat()
+			return member() and not beast.knocked_out and beast.is_threat()
 		return raiding and not beast.knocked_out and (archer or not beast.is_flying())
 	var b := _foe as Destructible
 	return b != null and not b.destroyed
@@ -3177,6 +3206,8 @@ func _die(charred: bool) -> void:
 	state = State.DEAD
 	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards", "archers", "necromancers", "skeletons"]:
 		remove_from_group(group)
+	if is_instance_valid(village):
+		remove_from_group(village.people_group)
 	if not skeleton and is_instance_valid(Game.village) and Game.village.founded:
 		# Everyone who dies leaves bones for the village, and a body a
 		# necromancer can raise.

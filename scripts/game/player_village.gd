@@ -112,6 +112,16 @@ signal lesson(kind: String)
 
 var founded := false
 var center := Vector3.ZERO
+## A neutral village (NeutralVillage) rather than the player's. Its people
+## and buildings are in groups of their own; the player's are "people"
+## and "player_buildings".
+var neutral := false
+var people_group := "people"
+var buildings_group := "player_buildings"
+## The centres of the neutral villages the player has taken over: their
+## buildings and people are the player's now, and so is the ground round
+## them (in_territory()).
+var taken_centres: Array[Vector3] = []
 var resources := {}
 ## Seconds towards the next birth.
 var birth_progress := 0.0
@@ -205,21 +215,45 @@ func found(pos: Vector3, site := -1) -> void:
 	if site >= 0:
 		for node in tree.get_nodes_in_group("buildings"):
 			if node.get_meta("site", -1) == site:
-				node.add_to_group("player_buildings")
+				adopt(node)
 		for node in tree.get_nodes_in_group("villagers"):
 			var v := node as Villager
 			if v.get_meta("site", -1) == site and not v.goblin:
-				v.owned = true
-				v.add_to_group("people")
+				join(v)
 				v.home = center
 				v.home_radius = HOME_RADIUS
 	_raise_first_storehouse()
 	if people().is_empty():
 		Game.terrain.add_bare(center, 9.0, 0.7)
-		for k in roundi(Balance.num("start_villagers")):
-			WorldPopulator.spawn_villager(Game.world_root, Game.terrain, center, 6.0, false, true)
+		for k in start_people():
+			spawn_person(center, 6.0)
 		for v in people():
 			v.home_radius = HOME_RADIUS
+
+
+## Makes villager `v` (one already on the island) one of the village's people.
+func join(v: Villager) -> void:
+	v.owned = true
+	v.worshiper = true
+	v.add_to_group(people_group)
+
+
+## Makes building `b` one of the village's.
+func adopt(b: Node) -> void:
+	b.add_to_group(buildings_group)
+	if neutral:
+		b.add_to_group("neutral_buildings")
+		b.set_meta("village", self)
+
+
+## How many villagers the village starts with: Balance "start_villagers".
+func start_people() -> int:
+	return roundi(Balance.num("start_villagers"))
+
+
+## One of the village's own people (a newborn if `child`), near `at`.
+func spawn_person(at: Vector3, radius: float, child := false, fey := false) -> Villager:
+	return WorldPopulator.spawn_villager(Game.world_root, Game.terrain, at, radius, false, true, child, fey)
 
 
 ## The village's first Storehouse is free and stands on the start location
@@ -258,7 +292,7 @@ func _raise_first_storehouse() -> void:
 	Game.world_root.add_child(store)
 	store.global_position = Vector3(spot.x, h, spot.z)
 	store.rotation.y = rng.randf() * TAU
-	store.add_to_group("player_buildings")
+	adopt(store)
 	terrain.add_bare(store.global_position, store.footprint + 1.5, 0.9)
 
 
@@ -269,7 +303,7 @@ func store(kind: String, amount: float) -> void:
 	var per := maxf(Balance.num("stored_per_lesson"), 1.0)
 	var before: float = _stored.get(kind, 0.0)
 	_stored[kind] = before + amount
-	if quota.has(kind) and floorf(_stored[kind] / per) > floorf(before / per):
+	if not neutral and quota.has(kind) and floorf(_stored[kind] / per) > floorf(before / per):
 		lesson.emit(kind)
 
 
@@ -332,7 +366,7 @@ func free_wizards() -> int:
 ## A villager is stuck (see Villager._watch_stuck()): said at most
 ## STUCK_REPORTS times a game.
 func report_stuck(v: Villager) -> void:
-	if _stuck_reports >= STUCK_REPORTS:
+	if neutral or _stuck_reports >= STUCK_REPORTS:
 		return
 	_stuck_reports += 1
 	villager_stuck.emit(v)
@@ -346,15 +380,30 @@ func sacrifice_someone() -> bool:
 	return sacrifice(all[randi() % all.size()].global_position)
 
 
+## True if `node` (a wheat field, a building site) is this village's: the
+## player's have no "village" meta, a neutral village's carry it.
+func owns(node: Node) -> bool:
+	var of: Variant = node.get_meta("village") if node.has_meta("village") else null
+	return (of == self) if neutral else (of == null or not is_instance_valid(of))
+
+
+func fields() -> Array:
+	return get_tree().get_nodes_in_group("fields").filter(owns)
+
+
+func construction_sites() -> Array:
+	return get_tree().get_nodes_in_group("construction_sites").filter(owns)
+
+
 func people() -> Array[Villager]:
 	var out: Array[Villager] = []
-	for node in get_tree().get_nodes_in_group("people"):
+	for node in get_tree().get_nodes_in_group(people_group):
 		out.append(node as Villager)
 	return out
 
 
 func population() -> int:
-	return get_tree().get_nodes_in_group("people").size()
+	return get_tree().get_nodes_in_group(people_group).size()
 
 
 func adults() -> int:
@@ -367,7 +416,7 @@ func adults() -> int:
 
 func housing() -> int:
 	var total := BuildingCatalog.BASE_HOUSING
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		total += BuildingCatalog.housing(node.get_meta("kind", ""))
 	return total
 
@@ -407,15 +456,24 @@ func sacrifice(pos: Vector3) -> bool:
 
 
 func soldiers() -> int:
-	return get_tree().get_nodes_in_group("soldiers").size()
+	return _in_group("soldiers")
 
 
 func wizards() -> int:
-	return get_tree().get_nodes_in_group("wizards").size()
+	return _in_group("wizards")
 
 
 func archers() -> int:
-	return get_tree().get_nodes_in_group("archers").size()
+	return _in_group("archers")
+
+
+## How many of the village's people are in `group` ("soldiers", "wizards"...).
+func _in_group(group: String) -> int:
+	var n := 0
+	for v in people():
+		if v.is_in_group(group):
+			n += 1
+	return n
 
 
 func count(role: String) -> int:
@@ -425,9 +483,9 @@ func count(role: String) -> int:
 		"archer":
 			return archers()
 		"necromancer":
-			return get_tree().get_nodes_in_group("necromancers").size()
+			return _in_group("necromancers")
 		"fey_archer":
-			return get_tree().get_nodes_in_group("fey_archers").size()
+			return _in_group("fey_archers")
 	return wizards()
 
 
@@ -464,7 +522,7 @@ func max_count(role: String) -> int:
 # --- Blacksmith and research ----------------------------------------------------
 
 func has_blacksmith() -> bool:
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		if BuildingCatalog.role(node.get_meta("kind", "")) == "smith":
 			return true
 	return false
@@ -476,7 +534,7 @@ func has_research(id: String) -> bool:
 
 ## True while one of the village's buildings with `role` stands.
 func has_role(role: String) -> bool:
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		if BuildingCatalog.role(node.get_meta("kind", "")) == role and not (node as Destructible).destroyed:
 			return true
 	return false
@@ -501,7 +559,7 @@ func researching(place: String) -> Array:
 ## buildings that stands.
 func research_slots(place: String) -> int:
 	var count := 0
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		if BuildingCatalog.role(node.get_meta("kind", "")) == place and not (node as Destructible).destroyed:
 			count += 1
 	return count
@@ -801,7 +859,7 @@ func fey_target(p: Vector3) -> Villager:
 func start_tryst(v: Villager, pixie: Node3D) -> void:
 	var best: Destructible = null
 	var best_d := INF
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		var b := node as Destructible
 		if b.destroyed or b is RopeBridge:
 			continue
@@ -858,7 +916,7 @@ func learn_all_spells() -> void:
 ## proportion to its size before that, and less again while it is young.
 func creature_upkeep() -> float:
 	var c := Game.creature
-	if not is_instance_valid(c) or c.knocked_out:
+	if neutral or not is_instance_valid(c) or c.knocked_out:
 		return 0.0
 	var young := Balance.num("creature_young_appetite") if c.grown() < 0.5 else 1.0
 	return Game.settings.creature_food * c.size * young
@@ -941,7 +999,7 @@ func food_upkeep() -> float:
 func drop_point(from: Vector3, kind := "") -> Vector3:
 	var best := center
 	var best_d := INF
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		var b := node as Destructible
 		var role := BuildingCatalog.role(b.get_meta("kind", ""))
 		if role != "store" and not (role == "granary" and kind == "food"):
@@ -961,7 +1019,7 @@ func drop_point(from: Vector3, kind := "") -> Vector3:
 ## standing (one is enough; more add nothing).
 func food_rate() -> float:
 	var rate: float = Game.settings.food_rate
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		var b := node as Destructible
 		if b != null and not b.destroyed and b.get_meta("kind", "") == "windmill":
 			return rate + Balance.num("windmill_food_rate")
@@ -1019,7 +1077,7 @@ func capacity(res: String) -> float:
 		return INF
 	var stores := 0
 	var granaries := 0
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		match BuildingCatalog.role(node.get_meta("kind", "")):
 			"store":
 				stores += 1
@@ -1134,7 +1192,15 @@ func influence() -> float:
 
 ## True where the village may put up a building, or the player cast a spell.
 func in_territory(p: Vector3) -> bool:
-	return founded and Vector2(p.x - center.x, p.z - center.z).length() < influence()
+	if not founded:
+		return false
+	var reach := influence()
+	if Vector2(p.x - center.x, p.z - center.z).length() < reach:
+		return true
+	for c in taken_centres:
+		if Vector2(p.x - c.x, p.z - c.z).length() < reach:
+			return true
+	return false
 
 
 ## The Shrines the village has built itself (they make animus).
@@ -1149,7 +1215,7 @@ func built_shrines() -> int:
 ## The Shrines that stand, for animus and bringing the creature back.
 func shrines() -> Array[Destructible]:
 	var out: Array[Destructible] = []
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		var b := node as Destructible
 		if BuildingCatalog.role(b.get_meta("kind", "")) == "shrine" and not b.destroyed:
 			out.append(b)
@@ -1158,12 +1224,16 @@ func shrines() -> Array[Destructible]:
 
 ## 0..1 of the way to the next birth (0 while no child can be born).
 ## Magicko the village makes a minute: Game.settings.magicko_rate from each
-## grown-up villager (the fey Balance "fey_magicko" times as much), Balance
-## "wizard_magicko" from each wizard, all blood_boost() times as much while a
-## Blood Sacrifice lasts. (Magic trees give theirs themselves.)
+## grown-up worshiper (every one of the village's own people is one; the fey
+## make Balance "fey_magicko" times as much), the worshipers in the neutral
+## villages too (NeutralVillage.worshipers()), Balance "wizard_magicko" from
+## each wizard, all blood_boost() times as much while a Blood Sacrifice
+## lasts. (Magic trees give theirs themselves.)
 func magicko_per_minute() -> float:
 	var grown := adults() - wizards()
 	var fey_extra := fey_adults() * (Balance.num("fey_magicko") - 1.0)
+	for node in get_tree().get_nodes_in_group("neutral_villages"):
+		grown += (node as NeutralVillage).grown_worshipers()
 	var boost := blood_boost() if blood_active() else 1.0
 	return ((grown + fey_extra) * Game.settings.magicko_rate + wizards() * Balance.num("wizard_magicko")) * boost
 
@@ -1184,10 +1254,22 @@ func next_birth_in() -> float:
 func _process(delta: float) -> void:
 	if not founded:
 		return
+	if neutral:
+		_live(delta)
+		return
 	give("magicko", magicko_per_minute() / 60.0 * delta)
 	# Animus: Balance "animus_per_minute" to begin with, and more for every
 	# Shrine the village has built (not the ones its site came with).
 	give("animus", (Balance.num("animus_per_minute") + built_shrines() * Balance.num("animus_per_shrine")) / 60.0 * delta)
+	_live(delta)
+	_update_research(delta)
+	_update_spell_research(delta)
+	_plan_planting(delta)
+
+
+## What every village does, the player's and the neutral ones: eat, have
+## children, and set its people to work and to train.
+func _live(delta: float) -> void:
 	_sample(delta)
 	_eat(delta)
 	if population() < housing() and amount("food") > 0:
@@ -1204,9 +1286,6 @@ func _process(delta: float) -> void:
 		_army_timer = 0.5
 		barrows = has_research("wheelbarrows")
 		_manage_army()
-	_update_research(delta)
-	_update_spell_research(delta)
-	_plan_planting(delta)
 
 
 ## The dev menu's Advance time: `seconds` go by at once for births (as
@@ -1242,7 +1321,7 @@ func _eat(delta: float) -> void:
 		return
 	resources.food = 0.0
 	hungry_for += delta
-	if founded and Game.now >= _food_warned_at + Balance.num("food_warning_seconds"):
+	if founded and not neutral and Game.now >= _food_warned_at + Balance.num("food_warning_seconds"):
 		_food_warned_at = Game.now
 		_float_over_storehouse(Texts.line("out_of_food" if hungry_for < STARVE_AFTER else "starving"))
 	if hungry_for < STARVE_AFTER:
@@ -1260,11 +1339,11 @@ func _eat(delta: float) -> void:
 
 ## A line of text floats up from the Storehouse (the nearest to the
 ## middle of the village), or from the middle if there is none.
-func _float_over_storehouse(text: String) -> void:
+func _float_over_storehouse(text: String, color := Color(1.0, 0.55, 0.4)) -> void:
 	var at := center
 	var high := 6.0
 	var best := INF
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		var b := node as Destructible
 		if b != null and not b.destroyed and BuildingCatalog.role(b.get_meta("kind", "")) == "store" and b.global_position.distance_to(center) < best:
 			best = b.global_position.distance_to(center)
@@ -1278,7 +1357,7 @@ func _float_over_storehouse(text: String) -> void:
 	label.pixel_size = 0.0011
 	label.font_size = 26
 	label.outline_size = 10
-	label.modulate = Color(1.0, 0.55, 0.4)
+	label.modulate = color
 	label.add_to_group("food_warnings")
 	Game.effects.add_child(label)
 	label.global_position = at + Vector3.UP * (high + 1.5)
@@ -1291,13 +1370,13 @@ func _float_over_storehouse(text: String) -> void:
 
 func _spawn_child() -> Villager:
 	var spot := center
-	var homes := get_tree().get_nodes_in_group("player_buildings")
+	var homes := get_tree().get_nodes_in_group(buildings_group)
 	if not homes.is_empty():
 		var b := homes[randi() % homes.size()] as Destructible
 		var a := randf() * TAU
 		spot = b.global_position + Vector3(cos(a), 0.0, sin(a)) * (b.footprint + 1.0)
 	# (While the fey are about, every child is fey: a girl with wings.)
-	var v := WorldPopulator.spawn_villager(Game.world_root, Game.terrain, spot, 1.0, false, true, true, Game.now < fey_until)
+	var v := spawn_person(spot, 1.0, true, Game.now < fey_until)
 	v.home = center
 	v.home_radius = HOME_RADIUS
 	Game.effects.spawn_dust(v.global_position, 0.4)
@@ -1411,7 +1490,7 @@ func _assign_jobs() -> void:
 	# Building: each site takes up to `most` villagers, builders first, then
 	# unassigned workers; the oldest site is manned first.
 	var most := maxi(1, roundi(Balance.num("builders_per_building")))
-	var sites := get_tree().get_nodes_in_group("construction_sites")
+	var sites := construction_sites()
 	var crew := {}
 	for v in workers:
 		if v.job != "build":
@@ -1454,7 +1533,7 @@ func _assign_jobs() -> void:
 			per_target[v.job_target] = per_target.get(v.job_target, 0) + 1
 			farming += 1
 	var fields_want_hands := false
-	for node in get_tree().get_nodes_in_group("fields"):
+	for node in fields():
 		fields_want_hands = fields_want_hands or (node as CropField).needs_work()
 	# The villagers the player set to a job keep to it.
 	for v in workers:
@@ -1471,7 +1550,7 @@ func _assign_jobs() -> void:
 	# The farmers go to the fields: ripe ones first (they reap before they
 	# sow), and every field gets one before any gets a second.
 	var fields: Array[CropField] = []
-	for node in get_tree().get_nodes_in_group("fields"):
+	for node in fields():
 		var field := node as CropField
 		if field != null and field.needs_work():
 			fields.append(field)
@@ -1550,7 +1629,7 @@ func _spare_farmer(workers: Array[Villager], field: CropField, farmers: Dictiona
 
 func _training_buildings(role: String) -> Array[Destructible]:
 	var out: Array[Destructible] = []
-	for node in get_tree().get_nodes_in_group("player_buildings"):
+	for node in get_tree().get_nodes_in_group(buildings_group):
 		var b := node as Destructible
 		if BuildingCatalog.role(b.get_meta("kind", "")) == ARMY[role][0] and not b.destroyed:
 			out.append(b)
@@ -1646,7 +1725,7 @@ func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
 			# sow; nothing while all are growing.
 			var best: CropField = null
 			var best_score := INF
-			for node in get_tree().get_nodes_in_group("fields"):
+			for node in fields():
 				var field := node as CropField
 				if field == null or not field.needs_work() or (not field.is_ripe() and v.pin != "food"):
 					continue
@@ -1680,7 +1759,7 @@ func _give_job(v: Villager, kind: String, per_target: Dictionary) -> bool:
 func _tend_field(v: Villager, per_target: Dictionary) -> bool:
 	var best: CropField = null
 	var fewest := 1 << 30
-	for node in get_tree().get_nodes_in_group("fields"):
+	for node in fields():
 		var field := node as CropField
 		if field == null or field.stage != CropField.Stage.GROWING:
 			continue

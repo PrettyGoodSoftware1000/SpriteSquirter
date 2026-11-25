@@ -870,17 +870,20 @@ func _cast(spell: String, target: Vector3, facts: Dictionary) -> void:
 			Game.world_root.add_child(fb)
 			fb.launch(creature.mouth_position(), target)
 			did(spell, result, Texts.line("cast_fireball"))
+			NeutralVillage.creature_helped(target, true)
 		"rain":
 			var cloud := RainCloud.new()
 			Game.world_root.add_child(cloud)
 			cloud.cast(target)
 			did(spell, result, Texts.line("cast_water" if facts.get("target", "") == "crops" else "cast_rain"))
+			NeutralVillage.creature_helped(target)
 		"roots":
 			var patch := RootPatch.new()
 			Game.world_root.add_child(patch)
 			patch.cast(target)
 			result["hit"] = _caught_near(target, RootPatch.RADIUS)
 			did(spell, result, Texts.line("cast_roots"))
+			NeutralVillage.creature_helped(target, true)
 		"lightning":
 			ChainLightning.cast(target, Balance.num("creature_friendly_fire"))
 			var hit: Array[String] = []
@@ -904,6 +907,8 @@ func _cast(spell: String, target: Vector3, facts: Dictionary) -> void:
 			result["wet"] = wet
 			result["enemy"] = Creature.enemy_name(enemies)
 			did(spell, result, Texts.line("cast_lightning"))
+			if not enemies.is_empty():
+				NeutralVillage.creature_helped(target, true)
 		"blood":
 			if Game.village.sacrifice_someone():
 				did(spell, result, Texts.line("cast_blood"))
@@ -993,6 +998,8 @@ func _update_task() -> void:
 				node.remove_from_group("rocks")
 				node.remove_from_group("grounded")
 		Game.effects.spawn_dust(goal, 2.0 * creature.size)
+		# (A neutral village nearby sees it gathering.)
+		NeutralVillage.creature_helped(goal)
 		creature.carry(load)
 		_task.stage = "carry"
 		return

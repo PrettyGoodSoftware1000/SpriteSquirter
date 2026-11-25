@@ -35,6 +35,8 @@ var sculpt_brush := Terrain.Brush.RAISE
 var brush_radius := 8.0
 
 var village: PlayerVillage
+## The neutral villages there are (see NeutralVillage).
+var neutrals: Array[NeutralVillage] = []
 var day_cycle: DayCycle
 var raids: GoblinRaids
 var pause_menu: PauseMenu
@@ -139,6 +141,8 @@ func _ready() -> void:
 	raids.balrog_grown.connect(func() -> void: _announce(Texts.line("balrog_grown")))
 	raids.balrog_died.connect(func() -> void: _announce(Texts.line("balrog_died")))
 	raids.raid_ended.connect(func() -> void: _announce(Texts.line("raid_ended")))
+	raids.neutral_raid_started.connect(func(count: int) -> void: _announce(Texts.line("raid_neutral", {"goblins": count})))
+	GoblinRaids.neutral_start = 0
 	raids.bat_took.connect(func() -> void: _announce(Texts.line("bat_took")))
 
 	_ring = GroundRing.new()
@@ -162,6 +166,9 @@ func _ready() -> void:
 	hud.spell_selected.connect(_on_spell_button)
 	hud.spell_hovered.connect(_on_spell_hovered)
 	hud.resurrect_requested.connect(resurrect)
+	hud.neutral_count_changed.connect(func(change: int) -> void:
+		Game.neutral_villages = clampi(Game.neutral_villages + change, 0, NeutralVillage.MOST)
+		_show_neutral_count())
 	hud.grow_requested.connect(func() -> void:
 		if creature and creature.pay_for_growth():
 			Game.effects.spawn_dust(creature.global_position, 1.0))
@@ -243,7 +250,18 @@ func _ready() -> void:
 	else:
 		Game.camera_rig.set_zoom(170.0 * Terrain.SCALE, true)
 		hud.set_prompt(Texts.line("choose_start", {"map": _info.name}))
+		_show_neutral_count()
 	_set_mode(Mode.COMMAND)
+
+
+## How many neutral villages there will be: Game.neutral_villages, but no
+## more than one fewer than the start locations.
+func neutral_count() -> int:
+	return clampi(Game.neutral_villages, 0, maxi(0, (_info.starts as PackedVector2Array).size() - 1))
+
+
+func _show_neutral_count() -> void:
+	hud.show_neutral_count(neutral_count(), maxi(0, (_info.starts as PackedVector2Array).size() - 1))
 
 
 func _process(delta: float) -> void:
@@ -270,7 +288,10 @@ func _process(delta: float) -> void:
 	_update_ghost()
 	_update_spell_cursor()
 	_update_wall()
-	hud.set_hover_tip(_goblin_tip() if not _choosing else "")
+	var tip := _goblin_tip() if not _choosing else ""
+	if tip == "" and not _choosing:
+		tip = _worship_tip()
+	hud.set_hover_tip(tip)
 	if mode == Mode.RULER and _ruler_from != null and not _ruler_fixed and _cursor_hit != null:
 		_ruler.show_line(_ruler_from, _cursor_hit)
 	_ui_timer -= delta
@@ -485,9 +506,11 @@ func _found(pos: Vector3, start_index: int) -> void:
 	_markers.clear()
 	_hover = null
 	hud.set_prompt("")
+	hud.show_neutral_count(0, -1)
 	var site := start_index if not _info.from_map else -1
 	village.found(pos, site)
 	day_cycle.process_mode = Node.PROCESS_MODE_INHERIT
+	_found_neutrals(start_index)
 
 	var out := Vector2(pos.x, pos.z)
 	var dir := (-out).normalized() if out.length() > 1.0 else Vector2.RIGHT
@@ -495,6 +518,84 @@ func _found(pos: Vector3, start_index: int) -> void:
 	_make_creature(Vector3(spot.x, 0.0, spot.y), atan2(dir.x, dir.y))
 	Game.camera_rig.focus_on(pos)
 	Game.camera_rig.set_zoom(75.0)
+
+
+## The neutral villages, on start locations the player did not pick (at
+## random). Each one there at the start makes the goblins stronger.
+func _found_neutrals(taken: int) -> void:
+	var starts: PackedVector2Array = _info.starts
+	var free: Array[int] = []
+	for k in starts.size():
+		if k != taken:
+			free.append(k)
+	# (A start the player did not click, but founded on, is the nearest.)
+	if taken < 0 and not free.is_empty():
+		var c := Vector2(village.center.x, village.center.z)
+		free.sort_custom(func(a: int, b: int) -> bool: return starts[a].distance_to(c) < starts[b].distance_to(c))
+		free.pop_front()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = Game.world_seed + 4242
+	var wanted := mini(neutral_count(), free.size())
+	for n in wanted:
+		var k: int = free.pop_at(rng.randi() % free.size())
+		found_neutral(starts[k], k if not _info.from_map else -1)
+	GoblinRaids.neutral_start = neutrals.size()
+
+
+## Starts a neutral village at `p` (`site`: its village site in a built-up
+## random world, else -1).
+func found_neutral(p: Vector2, site := -1) -> NeutralVillage:
+	var nv := add_neutral("Neutral village %d" % (neutrals.size() + 1))
+	nv.found(Vector3(p.x, Game.terrain.get_height(p.x, p.y), p.y), site)
+	return nv
+
+
+## A neutral village called `title`, not founded yet (found_neutral(), or
+## SaveGame puts a saved one back).
+func add_neutral(title: String) -> NeutralVillage:
+	var nv := NeutralVillage.new()
+	nv.title = title
+	nv.name = "Neutral%d" % (neutrals.size() + 1)
+	add_child(nv)
+	neutrals.append(nv)
+	var creature_name := func() -> String: return creature.species_name().to_lower() if creature else "creature"
+	nv.taken_over.connect(func(v: NeutralVillage, peaceful: bool) -> void:
+		neutrals.erase(v)
+		_announce(Texts.line("neutral_taken" if peaceful else "neutral_taken_empty", {"village": v.title, "creature": creature_name.call()})))
+	nv.wiped_out.connect(func(v: NeutralVillage, cave: Node3D) -> void:
+		neutrals.erase(v)
+		raids.add_cave(cave)
+		_announce(Texts.line("neutral_fell", {"village": v.title})))
+	return nv
+
+
+## The box by the pointer over a Storehouse: how many worship the creature
+## there (a neutral village's: how near it is to being the player's).
+func _worship_tip() -> String:
+	if _cursor_hit == null or get_viewport().gui_get_hovered_control() != null:
+		return ""
+	var p: Vector3 = _cursor_hit
+	for nv in neutrals:
+		if is_instance_valid(nv):
+			for node in get_tree().get_nodes_in_group(nv.buildings_group):
+				if _store_under(node as Destructible, p):
+					return nv.worship_tip()
+	for node in get_tree().get_nodes_in_group("player_buildings"):
+		if _store_under(node as Destructible, p):
+			var won := 0
+			for nv in neutrals:
+				if is_instance_valid(nv):
+					won += nv.worshipers()
+			var tip := "Worshipers: %d (everyone in your village)" % village.population()
+			if won > 0:
+				tip += "\nand %d in the neutral villages" % won
+			return tip
+	return ""
+
+
+func _store_under(b: Destructible, p: Vector3) -> bool:
+	return b != null and not b.destroyed and BuildingCatalog.role(b.get_meta("kind", "")) == "store" \
+		and Vector2(b.global_position.x - p.x, b.global_position.z - p.z).length() < b.footprint * 1.3 + 1.0
 
 
 ## The player's creature (Game.creature_kind), at `pos` facing `facing`.

@@ -832,8 +832,11 @@ def add_limits(rig):
             # The ankle: either way from where it is, but not past straight.
             c.min_x, c.max_x = math.radians(max(-rest, -45.0)), math.radians(45.0)
         else:
-            c.min_x = math.radians(-rest)
-            c.max_x = math.radians(most - rest)
+            # Never past straight, nor past how the model holds it (a toe
+            # curled the other way at rest keeps its curl: its rest pose is
+            # always allowed).
+            c.min_x = math.radians(min(-rest, 0.0))
+            c.max_x = math.radians(max(most - rest, 0.0))
         twist = 6.0 if kind in ("finger", "toe") else 4.0
         c.min_y, c.max_y = math.radians(-twist), math.radians(twist)
         c.min_z, c.max_z = math.radians(-twist), math.radians(twist)

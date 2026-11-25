@@ -412,6 +412,11 @@ from one model to the other as it takes off and lands. The originals (about
      the tips a moment behind the shoulder; the body rising on each
      downstroke, the head level, the tail trimming, the legs tucked.
 
+- (0.59) Fixed: a hinge whose bend in the model is the other way round from
+  the way it closes (the flier's curled toes, the toe bases, a few finger
+  joints) was forced to bend as far again; now every hinge's limits always
+  allow the model's own pose, so the toes keep the model's flight position.
+
 Review notes, with the frames worth a check: `docs/raven_new_review.md`
 (pictures in `docs/raven_review/`). The test environment shows them ("New
 raven"). Not yet: the raven in the game (it still uses `raven.glb` and its

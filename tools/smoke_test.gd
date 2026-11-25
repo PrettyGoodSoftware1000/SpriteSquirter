@@ -1,7 +1,12 @@
 extends Node
 ## Headless smoke test for the game modes. It plays through the main
 ## systems without a mouse and fails loudly if something is off:
-##   godot --headless --path . res://tools/smoke_test.tscn
+##   godot --headless --fixed-fps 60 --path . res://tools/smoke_test.tscn
+## (--fixed-fps 60: every frame moves the game on by the same step, as fast
+## as the computer can go: about two and a quarter minutes. Without it the
+## run keeps to real time, three minutes, and its steps vary with the
+## computer's speed. Runs still differ a little, as the game's own random
+## numbers do, so a check that waits on a fight can now and then fail.)
 ## It saves a map called "Smoke test" in user://maps/ and deletes it after.
 ##
 ## It comes in eight sections (1 the menu, 2 a village on a random island,
@@ -15,8 +20,12 @@ extends Node
 
 const MAIN := "res://scenes/main.tscn"
 const TEST_MAP := "Smoke test"
-## How many times as fast as real time the game runs while testing.
-const SPEED := 16.0
+## How many times as fast as real time the game runs while testing (with
+## --fixed-fps, see the top, it runs as fast as the computer can anyway).
+const SPEED := 8.0
+## The global random numbers start the same every run (the game's own
+## generators do not).
+const SEED := 20261125
 
 var _failures: PackedStringArray = []
 ## The sections to run (empty: all of them), from --only=.
@@ -49,6 +58,7 @@ func _run() -> void:
 		elif arg.begins_with("--speed="):
 			speed = maxf(1.0, arg.trim_prefix("--speed=").to_float())
 	Engine.time_scale = speed
+	seed(SEED)
 	print("smoke test at %.0fx%s" % [speed, (", sections " + ",".join(_only)) if not _only.is_empty() else ""])
 	game.settings.birth_seconds = 5.0
 	# The test's checks were made with villagers making 30 magicko a minute
@@ -624,8 +634,17 @@ func _run() -> void:
 		await _wait(0.5)
 		var ogres := get_tree().get_nodes_in_group("ogres")
 		_check(ogres.size() == 1 and play.raids.standing(GoblinRaids.OGRE_HOME).size() == 1, "a finished war hut adds an ogre (%d)" % ogres.size())
+		# (The village fights back: the ogre is kept alive for this check.)
+		var ogre_hp: Array = ogres.map(func(o: Node) -> Array: return [(o as Villager).max_hp, (o as Villager).hp])
+		for o in ogres:
+			(o as Villager).max_hp = 1.0e6
+			(o as Villager).hp = 1.0e6
 		play.raids.start_raid()
 		await _wait(14.0)
+		for k in ogres.size():
+			if is_instance_valid(ogres[k]):
+				(ogres[k] as Villager).max_hp = ogre_hp[k][0]
+				(ogres[k] as Villager).hp = ogre_hp[k][1]
 		_check(get_tree().get_nodes_in_group("ogres").size() == 1 and get_tree().get_nodes_in_group("bats").size() == 1, "the raid has the hut's ogre and the watchtower's bat (%d, %d)"
 			% [get_tree().get_nodes_in_group("ogres").size(), get_tree().get_nodes_in_group("bats").size()])
 		for node in get_tree().get_nodes_in_group("bats"):
@@ -1313,6 +1332,9 @@ func _run() -> void:
 		if lover != null:
 			# (Near the middle of the village, so the walk to a building is short.)
 			lover.global_position = village.center + Vector3(3, 0, 3)
+			# (Nothing kills it meanwhile: a raider or a stomp would end the tryst.)
+			lover.max_hp = 1.0e6
+			lover.hp = 1.0e6
 			Balance.values["fey_tryst_seconds"] = 3.0
 			var tryst := FeyTryst.new()
 			game.world_root.add_child(tryst)
@@ -1390,8 +1412,12 @@ func _run() -> void:
 
 		# Lumberjacks go as far as it takes for wood.
 		var far_tree := WorldPopulator.spawn_tree(game.world_root, game.terrain, village.center.x + PlayerVillage.WORK_REACH + 30.0, village.center.z, 0.0, 7)
+		far_tree.extinguish()
 		await _wait(0.1)
-		_check(village._nearest_free(far_tree.global_position, "trees", {}) == far_tree, "there is no limit to how far lumberjacks go for wood")
+		# (That tree, or another as far out if that one is burning or blocked.)
+		var chosen := village._nearest_free(far_tree.global_position, "trees", {})
+		_check(chosen != null and Vector2(chosen.global_position.x - village.center.x, chosen.global_position.z - village.center.z).length() > PlayerVillage.WORK_REACH,
+			"there is no limit to how far lumberjacks go for wood")
 		far_tree.queue_free()
 		_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 1.5) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 1.0)
 			and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "the owner's sliders are the defaults: Goblin Spawn Rate 1, goblin build speed 1.5")

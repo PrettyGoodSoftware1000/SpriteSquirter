@@ -851,10 +851,12 @@ Godot exports a game to a file people run without Godot installed.
 A headless run through the menu, a random game (gathering, births,
 building, rain), the editor (save, list, load), a saved-map game, a large
 island, the raven and the balrog, neutral villages and the test
-environment, at 16 times real speed (about 2 minutes):
+environment. With `--fixed-fps 60` every frame moves the game on by the same
+step, as fast as the computer can go (about two and a quarter minutes;
+without it, three):
 
 ```bash
-godot --headless --path . res://tools/smoke_test.tscn
+godot --headless --fixed-fps 60 --path . res://tools/smoke_test.tscn
 ```
 
 It prints `SMOKE TEST PASSED` or the checks that failed, and exits with 0 or 1.
@@ -864,7 +866,7 @@ balrog, 7 neutral villages, 8 the test environment). To run only some, or
 change the speed, add options after `--`:
 
 ```bash
-godot --headless --path . res://tools/smoke_test.tscn -- --only=7,8 --speed=16
+godot --headless --fixed-fps 60 --path . res://tools/smoke_test.tscn -- --only=7,8
 ```
 
 At the end it prints how long each section took and which waits took

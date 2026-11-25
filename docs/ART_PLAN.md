@@ -46,7 +46,9 @@ it up to date as steps are done.
      wears its own painted texture (no cel shading or outline), about 14 m
      tall. The village's free first storehouse is whichever asset has the
      Storehouse job (`BuildingCatalog.kind_for_role()`).
-   - (0.55) **StoreHouseAlt**, for the owner to review (not in the game):
+   - (0.58) StoreHouseAlt is in the build menu as its own asset, with the
+     gameplay effect Showpiece: it costs nothing and does nothing.
+   - (0.55) **StoreHouseAlt**, for the owner to review (not in the game then):
      `assets/buildings/StoreHouseAlt.glb`, made from StoreHouse.glb (left
      as it is) by `tools/storehouse_alt.py`. Meshy's 2048 px texture gave
      most of its room to the leaves, so each house wall had a few blurry

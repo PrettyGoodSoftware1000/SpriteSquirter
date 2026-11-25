@@ -106,7 +106,9 @@ starts; they carry over into it.
    building with no in-game name is shown as "Name missing". The asset
    names never change, and players never see them: the build menu shows
    one, as a tooltip, only while the dev menu is open. The build menu
-   shows a picture of each building.
+   shows a picture of each building. **StoreHouseAlt** (the cleaned-up
+   storehouse model, in the menu as "Storehouse Alt") is a **Showpiece**:
+   it costs nothing to build and does nothing (`cost_showpiece_...`).
    **Treehouses and rope bridges.** There are four treehouses (Treehouse,
    Lookout treehouse, Twin treehouse, Great treehouse): houses on a deck
    up a tree, with a ladder; their leaves take the colours of the nature

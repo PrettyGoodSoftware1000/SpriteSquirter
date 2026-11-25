@@ -48,13 +48,14 @@ const ASSETS := [
 	["windmill", "Windmill"],
 	["crystal_tower", "Crystal tower"],
 	["tall_house", "Tall house"],
+	["store_house_alt", "StoreHouseAlt"],
 ]
 ## The gameplay names used when Names.txt is missing or leaves an asset out.
 const DEFAULT_GAMEPLAY := {
 	"treehouse": "Home", "lookout_treehouse": "Home", "twin_treehouse": "Home", "great_treehouse": "Home",
 	"store": "Storehouse", "store_house": "Storehouse", "moon_tower": "Wizardry tower", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
 	"singing_rocks": "Shrine", "necro_tower": "Necromancer tower", "windmill": "Granary",
-	"crystal_tower": "Decoration", "tall_house": "Town guard",
+	"crystal_tower": "Decoration", "tall_house": "Town guard", "store_house_alt": "Showpiece",
 }
 ## gameplay effect (lower case) -> [name, role, cost id, what the menu says].
 ## Players never see the gameplay effect: the game shows in-game names.
@@ -69,6 +70,7 @@ const GAMEPLAY := {
 	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Trains wizards\nResearches spells"],
 	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Turns wizards into necromancers\nBlood Sacrifice upgrade"],
 	"decoration": ["Decoration", "", "decoration", "No use yet"],
+	"showpiece": ["Showpiece", "", "showpiece", "Free; no use"],
 }
 ## Menu entries that are not placed like buildings.
 const SPECIAL := [

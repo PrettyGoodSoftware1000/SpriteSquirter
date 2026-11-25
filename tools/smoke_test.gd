@@ -894,6 +894,11 @@ func _run() -> void:
 		play.hud.show_build_menu(true)
 		await _wait(0.3)
 		_check(play.hud._build_previews.size() == BuildingCatalog.BUILDINGS.size() - 2, "the build menu shows a picture of each building (%d)" % play.hud._build_previews.size())
+		var showpiece := BuildingCatalog.find("store_house_alt")
+		var alt_house := BuildingFactory.create("store_house_alt", RandomNumberGenerator.new())
+		_check(BuildingCatalog.BUILDINGS.has(showpiece) and showpiece.cost.is_empty() and showpiece.role == "" and showpiece.housing == 0
+			and alt_house.height > 8.0, "StoreHouseAlt is in the build menu, free, and does nothing (%.0f m tall)" % alt_house.height)
+		alt_house.free()
 		Game.dev_menu = true
 		play.hud.set_dev_visible(true)
 		_check((play.hud._build_buttons[store_kind] as Button).tooltip_text.contains(BuildingCatalog.find(store_kind).name), "with the dev menu open, the build menu tells the model's name")

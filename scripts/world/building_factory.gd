@@ -124,6 +124,8 @@ static func create(kind: String, rng: RandomNumberGenerator) -> Destructible:
 			top = _build_store(b, rng)
 		"store_house":
 			top = _build_store_house(b, rng)
+		"store_house_alt":
+			top = _build_store_house(b, rng, STORE_HOUSE_ALT_MODEL)
 		"windmill":
 			top = _build_windmill(b, rng)
 		"blacksmith":
@@ -655,13 +657,15 @@ static func _build_store(b: Destructible, rng: RandomNumberGenerator) -> float:
 # --- Store house (a Meshy model) -----------------------------------------------
 
 ## The owner's Meshy storehouse (assets/buildings/StoreHouse.glb), in its
-## own painted material (no cel shading or outline), about 14 m tall.
+## own painted material (no cel shading or outline), about 14 m tall; and
+## StoreHouseAlt, its cleaned-up copy (tools/storehouse_alt.py), the same way.
 const STORE_HOUSE_MODEL := "res://assets/buildings/StoreHouse.glb"
+const STORE_HOUSE_ALT_MODEL := "res://assets/buildings/StoreHouseAlt.glb"
 const STORE_HOUSE_HEIGHT := 14.0
 
 
-static func _build_store_house(b: Destructible, rng: RandomNumberGenerator) -> float:
-	var scene := (load(STORE_HOUSE_MODEL) as PackedScene).instantiate() as Node3D
+static func _build_store_house(b: Destructible, rng: RandomNumberGenerator, model := STORE_HOUSE_MODEL) -> float:
+	var scene := (load(model) as PackedScene).instantiate() as Node3D
 	var source := scene.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
 	var box := source.mesh.get_aabb()
 	var scale := STORE_HOUSE_HEIGHT / maxf(box.size.y, 0.001)

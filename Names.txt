@@ -22,6 +22,7 @@
 #   Shrine             makes animus; the creature is revived there
 #   Necromancer tower  turns wizards into necromancers; the Blood Sacrifice upgrade
 #   Decoration         can be built, but does nothing yet
+#   Showpiece          costs nothing to build, and does nothing
 #
 # Leave the gameplay effect empty to keep a building out of the build menu.
 # What a building costs goes with its gameplay effect (see balancing.txt).
@@ -42,6 +43,7 @@ Skull tower         = Necromancer tower = Necromancer's Tower
 Windmill            = Granary           = Windmill
 Crystal tower       = Decoration        = Ain't doing nothing
 Tall house          = Town guard        = Guard House
+StoreHouseAlt       = Showpiece         = Storehouse Alt
 
 # What the build menu says each gameplay effect does. Each line is
 #   <Gameplay effect> description = text
@@ -57,3 +59,4 @@ Blacksmith description        = Wheelbarrows; research
 Wizardry tower description    = Trains wizards\nResearches spells
 Necromancer tower description = Turns wizards into necromancers\nBlood Sacrifice upgrade
 Decoration description        = No use yet
+Showpiece description         = Free; no use

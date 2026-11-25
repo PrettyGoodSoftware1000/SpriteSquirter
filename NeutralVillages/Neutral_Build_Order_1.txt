@@ -29,6 +29,7 @@ Skull tower (Necromancer tower) = 0        # costs bones, which neutral villages
 Windmill (Granary) = 1
 Crystal tower (Decoration) = 1
 Tall house (Town guard) = 2
+StoreHouseAlt (Showpiece) = 0
 Wheat field (Wheat field) = 4
 
 # --- What it builds first, in order ---------------------------------------------

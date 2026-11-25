@@ -108,6 +108,8 @@ cost_cottage_stone = 5
 cost_cottage_food = 30
 cost_decoration_lumber = 30
 cost_decoration_stone = 30
+cost_showpiece_lumber = 0           # a Showpiece (StoreHouseAlt) costs nothing to build
+cost_showpiece_stone = 0
 
 cost_necromancer_tower_lumber = 0
 cost_necromancer_tower_stone = 60

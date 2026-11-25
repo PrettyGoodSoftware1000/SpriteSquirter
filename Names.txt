@@ -33,12 +33,12 @@ Lookout treehouse   = Home              = Lookout house
 Twin treehouse      = Home              = Double Treehouse
 Great treehouse     = Home              = Big Old Treehouse
 Stacked houses      =                   = Storehouse
-Store house         = Storehouse        = Storehouse
-Moon tower          = Wizardry tower    = Wizardry tower
+Store house         = Storehouse        = StorehouseAlt
+Moon tower          = Wizardry tower    = Wizardry Tower
 Blacksmith          = Blacksmith        = Forger
 Mushroom cottage    = Cottage           = Shroom Home
 Singing rocks       = Shrine            = Singing Stones
-Skull tower         = Necromancer tower = Tower of Bone
+Skull tower         = Necromancer tower = Necromancer's Tower
 Windmill            = Granary           = Windmill
 Crystal tower       = Decoration        = Ain't doing nothing
 Tall house          = Town guard        = Guard House

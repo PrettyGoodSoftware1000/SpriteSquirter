@@ -46,6 +46,18 @@ it up to date as steps are done.
      wears its own painted texture (no cel shading or outline), about 14 m
      tall. The village's free first storehouse is whichever asset has the
      Storehouse job (`BuildingCatalog.kind_for_role()`).
+   - (0.55) **StoreHouseAlt**, for the owner to review (not in the game):
+     `assets/buildings/StoreHouseAlt.glb`, made from StoreHouse.glb (left
+     as it is) by `tools/storehouse_alt.py`. Meshy's 2048 px texture gave
+     most of its room to the leaves, so each house wall had a few blurry
+     pixels; the model is unwrapped again with the leaves made small, the
+     old texture baked onto a 4096 px one, sharpened (wide unsharp mask,
+     edge-keeping), with a little more colour. Its nearly flat panels
+     (walls, floors, roofs, doors) are flattened onto planes, walls stood
+     upright and floors levelled (at most 1.2 of its 120 units a point). The
+     texture can only be as detailed as Meshy's painting was: a sharper
+     result needs a higher resolution texture from Meshy. Before and after:
+     `docs/storehouse_alt_preview.png`.
 
 ## How the work is done
 
@@ -342,6 +354,14 @@ above the toes, three toes forward and one back).
   their toes down, which on the raven's long foot pointed its toes back),
   and the wings bounce with its steps: each footfall makes them dip, and
   they spring back past where they were and settle, the primaries most.
+- ✅ (0.55) **Raven alt**, for the owner to compare (the game still uses
+  `raven.glb`): `assets/creature/raven_alt.glb` and `raven_alt.blend`, made
+  by `tools/raven_rig.py -- --alt`. The same rig, with the hands (hand and
+  finger bones) and feet (foot and toe bones) twice as thick (`THICKEN`):
+  each point moves straight out from its bone, never along it, so the claws
+  are no longer, fading out at the wrist and ankle by skin weight. The test
+  environment shows it ("Raven alt"), and can set it to fight the raven.
+  Before and after: `docs/raven_alt_preview.png`.
 - Not yet: the toes are Meshy's (one bone chain for the three front toes);
   a jaw for the beak; the raven's own walk, hop and wingbeat clips (see
   below).

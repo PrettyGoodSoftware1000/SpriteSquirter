@@ -424,8 +424,10 @@ starts; they carry over into it.
    speed. The cost in magicko (the blue droplet) is under each spell.
    **Chain Lightning** strikes whoever is nearest the mouse and jumps
    on through up to twelve things, each within 9 m of the last: goblins,
-   ogres, bats and your own people alike. Anything wet (rained on in the
-   last 20 seconds, or standing in a river or lake) takes double.
+   ogres, bats and your own people alike. Every wet thing it strikes (rained
+   on lately, or standing in a river or lake) has a 75% chance of giving it
+   one jump more (`lightning_wet_jump_chance`). The raven is born knowing
+   it.
    **Blood Sacrifice** costs none: point at one of your villagers and
    they die, and magicko comes in twice as fast for 30 seconds (the counter
    turns red and drips while it lasts). A fireball crater is bare stone; it
@@ -840,13 +842,26 @@ Godot exports a game to a file people run without Godot installed.
 ### Smoke test
 
 A headless run through the menu, a random game (gathering, births,
-building, rain), the editor (save, list, load) and a saved-map game:
+building, rain), the editor (save, list, load), a saved-map game, a large
+island, the raven and the balrog, neutral villages and the test
+environment, at 16 times real speed (about 2 minutes):
 
 ```bash
 godot --headless --path . res://tools/smoke_test.tscn
 ```
 
 It prints `SMOKE TEST PASSED` or the checks that failed, and exits with 0 or 1.
+It comes in eight sections (1 the menu, 2 a village on a random island, 3
+the map editor, 4 playing its map, 5 a large island, 6 the raven and the
+balrog, 7 neutral villages, 8 the test environment). To run only some, or
+change the speed, add options after `--`:
+
+```bash
+godot --headless --path . res://tools/smoke_test.tscn -- --only=7,8 --speed=16
+```
+
+At the end it prints how long each section took and which waits took
+longest.
 
 ### Conventions
 

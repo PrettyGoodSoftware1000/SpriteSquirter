@@ -177,7 +177,7 @@ spell_cooldown_fey       = 300
 # --- Creature buffs (researched at the Shrine, cast from the buff bar) --------
 buff_research_first = 5             # animus the first buff costs to research
 buff_research_step = 5              # and each one after costs this much more
-buff_research_seconds = 480         # each takes this long to research (8 minutes)
+buff_research_seconds = 240         # each takes this long to research (4 minutes)
 buff_cost_growth = 1                # Creature Growth: animus to cast
 buff_seconds_growth = 120           # how long it lasts
 buff_cooldown_growth = 60           # seconds after it wears off before it can be cast again
@@ -268,7 +268,7 @@ goblin_watchtower_resources = 150
 lightning_damage = 130              # to each thing the bolt jumps through
 lightning_jumps = 18                # how many things one bolt can hit
 lightning_jump_range = 15           # metres between one and the next
-lightning_wet_bonus = 2             # damage is multiplied by this for anything wet
+lightning_wet_jump_chance = 75%     # every wet thing it strikes has this chance of giving the bolt one jump more
 wet_seconds = 60                    # how long rain leaves villagers and goblins wet
 
 # --- The giant bat --------------------------------------------------------------

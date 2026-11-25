@@ -90,6 +90,9 @@ func _ready() -> void:
 	creature = get_parent() as Creature
 	for id: String in SPELLS + HARVESTS:
 		knowledge[id] = 0.0
+	# Some creatures are born knowing a spell (Creature.SPECIES "knows").
+	for id: String in creature._species().get("knows", []):
+		knowledge[id] = needed(id)
 	for action in all_actions():
 		behavior[action] = clampf(Balance.num("affinity_start"), -100.0, 100.0)
 	if creature.hostile:

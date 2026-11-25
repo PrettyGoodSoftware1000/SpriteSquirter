@@ -3,9 +3,10 @@ extends Node3D
 ## The chain lightning spell: a bolt comes down on whoever is nearest the
 ## point and jumps on from one to the next, up to Balance "lightning_jumps"
 ## of them, each within "lightning_jump_range" of the last. It hits
-## villagers, goblins, ogres, skeletons, giant bats and the Balrog alike. Anything wet
-## (rained on lately, or standing in water) takes "lightning_wet_bonus"
-## times the damage. Use ChainLightning.cast().
+## villagers, goblins, ogres, skeletons, giant bats and the Balrog alike.
+## Every wet one it strikes (rained on lately, or standing in water) has a
+## Balance "lightning_wet_jump_chance" of giving the bolt one jump more.
+## Use ChainLightning.cast().
 
 const FADE := 0.45
 
@@ -29,7 +30,10 @@ static func cast(pos: Vector3, friendly := 1.0) -> int:
 	var from := ground
 	var hits := 0
 	last_struck.clear()
-	for jump in roundi(Balance.num("lightning_jumps")):
+	var jumps := roundi(Balance.num("lightning_jumps"))
+	var jump := 0
+	while jump < jumps:
+		jump += 1
 		var best: Node3D = null
 		var best_d := reach
 		for n in left:
@@ -47,8 +51,9 @@ static func cast(pos: Vector3, friendly := 1.0) -> int:
 		var v := best as Villager
 		if v:
 			points.append(v.global_position + Vector3.UP * 1.1 * v.scale.y)
-			if v.is_wet():
-				harm *= Balance.num("lightning_wet_bonus")
+			if v.is_wet() and randf() < Balance.num("lightning_wet_jump_chance"):
+				# (Water carries it on: one jump more.)
+				jumps += 1
 			if v.owned:
 				harm *= friendly
 			v.take_hit(harm, null)

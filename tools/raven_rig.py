@@ -2,6 +2,11 @@
 
 Run from the project folder:
     blender -b --factory-startup --python tools/raven_rig.py [-- render_dir]
+    blender -b --factory-startup --python tools/raven_rig.py -- --alt [render_dir]
+
+With --alt it makes the "raven alt" instead (raven_alt.blend and
+raven_alt.glb; raven.blend and raven.glb are left as they are): the same
+rig with hands and feet THICKEN times as thick (see "Raven alt" below).
 
 Reads:
     assets/creature/RavenMeshyRig.glb   the owner's Meshy model and rig
@@ -50,10 +55,14 @@ from mathutils import Vector, Matrix, kdtree
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.normpath(os.path.join(HERE, "..", "assets", "creature"))
 SRC = os.path.join(ASSETS, "RavenMeshyRig.glb")
-OUT_BLEND = os.path.join(ASSETS, "raven.blend")
-OUT_GLB = os.path.join(ASSETS, "raven.glb")
 ARGS = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+ALT = "--alt" in ARGS
+ARGS = [a for a in ARGS if a != "--alt"]
+OUT_BLEND = os.path.join(ASSETS, "raven_alt.blend" if ALT else "raven.blend")
+OUT_GLB = os.path.join(ASSETS, "raven_alt.glb" if ALT else "raven.glb")
 RENDER_DIR = ARGS[0] if ARGS else None
+# Raven alt: how many times as thick its hands and feet are.
+THICKEN = 2.0
 GAME_SCALE = 8.0
 
 # Meshy's bones on the +X side and the middle, and their new names. The -X
@@ -538,6 +547,39 @@ for o in bpy.data.objects:
     for mod in getattr(o, "modifiers", []):
         if mod.type == 'ARMATURE':
             mod.object = arm
+
+# --- Raven alt: thicker hands and feet ------------------------------------------------
+# Every point of a hand (hand and finger bones) or a foot (foot and toe bones)
+# moves straight out from the bone it is most bound to, so the part is
+# THICKEN times as thick; never along the bone, so claws are no longer. How
+# far it moves goes with how much of its skin those bones hold, so it fades
+# out at the wrist and the ankle.
+if ALT:
+    HANDS_FEET = set()
+    for side in ("_r", "_l"):
+        HANDS_FEET.add("hand" + side)
+        for f in FINGERS:
+            for k in (1, 2, 3):
+                HANDS_FEET.add("%s%d%s" % (f, k, side))
+        for n in ("foot", "foot_ball", "toe_root", "toe_back1", "toe_back2", "toe_back3", "toe_front1", "toe_front2"):
+            HANDS_FEET.add(n + side)
+    HANDS_FEET &= set(arm.data.bones.keys())
+    segs = {n: (arm.data.bones[n].head_local.copy(), arm.data.bones[n].tail_local.copy()) for n in HANDS_FEET}
+    moved = 0
+    for v in me.vertices:
+        ws = weights_of(v)
+        share = sum(w for n, w in ws.items() if n in HANDS_FEET)
+        if share <= 0.0:
+            continue
+        best = max((n for n in ws if n in HANDS_FEET), key=lambda n: ws[n])
+        h, t = segs[best]
+        axis = (t - h).normalized() if (t - h).length > 1e-6 else Vector((0, 0, 1))
+        off = v.co - h
+        out = off - axis * off.dot(axis)
+        v.co = v.co + out * (THICKEN - 1.0) * min(1.0, share)
+        moved += 1
+    me.update()
+    log("raven alt: thickened", moved, "points of", len(HANDS_FEET), "hand and foot bones")
 
 # --- Look at it -------------------------------------------------------------------
 def render(tag, curl=0.0):

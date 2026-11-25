@@ -17,7 +17,8 @@ extends Node3D
 ##
 ## The game's giants are here too, as they are in the game, with the
 ## game's own animation (Creature, Balrog): the tortoise, the squirrel, the
-## raven and the balrog. "Giants" puts one on its own; "Fight" puts two of
+## raven and the balrog, and the "raven alt" (ALT_MODELS: the raven with
+## twice as thick hands and feet, for the owner to compare). "Giants" puts one on its own; "Fight" puts two of
 ## them face to face, and they fight until one is down. "Walk somewhere"
 ## sends them off, and the size slider grows or shrinks them. They stand
 ## on flat ground the size of a small island (Terrain.generate_flat(), not
@@ -43,7 +44,10 @@ const WALK_RADIUS := 30.0
 const MASS_RESPONSE := 1.3
 ## The giants that can be put on the floor: name -> Creature kind
 ## ("balrog": the Balrog).
-const GIANTS := {"Tortoise": "tortoise", "Squirrel": "squirrel", "Raven": "raven", "Balrog": "balrog"}
+const GIANTS := {"Tortoise": "tortoise", "Squirrel": "squirrel", "Raven": "raven", "Raven alt": "raven_alt", "Balrog": "balrog"}
+## Other models of a giant, to look at beside the one the game uses: the
+## name in GIANTS -> [its kind, the model].
+const ALT_MODELS := {"raven_alt": ["raven", "res://assets/creature/raven_alt.glb"]}
 ## How far apart two giants start a fight.
 const FIGHT_GAP := 26.0
 ## The bone the upper body leans from, as it speeds up or slows down.
@@ -133,6 +137,10 @@ func _spawn_giant(kind: String, pos: Vector3, facing: float) -> Creature:
 	var g: Creature
 	if kind == "balrog":
 		g = Balrog.new()
+	elif ALT_MODELS.has(kind):
+		g = Creature.new()
+		g.kind = ALT_MODELS[kind][0]
+		g.model_path = ALT_MODELS[kind][1]
 	else:
 		g = Creature.new()
 		g.kind = kind

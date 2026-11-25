@@ -95,6 +95,8 @@ const SPECIES := {
 	"raven": {
 		"name": "Raven", "model": "res://assets/creature/raven.glb", "speed": 3.6,
 		"nervous": 0.25, "flies": true,
+		# Born knowing these spells (CreatureMind): chain lightning.
+		"knows": ["lightning"],
 		# The owner's Meshy model: its own texture (no cel shading or
 		# outline), its eyes painted on (no drawn face), and a closed beak
 		# (no jaw). Its ankle is where its rig puts it (a bird's leg: the
@@ -196,6 +198,9 @@ var hostile := false
 ## Set in the test environment: the giant this one fights, whatever side
 ## either is on (see TestEnvironment). Null in the game.
 var duel_foe: Creature
+## Set before adding to the scene: another model for this kind (the test
+## environment's "Raven alt", assets/creature/raven_alt.glb). "" for its own.
+var model_path := ""
 ## In the air (the raven), from take-off until its feet are down again.
 var flying := false
 ## On all fours and going fast (the squirrel).
@@ -2089,7 +2094,7 @@ func _frame(dir: Vector3) -> Basis:
 # --- Construction -----------------------------------------------------------
 
 func _build() -> void:
-	var model: Node3D = (load(_spec.model) as PackedScene).instantiate()
+	var model: Node3D = (load(model_path if model_path != "" else _spec.model) as PackedScene).instantiate()
 	model.name = "Model"
 	add_child(model)
 	_skel = model.find_children("*", "Skeleton3D", true, false)[0]

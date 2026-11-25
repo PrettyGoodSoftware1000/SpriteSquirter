@@ -82,3 +82,8 @@
   update it as steps are done.
 - Art and animation are done in desktop sessions on the owner's computer
   (Blender with the Blender MCP, Godot 4.7, Git installed there).
+- Every giant model is always in the test environment's animation testing
+  (`TestEnvironment.find_giants()`): each creature in `Creature.SPECIES`,
+  the balrog, and every other model of a creature saved as
+  `assets/creature/<kind>_alt....glb` appear there by themselves. A new
+  giant that fits none of these must be added to it in the same update.

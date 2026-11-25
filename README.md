@@ -621,7 +621,9 @@ there is no other way.
 **Test environment** on the main menu shows a model on its own under studio
 lights (the newer balrog test model and its clips), and the game's own
 **giants** with the game's own animation: the tortoise, the squirrel, the
-raven and the balrog. A giant's button puts it on the floor on its own;
+raven and the balrog, and every other model of one (such as the raven alt):
+the list is made from the game's creatures and the `<kind>_alt` models in
+`assets/creature`, so a new one is there by itself. A giant's button puts it on the floor on its own;
 pick two under **Fight** and press **Fight!** and they square up and fight
 until one is down (the line under them shows their health). **Walk
 somewhere** sends them off, and **Giant size** grows or shrinks them.

@@ -35,7 +35,7 @@ it up to date as steps are done.
      the top of a stomp, the ground shaking and dust at footfalls, follow-
      through after a strike (arms and tail keep swinging), slow turns.
 4. **Trees**: their variety is good; no changes planned beyond the height
-   variation added in 0.33 (up to 3 times as tall).
+   variation added in 0.33 (up to 3 times as tall; 2 times since 0.56).
 5. **Buildings** stay much as they are (built in code). Keep: the trees on
    buildings change colour with the colour palette, and rope bridges must
    keep working between treehouses.

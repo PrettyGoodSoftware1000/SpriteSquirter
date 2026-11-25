@@ -1317,11 +1317,19 @@ func _run() -> void:
 			var tryst := FeyTryst.new()
 			game.world_root.add_child(tryst)
 			tryst.begin(lover)
-			for k in 60:
+			# (What it saw at any point while it waited: the tryst can be over
+			# between two looks.)
+			var glowed := false
+			var went := false
+			for k in 120:
 				await _wait(0.5)
-				if lover.job == "tryst":
+				if not is_instance_valid(lover):
 					break
-			_check(lover.job == "tryst" and lover._pink_eyes.size() == 2, "a pixie flies to the villager, whose eyes glow green, and they go off together")
+				glowed = glowed or lover._pink_eyes.size() == 2
+				went = went or lover.job == "tryst" or village.fey_until > game.now
+				if glowed and went:
+					break
+			_check(glowed and went, "a pixie flies to the villager, whose eyes glow green, and they go off together (glowed %s, went %s)" % [glowed, went])
 			for k in 120:
 				await _wait(0.5)
 				if village.fey_until > game.now:
@@ -2622,7 +2630,17 @@ func _run() -> void:
 		# 8. The test environment: the game's giants, and a fight between two.
 		await _open(game, "test", "", 384)
 		var env := get_tree().current_scene.get_node("Controller") as TestEnvironment
-		_check(env != null and TestEnvironment.GIANTS.size() == Creature.SPECIES.size() + 1 + TestEnvironment.ALT_MODELS.size(), "every giant is in the test environment (%d)" % TestEnvironment.GIANTS.size())
+		var every := TestEnvironment.GIANTS.values().has("balrog")
+		for kind: String in Creature.SPECIES:
+			every = every and TestEnvironment.GIANTS.values().has(kind)
+		var alt_files := 0
+		for file in DirAccess.get_files_at(TestEnvironment.CREATURE_DIR):
+			for kind: String in Creature.SPECIES:
+				if file.begins_with(kind + "_alt") and file.ends_with(".glb"):
+					alt_files += 1
+		_check(env != null and every and TestEnvironment.ALT_MODELS.size() == alt_files
+			and TestEnvironment.GIANTS.size() == Creature.SPECIES.size() + 1 + alt_files,
+			"every giant, and every other model of one, is in the test environment by itself (%s)" % ", ".join(TestEnvironment.GIANTS.keys()))
 		env._show_giant("raven_alt")
 		_check(env._giants.size() == 1 and env._giants[0].kind == "raven" and env._giants[0].model_path.ends_with("raven_alt.glb"), "and the raven alt, the raven with thicker hands and feet")
 		env._fight_picks[0].selected = 0

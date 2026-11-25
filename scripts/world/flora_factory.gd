@@ -6,8 +6,9 @@ extends RefCounted
 ## cheap. Colours come from the nature palette (see Art.nature).
 
 const VARIANTS := 5
-## The tallest a tree grows, as a share of the usual height.
-const TALLEST := 3.0
+## The tallest a tree grows, as a share of the usual height (3 until
+## 0.56: the tallest trees are a third lower now).
+const TALLEST := 2.0
 
 static var _plants := {}
 static var _rocks: Array[ArrayMesh] = []

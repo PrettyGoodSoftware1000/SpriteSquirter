@@ -17,8 +17,10 @@ extends Node3D
 ##
 ## The game's giants are here too, as they are in the game, with the
 ## game's own animation (Creature, Balrog): the tortoise, the squirrel, the
-## raven and the balrog, and the "raven alt" (ALT_MODELS: the raven with
-## twice as thick hands and feet, for the owner to compare). "Giants" puts one on its own; "Fight" puts two of
+## raven and the balrog, and every other model of a creature (ALT_MODELS:
+## the "raven alt", with twice as thick hands and feet). The list is made
+## when the test environment opens (find_giants()), so a new creature or a
+## new model of one shows up by itself. "Giants" puts one on its own; "Fight" puts two of
 ## them face to face, and they fight until one is down. "Walk somewhere"
 ## sends them off, and the size slider grows or shrinks them. They stand
 ## on flat ground the size of a small island (Terrain.generate_flat(), not
@@ -42,12 +44,17 @@ const WALK_RADIUS := 30.0
 ## Mass: how quickly its speed follows what it wants (per second; lower is
 ## heavier). The speed eases in and out, so it never jerks into motion.
 const MASS_RESPONSE := 1.3
-## The giants that can be put on the floor: name -> Creature kind
-## ("balrog": the Balrog).
-const GIANTS := {"Tortoise": "tortoise", "Squirrel": "squirrel", "Raven": "raven", "Raven alt": "raven_alt", "Balrog": "balrog"}
-## Other models of a giant, to look at beside the one the game uses: the
-## name in GIANTS -> [its kind, the model].
-const ALT_MODELS := {"raven_alt": ["raven", "res://assets/creature/raven_alt.glb"]}
+## Where the creatures' models are, other ones (alts) among them.
+const CREATURE_DIR := "res://assets/creature/"
+## The giants that can be put on the floor: name -> key ("balrog": the
+## Balrog; a Creature kind; or a key of ALT_MODELS). Made by find_giants()
+## from every creature the game has (Creature.SPECIES), the balrog, and
+## every other model of a creature in CREATURE_DIR (a file named
+## <kind>_alt....glb, such as raven_alt.glb), so a new one is here at once.
+static var GIANTS := {}
+## Other models of a giant, to look at beside the one the game uses:
+## key -> [its kind, the model].
+static var ALT_MODELS := {}
 ## How far apart two giants start a fight.
 const FIGHT_GAP := 26.0
 ## The bone the upper body leans from, as it speeds up or slows down.
@@ -91,7 +98,32 @@ var _phase := 0.0
 var _walk_w := 0.0
 
 
+## Fills GIANTS and ALT_MODELS (see there).
+static func find_giants() -> void:
+	GIANTS = {}
+	ALT_MODELS = {}
+	var files := PackedStringArray()
+	var dir := DirAccess.open(CREATURE_DIR)
+	if dir != null:
+		for file in dir.get_files():
+			# (An exported game lists "x.glb.import" for "x.glb".)
+			file = file.trim_suffix(".import")
+			if file.ends_with(".glb") and not files.has(file):
+				files.append(file)
+	files.sort()
+	for kind: String in Creature.SPECIES:
+		var title: String = Creature.SPECIES[kind].name
+		GIANTS[title] = kind
+		for file in files:
+			if file.begins_with(kind + "_alt"):
+				var key := file.get_basename()
+				GIANTS["%s %s" % [title, key.trim_prefix(kind + "_").replace("_", " ")]] = key
+				ALT_MODELS[key] = [kind, CREATURE_DIR + file]
+	GIANTS["Balrog"] = "balrog"
+
+
 func _ready() -> void:
+	find_giants()
 	_build_ground()
 	_build_lighting()
 	_build_floor()
@@ -469,8 +501,11 @@ func _build_ui() -> void:
 	box.add_child(slash)
 
 	box.add_child(_heading_label("Giants (the game's own)"))
-	var giant_row := HBoxContainer.new()
-	giant_row.add_theme_constant_override("separation", 6)
+	# (Four a row: there may be any number.)
+	var giant_row := GridContainer.new()
+	giant_row.columns = 4
+	giant_row.add_theme_constant_override("h_separation", 6)
+	giant_row.add_theme_constant_override("v_separation", 6)
 	box.add_child(giant_row)
 	for label: String in GIANTS:
 		var b := _button(label)

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cakal8cw7me0f"
-path="res://.godot/imported/raven_alt.glb-6929970792d9f1c129f2099ba845f343.scn"
+uid="uid://d2pp7vhaf4yad"
+path="res://.godot/imported/raven_fly.glb-2b2898eb9c19c4c9c3ffb076474067f0.scn"
 
 [deps]
 
-source_file="res://assets/creature/raven_alt.glb"
-dest_files=["res://.godot/imported/raven_alt.glb-6929970792d9f1c129f2099ba845f343.scn"]
+source_file="res://assets/creature/raven_fly.glb"
+dest_files=["res://.godot/imported/raven_fly.glb-2b2898eb9c19c4c9c3ffb076474067f0.scn"]
 
 [params]
 

@@ -2641,8 +2641,6 @@ func _run() -> void:
 		_check(env != null and every and TestEnvironment.ALT_MODELS.size() == alt_files
 			and TestEnvironment.GIANTS.size() == Creature.SPECIES.size() + 1 + alt_files,
 			"every giant, and every other model of one, is in the test environment by itself (%s)" % ", ".join(TestEnvironment.GIANTS.keys()))
-		env._show_giant("raven_alt")
-		_check(env._giants.size() == 1 and env._giants[0].kind == "raven" and env._giants[0].model_path.ends_with("raven_alt.glb"), "and the raven alt, the raven with thicker hands and feet")
 		env._fight_picks[0].selected = 0
 		env._fight_picks[1].selected = TestEnvironment.GIANTS.size() - 1
 		env._start_fight()
@@ -2654,6 +2652,20 @@ func _run() -> void:
 		_check(fighters.size() == 2 and fighters[0].hp < fighters[0].max_hp and fighters[1].hp < fighters[1].max_hp,
 			"two giants there fight each other (%s)" % env._giants_text().replace("\n", " / "))
 		env._clear_giants()
+		# The new raven: walks, takes off (the flying model takes over) and lands.
+		env._new_raven("walk")
+		await _wait(2.0)
+		var walking: bool = env._nr_walk.visible and not env._nr_fly.visible and env._nr_speed > 0.5 \
+			and env._nr_walk_player != null and env._nr_walk_player.is_playing() and env._nr_walk_player.current_animation == "Walk"
+		env._new_raven("rise")
+		await _wait(TestEnvironment.NEW_RAVEN_LIFT_SECONDS + 1.0)
+		var flying: bool = env._nr_fly.visible and not env._nr_walk.visible and env._nr_state == "fly" and env._nr_height > 10.0 \
+			and env._nr_fly_player != null and env._nr_fly_player.current_animation == "Fly"
+		env._new_raven("fall")
+		await _wait(TestEnvironment.NEW_RAVEN_LIFT_SECONDS + 1.0)
+		var landed: bool = env._nr_walk.visible and not env._nr_fly.visible and env._nr_height == 0.0
+		_check(walking and flying and landed, "the new raven walks with its Walk clip, takes off on its flying model with its Fly clip, and lands back on the walking one (%s, %s, %s)" % [walking, flying, landed])
+		env._clear_new_raven()
 		game.terrain = null
 
 	_section("")

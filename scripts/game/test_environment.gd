@@ -18,11 +18,19 @@ extends Node3D
 ## The game's giants are here too, as they are in the game, with the
 ## game's own animation (Creature, Balrog): the tortoise, the squirrel, the
 ## raven and the balrog, and every other model of a creature (ALT_MODELS:
-## the "raven alt", with twice as thick hands and feet). The list is made
+## a model saved as <kind>_alt....glb). The list is made
 ## when the test environment opens (find_giants()), so a new creature or a
 ## new model of one shows up by itself. "Giants" puts one on its own; "Fight" puts two of
 ## them face to face, and they fight until one is down. "Walk somewhere"
-## sends them off, and the size slider grows or shrinks them. They stand
+## sends them off, and the size slider grows or shrinks them.
+##
+## "New raven" shows the owner's new raven (0.57, for review; not in the
+## game yet): two models, one on the ground (raven_walk.glb) and one in the
+## air (raven_fly.glb), each with its own clip (made by tools/raven_new_*.py).
+## "Walk" walks it round a circle, its Walk clip played as fast as it really
+## goes so the feet do not slide; "Take off" changes it for the flying model
+## as it leaves the ground, which flies round with its Fly clip; "Land"
+## brings it down and changes it back as its feet touch. They stand
 ## on flat ground the size of a small island (Terrain.generate_flat(), not
 ## drawn: the grey floor shows instead), with the game's effects and fire.
 
@@ -50,13 +58,25 @@ const CREATURE_DIR := "res://assets/creature/"
 ## Balrog; a Creature kind; or a key of ALT_MODELS). Made by find_giants()
 ## from every creature the game has (Creature.SPECIES), the balrog, and
 ## every other model of a creature in CREATURE_DIR (a file named
-## <kind>_alt....glb, such as raven_alt.glb), so a new one is here at once.
+## <kind>_alt....glb, such as a raven_alt.glb), so a new one is here at once.
 static var GIANTS := {}
 ## Other models of a giant, to look at beside the one the game uses:
 ## key -> [its kind, the model].
 static var ALT_MODELS := {}
 ## How far apart two giants start a fight.
 const FIGHT_GAP := 26.0
+## The new raven: its two models, how much bigger than in Blender they are
+## shown (as big as the game's raven), how fast its Walk clip carries it at
+## Blender's size, and how it flies.
+const NEW_RAVEN_WALK := "res://assets/creature/raven_walk.glb"
+const NEW_RAVEN_FLY := "res://assets/creature/raven_fly.glb"
+const NEW_RAVEN_SCALE := 8.0
+const NEW_RAVEN_CLIP_SPEED := 0.475
+const NEW_RAVEN_WALK_RADIUS := 28.0
+const NEW_RAVEN_FLY_RADIUS := 45.0
+const NEW_RAVEN_FLY_SPEED := 10.0
+const NEW_RAVEN_FLY_HEIGHT := 16.0
+const NEW_RAVEN_LIFT_SECONDS := 3.0
 ## The bone the upper body leans from, as it speeds up or slows down.
 const LEAN_BONE := "Bone_003"
 ## Bones a slash leaves to the walk while it walks (the hips and legs).
@@ -88,6 +108,19 @@ var _light_defaults: Array[float] = []
 ## The game's giants on the floor, and the line that shows their health.
 var _giants: Array[Creature] = []
 var _giant_info: Label
+## The new raven: its holder, its two models and their players, what it is
+## doing ("", "stand", "walk", "rise", "fly", "fall"), and where.
+var _nr: Node3D
+var _nr_walk: Node3D
+var _nr_fly: Node3D
+var _nr_walk_player: AnimationPlayer
+var _nr_fly_player: AnimationPlayer
+var _nr_state := ""
+var _nr_speed := 0.0
+var _nr_heading := 0.0
+var _nr_height := 0.0
+var _nr_t := 0.0
+var _nr_info: Label
 var _giant_size := 1.0
 var _fight_picks: Array[OptionButton] = []
 var _speed := 0.0
@@ -204,6 +237,7 @@ func _size_giant(g: Creature) -> void:
 ## One giant on the floor, on its own (the test model is put away).
 func _show_giant(kind: String) -> void:
 	_clear_giants()
+	_clear_new_raven()
 	_model.visible = false
 	_walking = false
 	_spawn_giant(kind, Vector3(0.0, 0.0, 0.0), 0.0)
@@ -213,6 +247,7 @@ func _show_giant(kind: String) -> void:
 ## Two giants face to face, each the other's foe: they fight until one is down.
 func _start_fight() -> void:
 	_clear_giants()
+	_clear_new_raven()
 	_model.visible = false
 	_walking = false
 	var names := GIANTS.keys()
@@ -234,6 +269,7 @@ func _wander_giants() -> void:
 ## Back to the test model, with the giants put away.
 func _show_model() -> void:
 	_clear_giants()
+	_clear_new_raven()
 	_model.visible = true
 
 
@@ -558,6 +594,20 @@ func _build_ui() -> void:
 	_giant_info.modulate = Color(1, 1, 1, 0.8)
 	box.add_child(_giant_info)
 
+	box.add_child(_heading_label("New raven (two models, to review)"))
+	var nr_row := HBoxContainer.new()
+	nr_row.add_theme_constant_override("separation", 6)
+	box.add_child(nr_row)
+	for pair: Array in [["Walk", "walk"], ["Stand", "stand"], ["Take off", "rise"], ["Land", "fall"]]:
+		var b := _button(pair[0])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.disabled = not ResourceLoader.exists(NEW_RAVEN_WALK) or not ResourceLoader.exists(NEW_RAVEN_FLY)
+		b.pressed.connect(_new_raven.bind(pair[1]))
+		nr_row.add_child(b)
+	_nr_info = Label.new()
+	_nr_info.modulate = Color(1, 1, 1, 0.8)
+	box.add_child(_nr_info)
+
 	box.add_child(_heading_label("Lighting"))
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -607,7 +657,119 @@ func _model_info() -> String:
 		ANIMS.get_file(), tris, _skel.get_bone_count() if _skel != null else 0, clips, lines]
 
 
+# --- The new raven ----------------------------------------------------------------
+
+## One of the new raven's models, as big as the game's raven, with its clip
+## set to loop.
+func _new_raven_model(path: String, clip: String) -> Array:
+	var model := (load(path) as PackedScene).instantiate() as Node3D
+	model.scale = Vector3.ONE * NEW_RAVEN_SCALE
+	_nr.add_child(model)
+	var players := model.find_children("*", "AnimationPlayer", true, false)
+	var player: AnimationPlayer = players[0] if not players.is_empty() else null
+	if player != null and player.has_animation(clip):
+		player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+		player.play(clip)
+	return [model, player]
+
+
+## Asks the new raven to walk, stand, take off or land (see the top).
+func _new_raven(order: String) -> void:
+	if _nr == null:
+		_clear_giants()
+		_model.visible = false
+		_walking = false
+		_nr = Node3D.new()
+		_nr.name = "NewRaven"
+		add_child(_nr)
+		var w := _new_raven_model(NEW_RAVEN_WALK, "Walk")
+		_nr_walk = w[0]
+		_nr_walk_player = w[1]
+		var f := _new_raven_model(NEW_RAVEN_FLY, "Fly")
+		_nr_fly = f[0]
+		_nr_fly_player = f[1]
+		_nr_fly.visible = false
+		_nr_state = "stand"
+		_nr.position = Vector3(NEW_RAVEN_WALK_RADIUS, 0.0, 0.0)
+	match order:
+		"walk", "stand":
+			if _nr_state in ["walk", "stand"]:
+				_nr_state = order
+		"rise":
+			if _nr_state in ["walk", "stand"]:
+				_nr_state = "rise"
+				_nr_t = 0.0
+				_swap_new_raven(true)
+		"fall":
+			if _nr_state in ["fly", "rise"]:
+				_nr_state = "fall"
+				_nr_t = 0.0
+
+
+## Shows the flying model (or the walking one) in the other's place.
+func _swap_new_raven(flying: bool) -> void:
+	_nr_walk.visible = not flying
+	_nr_fly.visible = flying
+	if Game.effects != null:
+		Game.effects.spawn_dust(_nr.global_position, 2.0)
+
+
+func _update_new_raven(delta: float) -> void:
+	if _nr == null:
+		return
+	var want := 0.0
+	var radius := NEW_RAVEN_WALK_RADIUS
+	match _nr_state:
+		"walk":
+			want = NEW_RAVEN_CLIP_SPEED * NEW_RAVEN_SCALE
+		"rise", "fly", "fall":
+			want = NEW_RAVEN_FLY_SPEED
+			radius = NEW_RAVEN_FLY_RADIUS
+	# Speed eases in and out (a giant's weight).
+	_nr_speed = move_toward(_nr_speed, want, delta * (1.2 if _nr_state == "walk" or _nr_state == "stand" else 2.5))
+	_nr_heading += _nr_speed / radius * delta
+	var centre := Vector3.ZERO
+	var at := centre + Vector3(cos(_nr_heading), 0.0, -sin(_nr_heading)) * radius
+	# (It goes round anticlockwise seen from above, facing the way it goes.)
+	var ahead := Vector3(-sin(_nr_heading), 0.0, -cos(_nr_heading))
+	if _nr_state == "rise":
+		_nr_t += delta
+		_nr_height = NEW_RAVEN_FLY_HEIGHT * smoothstep(0.0, NEW_RAVEN_LIFT_SECONDS, _nr_t)
+		if _nr_t >= NEW_RAVEN_LIFT_SECONDS:
+			_nr_state = "fly"
+	elif _nr_state == "fall":
+		_nr_t += delta
+		_nr_height = NEW_RAVEN_FLY_HEIGHT * (1.0 - smoothstep(0.0, NEW_RAVEN_LIFT_SECONDS, _nr_t))
+		if _nr_t >= NEW_RAVEN_LIFT_SECONDS:
+			_nr_height = 0.0
+			_nr_state = "walk"
+			_swap_new_raven(false)
+	_nr.position = Vector3(at.x, _nr_height, at.z)
+	_nr.rotation.y = atan2(ahead.x, ahead.z)
+	if _nr_walk_player != null:
+		# The walk clip runs as fast as the raven walks.
+		_nr_walk_player.speed_scale = _nr_speed / (NEW_RAVEN_CLIP_SPEED * NEW_RAVEN_SCALE) if _nr_walk.visible else 1.0
+	if _follow:
+		Game.camera_rig.focus.x = _nr.position.x
+		Game.camera_rig.focus.z = _nr.position.z
+	_nr_info.text = "%s   %.1f m/s   %.1f m up" % [{"stand": "Standing", "walk": "Walking", "rise": "Taking off",
+		"fly": "Flying", "fall": "Landing"}.get(_nr_state, ""), _nr_speed, _nr_height]
+
+
+## Puts the new raven away.
+func _clear_new_raven() -> void:
+	if _nr != null:
+		_nr.queue_free()
+	_nr = null
+	_nr_state = ""
+	_nr_speed = 0.0
+	_nr_height = 0.0
+	if _nr_info != null:
+		_nr_info.text = ""
+
+
 func _process(delta: float) -> void:
+	_update_new_raven(delta)
 	if _model.visible:
 		_update_walk(delta)
 	if _bones.visible:

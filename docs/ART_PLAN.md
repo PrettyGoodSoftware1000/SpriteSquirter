@@ -354,17 +354,66 @@ above the toes, three toes forward and one back).
   their toes down, which on the raven's long foot pointed its toes back),
   and the wings bounce with its steps: each footfall makes them dip, and
   they spring back past where they were and settle, the primaries most.
-- ✅ (0.55) **Raven alt**, for the owner to compare (the game still uses
-  `raven.glb`): `assets/creature/raven_alt.glb` and `raven_alt.blend`, made
-  by `tools/raven_rig.py -- --alt`. The same rig, with the hands (hand and
-  finger bones) and feet (foot and toe bones) twice as thick (`THICKEN`):
-  each point moves straight out from its bone, never along it, so the claws
-  are no longer, fading out at the wrist and ankle by skin weight. The test
-  environment shows it ("Raven alt"), and can set it to fight the raven.
-  Before and after: `docs/raven_alt_preview.png`.
+- (0.55, deleted in 0.57) A "raven alt" with twice as thick hands and feet
+  was made for the owner to compare, and dropped for the new models below.
 - Not yet: the toes are Meshy's (one bone chain for the three front toes);
   a jaw for the beak; the raven's own walk, hop and wingbeat clips (see
   below).
+
+## The newest raven: two models, rigged and animated (0.57, for review)
+
+The owner's two new Meshy ravens (Nov 2026): `Raven3Spit.glb`, the raven on
+the ground, and `RavenFlyingSplit.glb`, the raven flying, each with its
+wings (and the flier's tail fan) as separate parts. The raven is to change
+from one model to the other as it takes off and lands. The originals (about
+90 MB each, 1.6 to 1.9 million faces) are kept out of git in
+`art_sources/raven/`; three scripts make everything from them:
+
+1. `tools/raven_new_prep.py`: each part cut down to a game's size (about
+   130,000 triangles a model, smooth shaded), scaled so the walking raven
+   stands 1.7 m (the flier matched to it by its body's surface area, as
+   Meshy fits each model to its own box: its wings span 4.6 m), the
+   textures (colour, normals, metal/roughness) 2048 px JPEGs.
+2. `tools/raven_new_rig.py`: one skeleton (134 bones, the same names on
+   both), fitted to each pose. The flier is pitched forward 83 degrees to
+   fly level, its head lifted to look ahead, and that is its rest pose.
+   - Body: root, pelvis, spine, chest, chest_upper, neck1, neck2, head.
+   - Legs: thigh, shin (the knee bends forward), tarsus (the reverse knee
+     between it and the ankle bends back), foot, and four toes (three ahead,
+     one behind, read off grid pictures of each foot).
+   - Arms: clavicle, arm_upper, arm_lower, hand, and four fingers of three
+     bones (found from the claw tips round the skin).
+   - Tail: tail1, tail2 and five fanned tail feathers of two bones.
+   - Wings, as a real wing: wing_root (the shoulder blade), wing_upper
+     (humerus), wing_fore (forearm), wing_hand, just inside the leading
+     edge; five primaries on the hand, four secondaries on the forearm, two
+     tertials by the body, each two bones so it bends, fanned to the wing's
+     outline.
+   - Every hinge (elbows, knees, reverse knees, ankles, wing elbows and
+     wrists, fingers, toes) bends about its bone's X, closes one way only and
+     never opens past straight (a Limit Rotation constraint; HINGES).
+   - Skin: on the body by distance round the skin (so a hand hanging by a
+     thigh keeps off it), smoothed so joints bend softly; the wings and tail
+     fan by distance to their feather bones, the wing's root holding to the
+     body.
+3. `tools/raven_new_anim.py`: the clips, keyed on every frame from smooth
+   looping curves, inside the joint limits, checked for smoothness (the
+   largest change in any bone's turning speed from one frame to the next).
+   - **Walk** (2 s, two steps): feet planted without sliding (the leg solved
+     each frame, the tarsus kept about as steep as the thigh), rolling off
+     the toes and setting down softly; the hips sink after each footfall,
+     sway and turn; the chest counters, the arms swing a little, the head
+     holds still, the wings bounce and the tail follows late.
+   - **Fly** (1.2 s a beat): the eagle's flap: spread wings sweeping down and
+     forward, primaries fanned and bent up under the load; the elbow and
+     wrist folding on the upstroke, the hand turning to let the air through;
+     the tips a moment behind the shoulder; the body rising on each
+     downstroke, the head level, the tail trimming, the legs tucked.
+
+Review notes, with the frames worth a check: `docs/raven_new_review.md`
+(pictures in `docs/raven_review/`). The test environment shows them ("New
+raven"). Not yet: the raven in the game (it still uses `raven.glb` and its
+procedural animation); clips for taking off, landing, attacking.
 
 ## The other giants
 

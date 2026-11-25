@@ -21,3 +21,9 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# The owner's Meshy originals, too big for git (tools read them from here)
+/art_sources/
+
+# Blender backups
+*.blend1

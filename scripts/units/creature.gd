@@ -199,7 +199,7 @@ var hostile := false
 ## either is on (see TestEnvironment). Null in the game.
 var duel_foe: Creature
 ## Set before adding to the scene: another model for this kind (the test
-## environment's "Raven alt", assets/creature/raven_alt.glb). "" for its own.
+## environment's other models of a creature, <kind>_alt....glb). "" for its own.
 var model_path := ""
 ## In the air (the raven), from take-off until its feet are down again.
 var flying := false

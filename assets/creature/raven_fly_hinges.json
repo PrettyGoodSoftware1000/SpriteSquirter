@@ -1,0 +1,234 @@
+{
+ "shin_r": {
+  "kind": "shin",
+  "rest": 90.97418555560792
+ },
+ "tarsus_r": {
+  "kind": "tarsus",
+  "rest": 78.48425575251248
+ },
+ "foot_r": {
+  "kind": "foot",
+  "rest": 71.98238694571307
+ },
+ "toe_back1_r": {
+  "kind": "toe",
+  "rest": -112.33601882636216
+ },
+ "toe_back2_r": {
+  "kind": "toe",
+  "rest": 60.82606523844096
+ },
+ "toe_in1_r": {
+  "kind": "toe",
+  "rest": -62.75693922623606
+ },
+ "toe_in2_r": {
+  "kind": "toe",
+  "rest": -0.0
+ },
+ "toe_in3_r": {
+  "kind": "toe",
+  "rest": -72.71359284730879
+ },
+ "toe_mid1_r": {
+  "kind": "toe",
+  "rest": -39.77132751805424
+ },
+ "toe_mid2_r": {
+  "kind": "toe",
+  "rest": 0.0
+ },
+ "toe_mid3_r": {
+  "kind": "toe",
+  "rest": -80.4486727993215
+ },
+ "toe_out1_r": {
+  "kind": "toe",
+  "rest": -30.17516445118562
+ },
+ "toe_out2_r": {
+  "kind": "toe",
+  "rest": 0.0
+ },
+ "toe_out3_r": {
+  "kind": "toe",
+  "rest": -65.3115051079017
+ },
+ "arm_lower_r": {
+  "kind": "arm_lower",
+  "rest": 88.35590083917523
+ },
+ "thumb1_r": {
+  "kind": "finger",
+  "rest": 51.03523836513239
+ },
+ "thumb2_r": {
+  "kind": "finger",
+  "rest": -24.440703256130284
+ },
+ "thumb3_r": {
+  "kind": "finger",
+  "rest": 44.84051975021387
+ },
+ "index1_r": {
+  "kind": "finger",
+  "rest": 14.676604620591265
+ },
+ "index2_r": {
+  "kind": "finger",
+  "rest": 70.96177226860557
+ },
+ "index3_r": {
+  "kind": "finger",
+  "rest": 43.46248127383961
+ },
+ "middle1_r": {
+  "kind": "finger",
+  "rest": 42.89695527094089
+ },
+ "middle2_r": {
+  "kind": "finger",
+  "rest": 35.90422467415476
+ },
+ "middle3_r": {
+  "kind": "finger",
+  "rest": 56.857971217473676
+ },
+ "ring1_r": {
+  "kind": "finger",
+  "rest": 70.56073088129911
+ },
+ "ring2_r": {
+  "kind": "finger",
+  "rest": -21.45063085260629
+ },
+ "ring3_r": {
+  "kind": "finger",
+  "rest": 75.31549193992261
+ },
+ "wing_fore_r": {
+  "kind": "wing_fore",
+  "rest": 30.676828185344714
+ },
+ "wing_hand_r": {
+  "kind": "wing_hand",
+  "rest": 13.424778648568727
+ },
+ "shin_l": {
+  "kind": "shin",
+  "rest": 90.97418555560792
+ },
+ "tarsus_l": {
+  "kind": "tarsus",
+  "rest": 78.48425575251248
+ },
+ "foot_l": {
+  "kind": "foot",
+  "rest": 71.98238694571307
+ },
+ "toe_back1_l": {
+  "kind": "toe",
+  "rest": -112.33601882636216
+ },
+ "toe_back2_l": {
+  "kind": "toe",
+  "rest": 60.82606523844096
+ },
+ "toe_in1_l": {
+  "kind": "toe",
+  "rest": -62.75693922623606
+ },
+ "toe_in2_l": {
+  "kind": "toe",
+  "rest": -0.0
+ },
+ "toe_in3_l": {
+  "kind": "toe",
+  "rest": -72.71359284730879
+ },
+ "toe_mid1_l": {
+  "kind": "toe",
+  "rest": -39.77132751805424
+ },
+ "toe_mid2_l": {
+  "kind": "toe",
+  "rest": 0.0
+ },
+ "toe_mid3_l": {
+  "kind": "toe",
+  "rest": -80.4486727993215
+ },
+ "toe_out1_l": {
+  "kind": "toe",
+  "rest": -30.17516445118562
+ },
+ "toe_out2_l": {
+  "kind": "toe",
+  "rest": 0.0
+ },
+ "toe_out3_l": {
+  "kind": "toe",
+  "rest": -65.3115051079017
+ },
+ "arm_lower_l": {
+  "kind": "arm_lower",
+  "rest": 88.35590083917523
+ },
+ "thumb1_l": {
+  "kind": "finger",
+  "rest": 51.03523836513239
+ },
+ "thumb2_l": {
+  "kind": "finger",
+  "rest": -24.440703256130284
+ },
+ "thumb3_l": {
+  "kind": "finger",
+  "rest": 44.84051975021387
+ },
+ "index1_l": {
+  "kind": "finger",
+  "rest": 14.676604620591265
+ },
+ "index2_l": {
+  "kind": "finger",
+  "rest": 70.96177226860557
+ },
+ "index3_l": {
+  "kind": "finger",
+  "rest": 43.46248127383961
+ },
+ "middle1_l": {
+  "kind": "finger",
+  "rest": 42.89695527094089
+ },
+ "middle2_l": {
+  "kind": "finger",
+  "rest": 35.90422467415476
+ },
+ "middle3_l": {
+  "kind": "finger",
+  "rest": 56.857971217473676
+ },
+ "ring1_l": {
+  "kind": "finger",
+  "rest": 70.56073088129911
+ },
+ "ring2_l": {
+  "kind": "finger",
+  "rest": -21.45063085260629
+ },
+ "ring3_l": {
+  "kind": "finger",
+  "rest": 75.31549193992261
+ },
+ "wing_fore_l": {
+  "kind": "wing_fore",
+  "rest": 30.676828185344714
+ },
+ "wing_hand_l": {
+  "kind": "wing_hand",
+  "rest": 13.424778648568727
+ }
+}

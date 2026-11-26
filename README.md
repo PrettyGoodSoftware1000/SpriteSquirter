@@ -4,7 +4,7 @@ A 3D village game built with [Godot 4](https://godotengine.org). Pick a start
 location on an island floating in the sky, and your tiny villagers gather
 lumber, stone and food, farm wheat, raise surreal buildings and have
 children. Every night at nightfall the **goblins raid**: your villagers,
-warriors and wizards fight them off, helped by a giant, gloomy tortoise that
+warriors and mages fight them off, helped by a giant, gloomy tortoise that
 stomps, throws and eats goblins. You cast **fireballs**, **rain**, **roots**
 and a **blood sacrifice** with magicko. Make your own islands in the **map editor**. The long-term plan is
 to grow it into an RTS / tower-defense game (see [docs/ROADMAP.md](docs/ROADMAP.md)).
@@ -77,9 +77,9 @@ starts; they carry over into it.
 3. **Build.** Press **B** or **Backspace** for the build menu, pick a
    building, and place its outline (**R** rotates it) anywhere inside your
    village's **influence**: a wall of light shows its edge while you place
-   a building, or hold the mouse over a Storehouse. It starts 45 m from the
-   start location and reaches 1 m further for every villager (both in the
-   dev menu). The cost is paid up
+   a building, or hold the mouse over a Storehouse. It reaches 22.5 m from
+   the start location and 3 m further for every villager (82.5 m with the
+   20 villagers a village starts with; both in the dev menu). The cost is paid up
    front and the villagers come and build it: up to 5 work on each
    building (your **Builders** first, then unassigned Workers), and a
    second building gets 5 of its own. The
@@ -91,10 +91,11 @@ starts; they carry over into it.
    **Storehouse** is where resources are carried and houses 25 people, a
    **Granary** (the Windmill) stores food, a **Town guard** (the Tall
    house) trains warriors (and archers), a **Wizardry tower** (the Moon
-   tower) trains wizards, a **Shrine** (the Singing rocks) makes animus
+   tower) trains mages, a **Shrine** (the Singing rocks) makes animus
    and is where a dead creature is brought back to life, a **Necromancer
-   tower** turns wizards into necromancers, and a **Blacksmith** makes
-   wheelbarrows and does research. The dev menu's construction rate makes
+   tower** turns mages into necromancers, a **Storm Spire** (the Crystal
+   tower) trains Storm Banshees and strikes enemies with chain lightning,
+   and a **Blacksmith** makes wheelbarrows and does research. The dev menu's construction rate makes
    all your building go faster or slower.
    **Asset names, gameplay names and in-game names.** Every building has
    an asset name (its model: Stacked houses, Moon tower, Skull tower,
@@ -123,9 +124,9 @@ starts; they carry over into it.
    **Bones and necromancers.** Whenever a villager, goblin or ogre dies
    the village gets 2 to 4 **bones** (the bone counter in the top bar).
    Build a Necromancer tower (it costs bones too) and ask for
-   necromancers in the village panel: a wizard trains at the tower for 75
+   necromancers in the village panel: a mage trains at the tower for 75
    seconds and comes out in black robes. A necromancer throws purple
-   firebolts (half a wizard's harm), and raises one dead villager or
+   firebolts (half a mage's harm), and raises one dead villager or
    enemy lying within 32 m as a **skeleton** warrior or archer, for 2
    bones: 2 seconds beside the body, then 3 seconds' rest. It keeps one
    skeleton up at a time; a skeleton fights for you with half the health
@@ -155,34 +156,47 @@ starts; they carry over into it.
    from the stores the moment it is placed), research or a spell does not
    change it. Food's can go below zero, since everyone eats all the time. Beside lumber, stone and food,
    **+** takes one Worker and makes it a Lumberjack, Miner or Farmer at
-   once (Builders the same way; never a warrior, archer or wizard), and
+   once (Builders the same way; never a warrior, archer or mage), and
    **-** sends one back to the Workers. Hold the mouse over a + or - to see
    what it does.
    Builders only build: they are first onto every building site and wait
    when there is nothing to build. Only Builders and unassigned Workers
    build; set one to another job and it drops the building at once. Farmers sow and reap fields twice as fast as other workers. No job's **+** works unless there is a free Worker
-   for it (one not already promised to a warrior, archer or wizard you
-   asked for); a necromancer needs a free wizard.
-4. **Jobs.** Grown-ups are workers unless you ask for warriors or wizards
+   for it (one not already promised to a warrior, archer or mage you
+   asked for); a necromancer needs a free mage.
+4. **Jobs.** Grown-ups are workers unless you ask for warriors or mages
    at the bottom of the village panel (the - and + buttons).
    The count beside each, such as **Warriors 1/4**, is how many are
    trained or training (it goes up the moment you press +) of the most
    your buildings allow: 0/0 with no Town guard, 0/4 as soon as one
    stands.
    Each Town guard allows 4 warriors and trains one at a time, taking
-   15 seconds each; each Wizardry tower allows 2 wizards and trains one
+   15 seconds each; each Wizardry tower allows 4 mages and trains one
    at a time, taking 45 seconds each (the dev menu's training time slider
    stretches or shortens all of them). Recruits are taken from the
    unassigned Workers. More buildings train side by side. A grey
    bar fills over the count while recruits train. Lower the number and
-   warriors or wizards go straight back to work; they have to train again
-   to return. **Wizards** make 5 magicko every 2 minutes each (`wizard_magicko`, 2.5 a minute; a worshiper makes 1 a minute, the dev menu's Magicko rate) and throw tiny
+   warriors or mages go straight back to work; they have to train again
+   to return. (Mages were called wizards before 0.61; the code and
+   `balancing.txt` still say wizard.) Hold the mouse over the magicko in
+   the village panel to see where it comes from (so much from the mages,
+   so much from the villagers, the fey, the worshipers in neutral villages
+   and a Blood Sacrifice). **Mages** make 5 magicko every 2 minutes each (`wizard_magicko`, 2.5 a minute; a worshiper makes 1 a minute, the dev menu's Magicko rate) and throw tiny
    **firebolts** at goblins from a distance, faster than a warrior's sword,
    sometimes setting them alight. Once **Bows** are researched an Archers
    count appears: each Town guard allows 2 **archers** (22½ seconds each),
    who shoot goblins from 22 m.
+   Each **Storm Spire** (the Crystal tower) allows 2 **Storm Banshees**
+   (40 seconds each): winged villagers (dressed in purple for now) who
+   blow a gust of wind every 6 seconds down a row 10 m wide in front of
+   them, which pushes every attacking goblin in it 20 m back and knocks it
+   over (it is not hurt). The Spire itself makes 10 **Storm Essence** a
+   minute (the violet bolt in the village panel), and strikes any enemy
+   that comes within 50 m with **chain lightning**, no more often than
+   every 20 seconds, for 25 Storm Essence a strike (all in
+   `balancing.txt`).
 5. **Feed everyone.** Each villager (children too) eats 1 food a minute,
-   each warrior 3 and each archer or wizard 2; the counter shows how much
+   each warrior 3 and each archer, mage or Storm Banshee 2; the counter shows how much
    is eaten. Your creature eats too: 20 food a minute when full grown, and
    in proportion to its size before that, but only half that until it is
    half grown (1.5 a minute at the start).
@@ -218,7 +232,7 @@ starts; they carry over into it.
    your villagers at random and carries it back to a cave for good. Knock
    the building down and no more come. A
    fireball or chain lightning brings it down, and so does a single arrow
-   or wizard's firebolt: archers and wizards always go for a bat they can
+   or mage's firebolt: archers and mages always go for a bat they can
    see first. A villager it was carrying drops and lives.
    The goblins have a giant of their own, the **balrog**: a horned demon
    that hatches at one of their caves and grows just as your creature
@@ -228,7 +242,7 @@ starts; they carry over into it.
    a **fireball** every 20 seconds (half as strong as yours). It has
    wings but cannot fly, and it walks a little slower than a goblin.
    Your creature and the balrog fight each other with their fists; your
-   archers, wizards and everyone else join in, and fireballs and chain
+   archers, mages and everyone else join in, and fireballs and chain
    lightning hurt it. When it dies the village gets bones, and another
    hatches ten minutes later.
    A goblin has the same health, damage and attack speed as a grown-up
@@ -244,7 +258,9 @@ starts; they carry over into it.
    sent it somewhere. With goblins about it moves 20% faster, scowls and
    opens its mouth. Nobody runs away from the tortoise any more.
    **Your creature.** Choose a **tortoise**, a **squirrel** or a **raven**
-   in the main menu.
+   in the main menu. (The raven is the owner's two Meshy ravens since 0.61:
+   one walking, one flying, swapped as it takes off and lands, each moved
+   by its own animation clips; see `RavenGiant`.)
    The squirrel is a nervous wreck (it shivers, wrings its paws and keeps
    glancing over its shoulder) and 30% faster; the tortoise has twice the
    health. The raven **flies**: any journey longer than 30 m, any way that
@@ -270,8 +286,9 @@ starts; they carry over into it.
    find it. Goblins attack a
    creature that comes close; at no health it **dies**, shrinks by a
    quarter of its size (it grows back) and lies where it fell. A
-   **Resurrect** button then appears above its bars: it costs 5 animus and
-   brings it back to life beside your Shrine, in a shaft of light, with all
+   **Resurrect** button then appears above its bars: it costs 5 animus the
+   first time and 5 more each time after, up to 25 (`resurrect_animus...`
+   in `balancing.txt`), and brings it back to life beside your Shrine, in a shaft of light, with all
    its health. Left alone it heals.
    **Health, stamina and magicko.** Three bars to the right of the spell
    bar show the creature's own. The squirrel **runs** on all fours (long
@@ -523,7 +540,7 @@ In the game, press **Esc** and **Show controls** for this list.
 | Double-click the creature's bars | Find the creature |
 | Click a Shrine / a Blacksmith | Research spells and creature buffs / research |
 | Mouse over a building | Its name, and what it is researching or training and how far along |
-| A buff on the buff bar (over the creature's health bar) | Cast that creature buff: **Creature Growth** (it grows twice as fast for 2 minutes, shedding yellow sparkles; then a minute's cooldown) or **Flaming Aura** (flames fall from it for 30 seconds and burn every enemy within 10 m for 5 a second). Each costs 1 animus and cannot be cast while it is on (`buff_...` in `balancing.txt`) |
+| A buff on the buff bar (over the creature's health bar) | Cast that creature buff: **Creature Growth** (it grows twice as fast for 2 minutes, shedding yellow sparkles; then a minute's cooldown) or **Flaming Aura** (flames fall from it for 30 seconds and burn every enemy within 10 m for 5 a second). Each costs 1 animus and cannot be cast while it is on (`buff_...` in `balancing.txt`). **Flag Bearer** is on until you click it again: raising the flag costs 5 animus every time and keeping it up 1 animus every 5 minutes (it comes down by itself when the animus runs out or the creature dies). While it is up your warriors, archers, mages, necromancers and Storm Banshees march on the nearest goblin cave, fighting every goblin and goblin building they meet, and then hack at the cave itself: a cave has 10,000 health (`goblin_cave_health`), and when it falls it spawns no more goblins |
 | Click outside a menu | Close it |
 | Click with a spell in hand | Cast it (Bless and Condemn: click anywhere); Shift+click keeps it in hand |
 | B / Backspace (or the hammer) | Open or close the build menu (1–9 pick the field, the bridge or a building) |
@@ -547,7 +564,7 @@ before a game starts.
 | Day length / Night length | Minutes of daylight (5 by default) and of night (3 by default); the 12-hour clock always runs dawn at 6:00 am to nightfall at 10:00 pm |
 | Lumber / Stone / Food rate | Units each worker gathers per minute |
 | Birth timer | Seconds between new villagers |
-| Magicko rate | Magicko each grown-up worshiper adds per minute (1 by default; wizards make `wizard_magicko`) |
+| Magicko rate | Magicko each grown-up worshiper adds per minute (1 by default; mages make `wizard_magicko`) |
 | Goblin Spawn Rate | Goblins each starting cave spawns per minute before its buildings add more (each finished goblin building adds `goblin_rate_per_building`, and every neutral village at the start `neutral_goblin_spawn`). 1 by default. **Goblin population bounce back**: with fewer than 5 goblins left, the caves spawn 5 a minute until there are 6 (`goblin_bounce_...` in `balancing.txt`) |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
@@ -629,10 +646,12 @@ new one is there by itself. A giant's button puts it on the floor on its own;
 pick two under **Fight** and press **Fight!** and they square up and fight
 until one is down (the line under them shows their health). **Walk
 somewhere** sends them off, and **Giant size** grows or shrinks them.
-**New raven** shows the new two-model raven for review (see
+**Raven's clips** shows the raven's two models for review (see
 `docs/raven_new_review.md`): **Walk** walks it round with its walk clip,
-**Take off** changes it for the flying model, which flaps round with its
-flight clip, and **Land** brings it down onto the walking model again.
+**Claw L**, **Claw R**, **Throw**, **Stomp L** and **Stomp R** stop it to
+play that clip once, **Take off** changes it for the flying model, which
+flaps round with its flight clip, and **Land** brings it down onto the
+walking model again.
 WASD pans, Q / E turn, the wheel zooms; Esc goes back to the menu.
 
 ## Balancing
@@ -714,7 +733,7 @@ project.godot              Engine settings (Forward+, Jolt physics, autoload "Ga
 scenes/main.tscn           The only scene; everything else is built in code
 shaders/                   Cel shading (toon.gdshaderinc), outlines, terrain, grass, water, sky...
 assets/textures/           Baked textures (made by tools/bake_textures.gd)
-assets/creature/           The creature models (tools/bake_creature.py; the raven: tools/raven_rig.py)
+assets/creature/           The creature models (tools/bake_creature.py; the raven: raven_walk.glb and raven_fly.glb, tools/raven_new_*.py)
 tools/                     Scripts that generate the assets above, and the smoke test
 scripts/
   main.gd                  Builds the world for the session, then starts its controller
@@ -758,12 +777,13 @@ NeutralVillages/           The owner's build orders for neutral villages (Neutra
   world/start_marker.gd    Numbered start-location banners
   world/ground_ring.gd     Circles drawn on the ground (brushes, outlines)
   units/creature.gd        The creatures (tortoise, squirrel, raven): growth, health, locomotion, flying, IK, faces, attacks
+  units/raven_giant.gd     The raven: its two models (walking, flying) posed by their own clips
   units/creature_mind.gd   What the creature learns, likes and does by itself; bless and curse
   core/balance.gd          Reads balancing.txt
   ui/pause_menu.gd         The pause screen (Esc)
   game/research.gd         What the Blacksmith can research
   spells/arrow.gd          An archer's arrow
-  units/villager.gd        Villager, warrior, wizard and goblin looks, jobs, fighting, state machine
+  units/villager.gd        Villager, warrior, mage (wizard), Storm Banshee and goblin looks, jobs, fighting, state machine
   spells/fireball.gd       Projectile
   spells/rain.gd           The rain cloud
   spells/roots.gd          The patch of snaring roots
@@ -801,7 +821,13 @@ python3 tools/bake_creature.py squirrel
 ```
 
 The raven and the balrog are not baked any more: they are the owner's
-Meshy models (see [docs/ART_PLAN.md](docs/ART_PLAN.md)). The raven is rigged
+Meshy models (see [docs/ART_PLAN.md](docs/ART_PLAN.md)). Since 0.61 the
+game's raven is the two-model one, `assets/creature/raven_walk.glb` and
+`raven_fly.glb`, made by `tools/raven_new_prep.py`, `raven_new_rig.py` and
+`raven_new_anim.py` (`blender -b --factory-startup --python
+tools/raven_new_anim.py -- walk` remakes the walking model's clips; `fly`
+or `both` remakes the flying one too, after which `tools/raven_fly_look.py`
+must be run again for its sheen). The older one-model raven is rigged
 for the game in Blender by a script (finger bones, the -X side mirrored
 from the +X, the game's bone names), which reads
 `assets/creature/RavenMeshyRig.glb` and writes `assets/creature/raven.blend`

@@ -24,12 +24,12 @@ extends Node3D
 ## them face to face, and they fight until one is down. "Walk somewhere"
 ## sends them off, and the size slider grows or shrinks them.
 ##
-## "New raven" shows the owner's new raven (0.57, for review; not in the
-## game yet): two models, one on the ground (raven_walk.glb) and one in the
-## air (raven_fly.glb), each with its own clip (made by tools/raven_new_*.py).
+## "Raven's clips" shows the raven's two models (the game's raven since
+## 0.61, see RavenGiant), one on the ground (raven_walk.glb) and one in the
+## air (raven_fly.glb), with their clips (made by tools/raven_new_*.py).
 ## "Walk" walks it round a circle, its Walk clip played as fast as it really
-## goes so the feet do not slide; "Attack" stops it for a swipe of its left
-## claw (its Attack clip); "Take off" changes it for the flying model
+## goes so the feet do not slide; "Claw L", "Claw R", "Throw", "Stomp L" and
+## "Stomp R" stop it to play that clip once; "Take off" changes it for the flying model
 ## as it leaves the ground, which flies round with its Fly clip; "Land"
 ## brings it down and changes it back as its feet touch. They stand
 ## on flat ground the size of a small island (Terrain.generate_flat(), not
@@ -208,8 +208,7 @@ func _spawn_giant(kind: String, pos: Vector3, facing: float) -> Creature:
 		g.kind = ALT_MODELS[kind][0]
 		g.model_path = ALT_MODELS[kind][1]
 	else:
-		g = Creature.new()
-		g.kind = kind
+		g = Creature.make(kind)
 	add_child(g)
 	if g is Balrog:
 		(g as Balrog).stand_at(pos, facing)
@@ -595,11 +594,14 @@ func _build_ui() -> void:
 	_giant_info.modulate = Color(1, 1, 1, 0.8)
 	box.add_child(_giant_info)
 
-	box.add_child(_heading_label("New raven (two models, to review)"))
+	box.add_child(_heading_label("Raven's clips (two models, to review)"))
 	var nr_row := HBoxContainer.new()
-	nr_row.add_theme_constant_override("separation", 6)
-	box.add_child(nr_row)
-	for pair: Array in [["Walk", "walk"], ["Stand", "stand"], ["Attack", "attack"], ["Take off", "rise"], ["Land", "fall"]]:
+	for pair: Array in [["Walk", "walk"], ["Stand", "stand"], ["Take off", "rise"], ["Land", "fall"],
+			["Claw L", "AttackLeft"], ["Claw R", "AttackRight"], ["Throw", "Throw"], ["Stomp L", "StompLeft"], ["Stomp R", "StompRight"]]:
+		if nr_row.get_child_count() % 5 == 0:
+			nr_row = HBoxContainer.new()
+			nr_row.add_theme_constant_override("separation", 6)
+			box.add_child(nr_row)
 		var b := _button(pair[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.disabled = not ResourceLoader.exists(NEW_RAVEN_WALK) or not ResourceLoader.exists(NEW_RAVEN_FLY)
@@ -696,11 +698,11 @@ func _new_raven(order: String) -> void:
 		"walk", "stand":
 			if _nr_state in ["walk", "stand"]:
 				_nr_state = order
-		"attack":
-			# It stops, swipes with its left claw once, and stands.
-			if _nr_state in ["walk", "stand"] and _nr_walk_player != null and _nr_walk_player.has_animation("Attack"):
+		"AttackLeft", "AttackRight", "Throw", "StompLeft", "StompRight":
+			# It stops, plays the clip once, and stands.
+			if _nr_state in ["walk", "stand"] and _nr_walk_player != null and _nr_walk_player.has_animation(order):
 				_nr_state = "attack"
-				_nr_walk_player.play("Attack", 0.25)
+				_nr_walk_player.play(order, 0.25)
 				_nr_walk_player.animation_finished.connect(func(_name: StringName) -> void:
 					if _nr_state == "attack":
 						_nr_state = "stand"

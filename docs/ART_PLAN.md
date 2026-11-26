@@ -424,11 +424,26 @@ from one model to the other as it takes off and lands. The originals (about
   after `raven_new_anim.py` makes the flier.
 - (0.60) An **Attack** clip on the walking raven: the left claw, after the
   balrog's slash (see the review notes).
+- ✅ (0.61) The owner's attack (from `raven_walk_slow.blend`, the same as
+  0.60's) played 50% faster (1.2 s): **AttackLeft**, and its mirror
+  **AttackRight**. New clips on the walking raven: **Throw** (crouch, scoop
+  with the right hand, wind up over the shoulder with the wing lifted out
+  of the way, hurl, follow through) and **StompRight** / **StompLeft** (the
+  weight onto the other foot, the knee up, the foot slammed down a little
+  ahead), all inside the rig's joint limits.
+- ✅ (0.61) **In the game**: the raven is the two-model one (`RavenGiant`):
+  the walking model on the ground, its Walk clip played as fast as it
+  walks; the flying model in the air with its Fly clip; its strikes,
+  throws (and eating, which lifts the goblins the same way) and stomps
+  played by their clips, timed to the game's moments. The old `raven.glb`
+  is no longer used.
 
 Review notes, with the frames worth a check: `docs/raven_new_review.md`
-(pictures in `docs/raven_review/`). The test environment shows them ("New
-raven"). Not yet: the raven in the game (it still uses `raven.glb` and its
-procedural animation); clips for taking off, landing, attacking.
+(pictures in `docs/raven_review/`). The test environment shows them
+("Raven's clips"), and the Raven giant is the game's. Not yet: the flier's
+sheen in the game (`raven_fly.glb` still has its own; the 0.60 look is in
+the `.blend` only); clips for taking off and landing (it swaps models at
+once, in a puff of dust).
 
 ## The other giants
 

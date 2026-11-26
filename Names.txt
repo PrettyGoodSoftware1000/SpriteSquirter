@@ -17,10 +17,11 @@
 #   Storehouse         villagers carry what they gather to it
 #   Town guard         trains warriors, and archers once bows are researched
 #   Blacksmith         wheelbarrows and research
-#   Wizardry tower     trains wizards; spells (and Overcast) are researched there
+#   Wizardry tower     trains mages; spells (and Overcast) are researched there
 #   Granary            stores more food
 #   Shrine             makes animus; the creature is revived there
-#   Necromancer tower  turns wizards into necromancers; the Blood Sacrifice upgrade
+#   Necromancer tower  turns mages into necromancers; the Blood Sacrifice upgrade
+#   Storm Spire        trains Storm Banshees; makes Storm Essence; strikes enemies with chain lightning
 #   Decoration         can be built, but does nothing yet
 #   Showpiece          costs nothing to build, and does nothing
 #
@@ -41,7 +42,7 @@ Mushroom cottage    = Cottage           = Shroom Home
 Singing rocks       = Shrine            = Singing Stones
 Skull tower         = Necromancer tower = Necromancer's Tower
 Windmill            = Granary           = Windmill
-Crystal tower       = Decoration        = Ain't doing nothing
+Crystal tower       = Storm Spire       = Storm Spire
 Tall house          = Town guard        = Guard House
 StoreHouseAlt       = Showpiece         = Storehouse Alt
 
@@ -56,7 +57,8 @@ Granary description           = Stores food
 Shrine description            = Makes animus\nRevives the creature
 Town guard description        = Trains warriors
 Blacksmith description        = Wheelbarrows; research
-Wizardry tower description    = Trains wizards\nResearches spells
-Necromancer tower description = Turns wizards into necromancers\nBlood Sacrifice upgrade
+Wizardry tower description    = Trains mages\nResearches spells
+Necromancer tower description = Turns mages into necromancers\nBlood Sacrifice upgrade
+Storm Spire description       = Trains Storm Banshees\nStorm Essence; chain lightning
 Decoration description        = No use yet
 Showpiece description         = Free; no use

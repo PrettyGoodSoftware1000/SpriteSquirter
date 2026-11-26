@@ -9,12 +9,18 @@ extends RefCounted
 ## "buff_research_first" animus to research and each one after
 ## "buff_research_step" more; each takes "buff_research_seconds".
 ## The effects live in Creature (start_buff(), buff_on()).
+##
+## A "toggle" buff (Flag Bearer) is on until it is clicked off: raising it
+## costs "buff_cost_<id>" animus every time, and keeping it up costs
+## "buff_upkeep_<id>" animus every "buff_upkeep_seconds_<id>" (PlayMode).
 
 const BUFFS := [
 	{"id": "growth", "name": "Creature Growth",
 		"hint": "Your creature grows twice as fast for 2 minutes, shedding yellow sparkles."},
 	{"id": "aura", "name": "Flaming Aura",
 		"hint": "Flames fall from your creature for 30 seconds, burning every enemy within 10 metres."},
+	{"id": "flag", "name": "Flag Bearer", "toggle": true,
+		"hint": "Your fighters march on the nearest goblin cave, fighting every goblin and goblin building on the way. 5 animus to raise the flag, then 1 every 5 minutes; click again to lower it."},
 ]
 ## How many buttons the buff bar has room for.
 const SLOTS := 5
@@ -32,6 +38,11 @@ static func index_of(id: String) -> int:
 		if BUFFS[k].id == id:
 			return k
 	return -1
+
+
+## True for a buff that stays on until it is turned off (see the top).
+static func is_toggle(id: String) -> bool:
+	return bool(find(id).get("toggle", false))
 
 
 static func cost(id: String) -> int:

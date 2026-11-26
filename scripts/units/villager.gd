@@ -231,6 +231,17 @@ var charmed_until := 0.0
 ## twice as fast as an archer, who flies about and lands now and then.
 var fey := false
 var fey_archer := false
+## How far from a goblin cave's middle its attackers stand (it is big).
+const CAVE_REACH := 9.0
+## A Storm Banshee (trained at a Storm Spire): a winged villager in purple
+## (for now) who blows goblins back with gusts of wind (storm_wind()).
+var banshee := false
+## On the march behind the Flag Bearer (see marching()).
+var _marched := false
+## Knocked over by a gust: lying on its back until then (Game.now).
+var _fallen_until := 0.0
+## The banshees' looks: a woman's, in purple (made from the villagers' own).
+static var _banshee_looks: Array[Dictionary] = []
 var _wings: Array[Node3D] = []
 var _wing_phase := randf() * TAU
 var _hover := 0.0
@@ -1450,7 +1461,7 @@ func _process(delta: float) -> void:
 		_animate(delta)
 		return
 	var ground := Game.terrain.get_height(global_position.x, global_position.z)
-	if fey:
+	if fey or banshee:
 		_update_fey(delta)
 		ground = maxf(ground, Game.terrain.water_level_at(global_position.x, global_position.z)) + _hover
 	# Goblins swim across rivers and lakes.
@@ -1611,7 +1622,7 @@ func member() -> bool:
 
 ## True if the villager could start a job right now.
 func can_work() -> bool:
-	return member() and not skeleton and not child and not soldier and not wizard and not archer and state != State.DEAD and state != State.BURNING and state != State.HELD
+	return member() and not skeleton and not child and not soldier and not wizard and not archer and not banshee and state != State.DEAD and state != State.BURNING and state != State.HELD
 
 
 ## Grown-up villagers of the player's village and goblins fight. Children
@@ -2283,6 +2294,112 @@ func become_archer(post: Vector3) -> void:
 	Game.effects.spawn_dust(global_position, 0.5)
 
 
+## Trained at a Storm Spire: a Storm Banshee, with a fey's wings, in
+## purple. It blows attacking goblins back (storm_wind()) instead of fighting.
+func become_banshee(post: Vector3) -> void:
+	if banshee or soldier or wizard or archer or goblin or state == State.DEAD:
+		return
+	_unload()
+	clear_job()
+	pin = ""
+	banshee = true
+	add_to_group("banshees")
+	max_hp = Balance.num("banshee_health")
+	hp = max_hp
+	home = post
+	home_radius = 10.0
+	if _banshee_looks.is_empty():
+		for look in _looks:
+			if look.get("female", false):
+				_banshee_looks.append(_in_purple(look))
+	if not _banshee_looks.is_empty():
+		_wear(_banshee_looks[randi() % _banshee_looks.size()])
+	if _wings.is_empty():
+		_add_wings()
+	Game.effects.spawn_dust(global_position, 0.5)
+
+
+## `look` dyed purple: every colour but the skin turned most of the way to
+## violet. (A stand-in until the banshees have their own clothes.)
+static func _in_purple(look: Dictionary) -> Dictionary:
+	var out := look.duplicate()
+	var violet := Color(0.5, 0.22, 0.72)
+	for key: String in look:
+		if not (look[key] is ArrayMesh):
+			continue
+		var mesh: ArrayMesh = look[key]
+		var dyed := ArrayMesh.new()
+		for s in mesh.get_surface_count():
+			var arrays := mesh.surface_get_arrays(s)
+			var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+			for i in colors.size():
+				var c := colors[i]
+				var skin := false
+				for tone: Color in Art.SKIN_COLORS:
+					if absf(c.r - tone.r) + absf(c.g - tone.g) + absf(c.b - tone.b) < 0.25:
+						skin = true
+						break
+				if not skin and c.v > 0.12:
+					colors[i] = c.lerp(violet * Color(c.v * 1.6, c.v * 1.6, c.v * 1.6, 1.0), 0.75)
+			arrays[Mesh.ARRAY_COLOR] = colors
+			dyed.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			dyed.surface_set_material(s, mesh.surface_get_material(s))
+		out[key] = dyed
+	return out
+
+
+## A Storm Banshee hangs back and blows a gust at the goblins every
+## Balance "banshee_wind_seconds".
+func _gust_at(foe: Node3D, to: Vector3, delta: float) -> void:
+	var reach := Balance.num("banshee_wind_range")
+	_in_reach = to.length() <= reach * 0.8
+	if not _in_reach:
+		_move_towards(foe.global_position, 2.4 * _speed_scale, delta)
+		return
+	rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
+	if _attack_timer <= 0.0:
+		_attack_timer = Balance.num("banshee_wind_seconds")
+		storm_wind(to.normalized())
+
+
+## A gust along `dir`: every attacking goblin in a row "banshee_wind_width"
+## wide and "banshee_wind_range" long in front of it is pushed back
+## "banshee_wind_push" metres and knocked over. Returns how many.
+func storm_wind(dir: Vector3) -> int:
+	dir.y = 0.0
+	dir = dir.normalized()
+	var across := Vector3(dir.z, 0.0, -dir.x)
+	var half := Balance.num("banshee_wind_width") * 0.5
+	var reach := Balance.num("banshee_wind_range")
+	var hit := 0
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g == null or not g.is_alive() or g.charmed() or not (g.raiding or g.threatens(my_village())):
+			continue
+		var rel := g.global_position - global_position
+		rel.y = 0.0
+		var along := rel.dot(dir)
+		if along > -1.0 and along < reach and absf(rel.dot(across)) < half:
+			g.knock_over(dir, Balance.num("banshee_wind_push"))
+			hit += 1
+	for k in 5:
+		Game.effects.spawn_dust(global_position + dir * (2.0 + k * reach / 5.0), 1.0 + 0.3 * k)
+	return hit
+
+
+## Blown over (by a Storm Banshee's gust): it slides `metres` along `dir`
+## and lies on its back a moment before it gets up.
+func knock_over(dir: Vector3, metres: float) -> void:
+	if state == State.DEAD or state == State.HELD:
+		return
+	dir.y = 0.0
+	# (A shove slows by 16 m/s each second: see _process().)
+	var push := sqrt(2.0 * 16.0 * metres)
+	_shove = dir.normalized() * push
+	_stagger_until = Game.now + push / 16.0 + 1.0
+	_fallen_until = _stagger_until
+
+
 ## A fey villager trained at a Town guard: an archer who flies, shooting
 ## twice as fast (Balance "fey_archer_shot_speed").
 func become_fey_archer(post: Vector3) -> void:
@@ -2321,8 +2438,16 @@ func become_fey_archer(post: Vector3) -> void:
 ## A soldier, archer or wizard goes back to ordinary work (and would have
 ## to train again to return).
 func become_worker() -> void:
-	if not (soldier or wizard or archer) or state == State.DEAD:
+	if not (soldier or wizard or archer or banshee) or state == State.DEAD:
 		return
+	if banshee:
+		banshee = false
+		remove_from_group("banshees")
+		if not fey:
+			for w in _wings:
+				w.queue_free()
+			_wings.clear()
+			_hover = 0.0
 	for g in _gear_nodes:
 		g.queue_free()
 	_gear_nodes.clear()
@@ -2387,6 +2512,66 @@ func end_raid() -> void:
 		state = State.WALK
 
 
+## True while the creature carries the flag (the Flag Bearer buff): the
+## village's fighters march on the goblins' nearest cave.
+static func flag_up() -> bool:
+	return is_instance_valid(Game.creature) and Game.creature.buff_on("flag")
+
+
+## True for one of the player's fighters (warriors, archers, mages and
+## necromancers, Storm Banshees) while the flag is up.
+func marching() -> bool:
+	return owned and (soldier or archer or wizard or banshee) and flag_up()
+
+
+## The cave the flag leads to: the standing one nearest this villager.
+func _flag_cave() -> Node3D:
+	var best: Node3D = null
+	var best_d := INF
+	for node in get_tree().get_nodes_in_group("caves"):
+		var cave := node as Node3D
+		if not GoblinRaids.cave_standing(cave):
+			continue
+		var d := _flat_to(cave.global_position)
+		if d < best_d:
+			best_d = d
+			best = cave
+	return best
+
+
+## On the march: whatever is nearest of the goblins (raiding or not),
+## their buildings, and the cave itself, within reach. Null if nothing.
+func _march_foe() -> Node3D:
+	var reach := SOLDIER_AGGRO
+	var best: Node3D = null
+	var best_d := reach
+	for node in get_tree().get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g == null or not g.is_alive() or g.charmed() or g.state == State.HELD:
+			continue
+		var d := _flat_to(g.global_position)
+		if d < best_d:
+			best_d = d
+			best = g
+	if best != null:
+		return best
+	best_d = reach
+	for node in get_tree().get_nodes_in_group("goblin_buildings"):
+		var b := node as Destructible
+		if b == null or b.destroyed:
+			continue
+		var d := _flat_to(b.global_position) - b.footprint
+		if d < best_d:
+			best_d = d
+			best = b
+	if best != null:
+		return best
+	var cave := _flag_cave()
+	if cave != null and _flat_to(cave.global_position) < reach + CAVE_REACH:
+		return cave
+	return null
+
+
 ## Looks for someone to fight (or to run from), a few times a second.
 func _think() -> void:
 	if state == State.BURNING or state == State.RAISE or state == State.CROSS:
@@ -2400,6 +2585,12 @@ func _think() -> void:
 		var rival := _nearest_goblin(AGGRO * 2.0)
 		if rival != null:
 			_engage(rival)
+		return
+	if goblin and not raiding and flag_up() and not (state == State.FIGHT and _foe_ok()):
+		# At home with the village's fighters marching on it: it fights back.
+		var intruder := _nearest_villager(AGGRO)
+		if intruder != null and intruder.owned:
+			_engage(intruder)
 		return
 	if goblin:
 		if not raiding or (state == State.FIGHT and _foe_ok() and (_foe is Villager or _foe is Creature)):
@@ -2421,6 +2612,35 @@ func _think() -> void:
 			if building:
 				_engage(building)
 		return
+	# The flag is down again: those who marched on the cave come home.
+	if _marched and not marching():
+		_marched = false
+		_foe = null
+		if state == State.FIGHT or state == State.WALK:
+			state = State.IDLE
+			_timer = 0.0
+	# The flag is up: the fighters march on the goblins' cave, fighting all
+	# they meet on the way.
+	if marching():
+		_marched = true
+		if state == State.FIGHT and _foe_ok():
+			return
+		if state == State.POST:
+			_leave_post()
+			return
+		if state == State.CROSS or job == "train":
+			return
+		var foe := _march_foe()
+		if foe != null:
+			_engage(foe)
+			return
+		var cave := _flag_cave()
+		if cave != null:
+			var to_us := global_position - cave.global_position
+			to_us.y = 0.0
+			_target = cave.global_position + (to_us.normalized() if to_us.length_squared() > 0.01 else Vector3.FORWARD) * CAVE_REACH
+			state = State.WALK
+		return
 	# Archers take up posts on treehouses and rope bridges, and shoot from there.
 	if owned and archer and not fey_archer:
 		if state == State.POST:
@@ -2440,7 +2660,7 @@ func _think() -> void:
 		return
 	var fighter := can_fight()
 	var best: Villager = null
-	var reach := SOLDIER_AGGRO if soldier or wizard or archer or skeleton else (AGGRO if fighter else 8.0)
+	var reach := SOLDIER_AGGRO if soldier or wizard or archer or banshee or skeleton else (AGGRO if fighter else 8.0)
 	var best_d := INF
 	for node in goblins:
 		var g := node as Villager
@@ -2556,8 +2776,10 @@ func _engage(foe: Node3D) -> void:
 
 
 func _foe_ok() -> bool:
-	if not is_instance_valid(_foe) or (goblin and not raiding and not charmed()):
+	if not is_instance_valid(_foe) or (goblin and not raiding and not charmed() and not flag_up()):
 		return false
+	if _foe.is_in_group("caves"):
+		return GoblinRaids.cave_standing(_foe) and marching()
 	if _foe is GiantBat:
 		return (_foe as GiantBat).is_alive()
 	var v := _foe as Villager
@@ -2567,7 +2789,7 @@ func _foe_ok() -> bool:
 		if goblin:
 			# Goblins fight charmed goblins, and charmed goblins fight goblins.
 			return v.charmed() != charmed() if v.goblin else not charmed()
-		return not v.charmed() and (v.raiding or v.threatens(my_village()))
+		return not v.charmed() and (v.raiding or v.threatens(my_village()) or (v.goblin and marching()))
 	if charmed():
 		return false
 	var beast := _foe as Creature
@@ -2581,6 +2803,8 @@ func _foe_ok() -> bool:
 
 func _update_fight(delta: float) -> void:
 	_attack_timer = maxf(0.0, _attack_timer - delta)
+	if Game.now < _fallen_until:
+		return
 	if not _foe_ok():
 		_foe = null
 		_in_reach = false
@@ -2592,8 +2816,22 @@ func _update_fight(delta: float) -> void:
 	if wizard and (_foe is Villager or _foe is Creature or _foe is GiantBat):
 		_cast_at(_foe, to, delta)
 		return
+	if banshee and _foe is Villager:
+		_gust_at(_foe, to, delta)
+		return
 	if archer and (_foe is Villager or _foe is Creature or _foe is GiantBat):
 		_shoot_at(_foe, to, delta)
+		return
+	if not (_foe is Destructible) and not (_foe is Creature) and not (_foe is Villager) and not (_foe is GiantBat):
+		# A goblin cave (the flag is up): hacked at from its edge.
+		_in_reach = to.length() <= CAVE_REACH + 1.0
+		if not _in_reach:
+			_move_towards(_foe.global_position, (3.0 if soldier else 2.6) * _speed_scale, delta)
+			return
+		rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), minf(1.0, delta * 10.0))
+		if _attack_timer <= 0.0:
+			_attack_timer = ATTACK_SECONDS
+			GoblinRaids.hurt_cave(_foe, power())
 		return
 	var reach := 2.6 if ogre else 1.2
 	var building := _foe as Destructible
@@ -2691,7 +2929,7 @@ func take_hit(amount: float, from: Node3D) -> void:
 func _choose_wander_target() -> void:
 	# Often as not, a stroll over a rope bridge if there is one about.
 	# (Not for warriors, archers and wizards, who must be ready for a raid.)
-	if not goblin and not soldier and not archer and not wizard and randf() < 0.6 and _try_bridge(home, true):
+	if not goblin and not soldier and not archer and not wizard and not banshee and randf() < 0.6 and _try_bridge(home, true):
 		return
 	for attempt in 6:
 		var a := randf() * TAU
@@ -2878,6 +3116,11 @@ func _pose(k: int, thigh: float, knee: float, arm: float, elbow: float, out: flo
 
 
 func _animate(delta: float) -> void:
+	if Game.now < _fallen_until:
+		# Knocked flat on its back by a gust.
+		_body.rotation.x = lerpf(_body.rotation.x, -1.4, minf(1.0, delta * 9.0))
+		_body.position.y = lerpf(_body.position.y, 0.15, minf(1.0, delta * 9.0))
+		return
 	var panicking := state == State.FLEE or state == State.BURNING or state == State.HELD
 	var blend := minf(1.0, delta * 12.0)
 	if is_working():
@@ -2901,7 +3144,7 @@ func _animate(delta: float) -> void:
 		_body.position.y = absf(lift) * 0.05
 	else:
 		_body.position.y = lerpf(_body.position.y, 0.0, blend)
-	if fey and _hover > 0.5:
+	if (fey or banshee) and _hover > 0.5:
 		# Flying: no steps; leaning into the flight when going forwards,
 		# legs trailing, upright while hovering in place.
 		stride = 0.0
@@ -3177,7 +3420,7 @@ func release() -> void:
 
 ## Carried away for good (into a goblin cave): gone without a body or bones.
 func carried_off() -> void:
-	for group in ["villagers", "people", "soldiers", "wizards", "archers", "necromancers"]:
+	for group in ["villagers", "people", "soldiers", "wizards", "archers", "necromancers", "banshees"]:
 		remove_from_group(group)
 	state = State.DEAD
 	queue_free()
@@ -3204,7 +3447,7 @@ func _die(charred: bool) -> void:
 	if state == State.DEAD:
 		return
 	state = State.DEAD
-	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards", "archers", "necromancers", "skeletons"]:
+	for group in ["villagers", "people", "goblins", "ogres", "raiders", "soldiers", "wizards", "archers", "necromancers", "banshees", "skeletons"]:
 		remove_from_group(group)
 	if is_instance_valid(village):
 		remove_from_group(village.people_group)

@@ -23,8 +23,8 @@ const DEFAULT_SETTINGS := {
 	"villager_detail": 300.0, # metres from the camera within which villagers are drawn in full detail (300: always)
 	"construction_rate": 1.0, # how many times as fast the village's buildings go up
 	"training_time": 1.0, # training times are multiplied by this
-	"influence_start": 45.0, # radius in metres of a new village's influence
-	"influence_per_person": 1.0, # metres the influence grows for every villager
+	"influence_start": 22.5, # radius in metres of a new village's influence, before its people (0.61: half what it was)
+	"influence_per_person": 3.0, # metres the influence grows for every villager (so 20 villagers start it at 82.5)
 	"crop_growth_rate": 1.0, # how many times as fast wheat ripens (balancing.txt crop_grow_seconds at 1)
 	"night_darkness": -100.0, # percent darker the night is than it was made (negative: lighter)
 	"starve_per_minute": 6.0, # villagers who starve a minute while there is no food

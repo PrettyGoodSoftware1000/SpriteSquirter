@@ -22,7 +22,7 @@ extends Node
 ## (the jobs panel). Each Town guard trains one warrior at a time, taking
 ## Balance "warrior_training_seconds", up to WARRIORS_PER_GUARD; each
 ## Wizardry tower trains one wizard at a time, taking
-## "wizard_training_seconds", up to WIZARDS_PER_ROCKS. (The dev menu's
+## "wizard_training_seconds", up to MAGES_PER_TOWER. (The dev menu's
 ## training time multiplies all the training times.) Buildings train side
 ## by side. A warrior or wizard sent back to work must train from the start
 ## to return. Recruits come from the unassigned workers, so no job's count
@@ -52,8 +52,8 @@ extends Node
 ## Game.settings.starve_per_minute of them a minute (the dev menu's
 ## Starvation deaths), until there is food again.
 
-const RESOURCES := ["lumber", "stone", "food", "bones", "animus", "magicko"]
-const START_RESOURCES := {"lumber": 100.0, "stone": 100.0, "food": 100.0, "bones": 0.0, "animus": 0.0, "magicko": 30.0}
+const RESOURCES := ["lumber", "stone", "food", "bones", "animus", "magicko", "storm_essence"]
+const START_RESOURCES := {"lumber": 100.0, "stone": 100.0, "food": 100.0, "bones": 0.0, "animus": 0.0, "magicko": 30.0, "storm_essence": 0.0}
 ## What the Storehouses (and, for food, the Granaries) hold.
 const STORED := ["lumber", "stone", "food", "bones"]
 const HOME_RADIUS := 16.0
@@ -68,7 +68,9 @@ const TREE_WOOD := 30.0
 const BUSH_WOOD := 10.0
 const WARRIORS_PER_GUARD := 4
 const ARCHERS_PER_GUARD := 2
-const WIZARDS_PER_ROCKS := 2
+## (Wizards are called Mages in the game since 0.61; the code still calls
+## them wizards, and so do balancing.txt's names.)
+const MAGES_PER_TOWER := 4
 ## Magicko each wizard makes per minute.
 ## Magicko a wizard makes a minute (5 every 2 minutes): Balance "wizard_magicko".
 ## Food eaten per minute.
@@ -76,6 +78,7 @@ const FOOD_PER_VILLAGER := 1.0
 const FOOD_PER_WARRIOR := 3.0
 const FOOD_PER_WIZARD := 2.0
 const FOOD_PER_ARCHER := 2.0
+const FOOD_PER_BANSHEE := 2.0
 const STARVE_AFTER := 30.0
 ## The most times a game "Villager stuck" is said.
 const STUCK_REPORTS := 3
@@ -86,9 +89,10 @@ const STUCK_REPORTS := 3
 const ARMY := {
 	"warrior": ["guard", WARRIORS_PER_GUARD],
 	"archer": ["guard", ARCHERS_PER_GUARD],
-	"wizard": ["wizard", WIZARDS_PER_ROCKS],
+	"wizard": ["wizard", MAGES_PER_TOWER],
 	"necromancer": ["necro", 2],
 	"fey_archer": ["guard", 0],
+	"banshee": ["storm", 0],
 }
 ## Blood Sacrifice: how long the magicko boost lasts, and how near the
 ## click a villager must be. How big the boost is: blood_boost().
@@ -127,7 +131,9 @@ var resources := {}
 var birth_progress := 0.0
 
 ## How many warriors and wizards the player asked for.
-var wanted := {"warrior": 0, "archer": 0, "wizard": 0, "necromancer": 0, "fey_archer": 0}
+var wanted := {"warrior": 0, "archer": 0, "wizard": 0, "necromancer": 0, "fey_archer": 0, "banshee": 0}
+## Storm Spire -> when (Game.now) it may strike with chain lightning again.
+var _spire_ready := {}
 ## Kinky Fey Stuff: until then (Game.now) births come twice as fast and
 ## every child is fey; and the villagers away with a pixie, each ->
 ## {"t": seconds away, "pixie": its pixie}.
@@ -486,6 +492,8 @@ func count(role: String) -> int:
 			return _in_group("necromancers")
 		"fey_archer":
 			return _in_group("fey_archers")
+		"banshee":
+			return _in_group("banshees")
 	return wizards()
 
 
@@ -501,6 +509,8 @@ func fey_adults() -> int:
 ## How many of `role` one of its buildings can keep, and how long each
 ## takes to train.
 func per_building(role: String) -> int:
+	if role == "banshee":
+		return roundi(Balance.num("banshees_per_spire"))
 	return roundi(Balance.num("necromancers_per_tower")) if role == "necromancer" else ARMY[role][1]
 
 
@@ -988,6 +998,8 @@ func food_upkeep() -> float:
 			total += FOOD_PER_WIZARD
 		elif v.archer:
 			total += FOOD_PER_ARCHER
+		elif v.banshee:
+			total += FOOD_PER_BANSHEE
 		else:
 			total += FOOD_PER_VILLAGER
 	return total + creature_upkeep()
@@ -1229,6 +1241,45 @@ func shrines() -> Array[Destructible]:
 ## villages too (NeutralVillage.worshipers()), Balance "wizard_magicko" from
 ## each wizard, all blood_boost() times as much while a Blood Sacrifice
 ## lasts. (Magic trees give theirs themselves.)
+## Where the village's magicko comes from, a minute: [amount, what], for
+## the magicko rate's tooltip. (They add up to magicko_per_minute().)
+func magicko_sources() -> Array[Array]:
+	var rate: float = Game.settings.magicko_rate
+	var mages := wizards()
+	var fey := fey_adults()
+	var plain := maxi(0, adults() - mages - fey)
+	var worshipers := 0
+	for node in get_tree().get_nodes_in_group("neutral_villages"):
+		worshipers += (node as NeutralVillage).grown_worshipers()
+	var out: Array[Array] = [
+		[mages * Balance.num("wizard_magicko"), "%d mage%s" % [mages, "" if mages == 1 else "s"]],
+		[plain * rate, "%d villager%s" % [plain, "" if plain == 1 else "s"]],
+	]
+	if fey > 0:
+		out.append([fey * Balance.num("fey_magicko") * rate, "%d fey villager%s" % [fey, "" if fey == 1 else "s"]])
+	if worshipers > 0:
+		out.append([worshipers * rate, "%d worshiper%s in neutral villages" % [worshipers, "" if worshipers == 1 else "s"]])
+	if blood_active():
+		var base := 0.0
+		for part in out:
+			base += part[0]
+		out.append([base * (blood_boost() - 1.0), "Blood Sacrifice (x%s)" % String.num(blood_boost(), 1)])
+	return out
+
+
+## The magicko rate's tooltip: the magicko a minute, and where it comes from.
+func magicko_tip() -> String:
+	var lines := PackedStringArray(["Magicko: %s a minute" % _signed(magicko_per_minute())])
+	for part in magicko_sources():
+		lines.append("%s from %s" % [_signed(part[0]), part[1]])
+	return "\n".join(lines)
+
+
+static func _signed(value: float) -> String:
+	var text := str(roundi(value)) if absf(value - roundf(value)) < 0.05 else String.num(value, 1)
+	return ("+" + text) if value >= 0.0 else text
+
+
 func magicko_per_minute() -> float:
 	var grown := adults() - wizards()
 	var fey_extra := fey_adults() * (Balance.num("fey_magicko") - 1.0)
@@ -1261,6 +1312,7 @@ func _process(delta: float) -> void:
 	# Animus: Balance "animus_per_minute" to begin with, and more for every
 	# Shrine the village has built (not the ones its site came with).
 	give("animus", (Balance.num("animus_per_minute") + built_shrines() * Balance.num("animus_per_shrine")) / 60.0 * delta)
+	_update_storm_spires(delta)
 	_live(delta)
 	_update_research(delta)
 	_update_spell_research(delta)
@@ -1412,6 +1464,8 @@ func work(v: Villager, delta: float) -> void:
 					"fey_archer":
 						v.guard = post
 						v.become_fey_archer(post.global_position)
+					"banshee":
+						v.become_banshee(post.global_position)
 					"necromancer":
 						# A wizard upgraded: no longer one of the wizards asked for.
 						v.become_necromancer(post.global_position)
@@ -1627,6 +1681,67 @@ func _spare_farmer(workers: Array[Villager], field: CropField, farmers: Dictiona
 	return null
 
 
+## The village's standing Storm Spires.
+func storm_spires() -> Array[Destructible]:
+	var out: Array[Destructible] = []
+	for node in get_tree().get_nodes_in_group(buildings_group):
+		var b := node as Destructible
+		if BuildingCatalog.role(b.get_meta("kind", "")) == "storm" and not b.destroyed:
+			out.append(b)
+	return out
+
+
+## Each Storm Spire makes Storm Essence, and strikes the nearest enemy
+## that comes within Balance "storm_lightning_range" with chain lightning
+## (no more often than "storm_lightning_seconds"), for
+## "storm_lightning_cost" Storm Essence.
+func _update_storm_spires(delta: float) -> void:
+	var spires := storm_spires()
+	if spires.is_empty():
+		return
+	give("storm_essence", spires.size() * Balance.num("storm_essence_per_minute") / 60.0 * delta)
+	var cost := Balance.num("storm_lightning_cost")
+	for b in spires:
+		if Game.now < float(_spire_ready.get(b, 0.0)) or float(resources.get("storm_essence", 0.0)) < cost:
+			continue
+		# (Looked for twice a second.)
+		_spire_ready[b] = Game.now + 0.5
+		var foe := _storm_target(b.global_position)
+		if foe == null:
+			continue
+		give("storm_essence", -cost, false)
+		_spire_ready[b] = Game.now + Balance.num("storm_lightning_seconds")
+		ChainLightning.cast(foe.global_position, 0.0)
+
+
+## The nearest enemy within the Storm Spire's reach of `at`: a goblin (not
+## charmed), an ogre, a giant bat or the Balrog. Null if none.
+func _storm_target(at: Vector3) -> Node3D:
+	var reach := Balance.num("storm_lightning_range")
+	var best: Node3D = null
+	var best_d := reach
+	var tree := get_tree()
+	for node in tree.get_nodes_in_group("goblins"):
+		var g := node as Villager
+		if g == null or not g.is_alive() or g.charmed():
+			continue
+		var d := Vector2(g.global_position.x - at.x, g.global_position.z - at.z).length()
+		if d < best_d:
+			best_d = d
+			best = g
+	for node in tree.get_nodes_in_group("bats") + tree.get_nodes_in_group("balrogs"):
+		var n := node as Node3D
+		if n is Creature and (n as Creature).knocked_out:
+			continue
+		if n is GiantBat and not (n as GiantBat).is_alive():
+			continue
+		var d := Vector2(n.global_position.x - at.x, n.global_position.z - at.z).length()
+		if d < best_d:
+			best_d = d
+			best = n
+	return best
+
+
 func _training_buildings(role: String) -> Array[Destructible]:
 	var out: Array[Destructible] = []
 	for node in get_tree().get_nodes_in_group(buildings_group):
@@ -1664,7 +1779,7 @@ func _manage_army() -> void:
 			else:
 				for v in people():
 					if (v.soldier and role == "warrior") or (v.wizard and not v.necromancer and role == "wizard") \
-							or (v.fey_archer and role == "fey_archer") \
+							or (v.fey_archer and role == "fey_archer") or (v.banshee and role == "banshee") \
 							or (v.archer and not v.fey_archer and role == "archer") or (v.necromancer and role == "necromancer"):
 						v.become_worker()
 						break

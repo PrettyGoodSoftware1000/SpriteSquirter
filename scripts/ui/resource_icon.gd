@@ -2,10 +2,10 @@ class_name ResourceIcon
 extends Control
 ## A small resource icon drawn with vector shapes, so it stays sharp at any
 ## UI scale: a log (lumber), a stone, an ear of wheat (food), a blue droplet
-## (magicko), a bone (bones), a golden cloud (animus) or a little person
-## (people).
+## (magicko), a bone (bones), a golden cloud (animus), a violet lightning
+## bolt (Storm Essence) or a little person (people).
 
-const KINDS := ["lumber", "stone", "food", "bones", "animus", "magicko", "people"]
+const KINDS := ["lumber", "stone", "food", "bones", "animus", "magicko", "storm_essence", "people"]
 const INK := Color(0.08, 0.06, 0.05)
 
 var kind := "lumber"
@@ -26,7 +26,7 @@ static func cost_row(cost: Dictionary, font_size := 14) -> HBoxContainer:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 3)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for res in ["lumber", "stone", "food", "bones", "animus", "magicko"]:
+	for res in ["lumber", "stone", "food", "bones", "animus", "magicko", "storm_essence"]:
 		if not cost.has(res):
 			continue
 		if row.get_child_count() > 0:
@@ -95,6 +95,11 @@ func _draw() -> void:
 				pts.append(p.call(centre.x + cos(a) * r, centre.y + sin(a) * r))
 			_shape(pts, Color(0.32, 0.6, 1.0))
 			_disc(p.call(0.42, 0.64), s * 0.07, Color(0.8, 0.92, 1.0), false)
+		"storm_essence":
+			# A lightning bolt, violet.
+			var bolt := PackedVector2Array([p.call(0.6, 0.04), p.call(0.22, 0.56), p.call(0.47, 0.56), p.call(0.36, 0.96),
+				p.call(0.8, 0.4), p.call(0.54, 0.4), p.call(0.68, 0.04)])
+			_shape(bolt, Color(0.74, 0.5, 1.0))
 		"people":
 			_disc(p.call(0.5, 0.28), s * 0.17, Color(0.98, 0.9, 0.78))
 			var body := PackedVector2Array()

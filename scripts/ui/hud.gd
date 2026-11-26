@@ -54,7 +54,7 @@ const SCULPT_NAMES := ["Raise", "Lower", "Flatten", "Smooth"]
 const RESOURCE_COLORS := {
 	"lumber": Color(0.95, 0.7, 0.42), "stone": Color(0.8, 0.82, 0.86), "food": Color(0.7, 0.92, 0.4),
 	"people": Color(1.0, 0.95, 0.85), "magicko": Color(0.8, 0.6, 1.0), "bones": Color(0.95, 0.92, 0.8),
-	"animus": Color(1.0, 0.88, 0.35),
+	"animus": Color(1.0, 0.88, 0.35), "storm_essence": Color(0.78, 0.6, 1.0),
 }
 ## Resource icons in the village panel, and the spell squares (half of 3 times as big).
 const ICON_SIZE := 24
@@ -81,7 +81,7 @@ const SETTING_SLIDERS := [
 	["villager_detail", "Villager detail within", 0.0, 300.0, 10.0, "m"],
 	["construction_rate", "Construction rate", 0.25, 10.0, 0.25, "x"],
 	["training_time", "Training time", 0.1, 3.0, 0.1, "x"],
-	["influence_start", "Starting influence", 10.0, 150.0, 5.0, "m"],
+	["influence_start", "Starting influence", 0.0, 150.0, 2.5, "m"],
 	["influence_per_person", "Influence per person", 0.0, 5.0, 0.25, "m"],
 	["night_darkness", "Night darkness", -150.0, 90.0, 5.0, "%"],
 	["starve_per_minute", "Starvation deaths", 0.0, 30.0, 0.5, "/min"],
@@ -94,14 +94,16 @@ const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.6
 const ROLES := {
 	"warrior": ["Warriors", "guard", "warrior"],
 	"archer": ["Archers", "guard", "archer"],
-	"wizard": ["Wizards", "wizard", "wizard"],
+	"wizard": ["Mages", "wizard", "mage"],
 	"necromancer": ["Necromancers", "necro", "necromancer"],
 	"fey_archer": ["Fey Archers", "guard", "fey archer"],
+	"banshee": ["Storm Banshees", "storm", "storm banshee"],
 }
 
 var _hint: Label
 var _resource_labels := {}
 var _rate_labels := {}
+var _resource_items := {}
 var _warning: Label
 var _workers_count: Label
 var _resurrect: Button
@@ -292,6 +294,7 @@ func _build_status_panel(root: Control) -> void:
 		item.add_child(rate)
 		_resource_labels[res] = amount
 		_rate_labels[res] = rate
+		_resource_items[res] = item
 		grid.add_child(item)
 		if JOB_NAMES.has(res):
 			grid.add_child(_quota_controls(res))
@@ -634,7 +637,7 @@ func update_buffs(village: PlayerVillage, beast: Creature, play: Node) -> void:
 		var cooling: float = play.buff_cooling(id)
 		var full := maxf(BuffBook.cooldown(id), 0.01)
 		(slot.fill as CooldownFill).set_left(clampf(cooling / full, 0.0, 1.0))
-		(slot.left as Label).text = ("%d" % ceili(beast.buff_left(id))) if on else ""
+		(slot.left as Label).text = ("up" if BuffBook.is_toggle(id) else "%d" % ceili(beast.buff_left(id))) if on else ""
 		var cannot := not on and (village.amount("animus") < BuffBook.cost(id) or cooling > 0.0 or not is_instance_valid(beast) or beast.knocked_out)
 		(slot.button as Button).modulate = Color(1.0, 0.85, 0.35) if on else (Color(1.0, 0.6, 0.6, 0.75) if cannot else Color.WHITE)
 
@@ -645,6 +648,8 @@ func update_creature(beast: Creature) -> void:
 	if not is_instance_valid(beast):
 		return
 	_resurrect.visible = beast.knocked_out
+	if beast.knocked_out:
+		_resurrect.text = "Resurrect at the %s (%d animus)" % [BuildingCatalog.role_name("shrine"), beast.resurrect_cost()]
 	var values := {"health": [beast.hp, beast.max_hp], "stamina": [beast.stamina, beast.max_stamina], "magicko": [beast.magicko, beast.max_magicko]}
 	for stat: String in values:
 		var now: float = values[stat][0]
@@ -1317,6 +1322,8 @@ func set_resources(village: PlayerVillage, clock: String) -> void:
 		(_rate_labels[res] as Label).text = ("+%d" % change) if change >= 0 else str(change)
 	# (Bones only show the total.)
 	(_rate_labels.bones as Label).text = ""
+	# Where the magicko comes from.
+	(_resource_items.magicko as Control).tooltip_text = village.magicko_tip()
 	if village.blood_active():
 		_resource_labels.magicko.text += " x%s" % _number(village.blood_boost())
 	var people: Label = _resource_labels.people

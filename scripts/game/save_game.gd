@@ -204,7 +204,7 @@ static func collect(play: PlayMode) -> Dictionary:
 			(data.others as Array).append(entry)
 	var c := play.creature
 	if is_instance_valid(c):
-		data["creature"] = {"pos": _vec(c.global_position), "yaw": c.rotation.y, "age": c.age, "growth_paid": c.growth_paid,
+		data["creature"] = {"pos": _vec(c.global_position), "yaw": c.rotation.y, "age": c.age, "growth_paid": c.growth_paid, "resurrections": c.resurrections,
 			"hp": c.hp, "dead": c.knocked_out, "levels": c.levels.duplicate(), "used": c.used.duplicate(),
 			"stamina": c.stamina, "magicko": c.magicko,
 			"knowledge": c.mind.knowledge.duplicate(true), "behavior": c.mind.behavior.duplicate(true), "seeds_thrown": c.mind.seeds_thrown}
@@ -222,6 +222,8 @@ static func _role(p: Villager) -> String:
 		return "wizard"
 	if p.fey_archer:
 		return "fey_archer"
+	if p.banshee:
+		return "banshee"
 	if p.archer:
 		return "archer"
 	if p.soldier:
@@ -494,7 +496,7 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 			person._grow(0.0)
 		person.pin = str(p.get("pin", ""))
 		var role := str(p.get("role", ""))
-		var post := _nearest_with_role(tree, at, "necro" if role == "necromancer" else ("wizard" if role == "wizard" else "guard"), home_village.buildings_group)
+		var post := _nearest_with_role(tree, at, {"necromancer": "necro", "wizard": "wizard", "banshee": "storm"}.get(role, "guard"), home_village.buildings_group)
 		var post_at := post.global_position if post != null else home_village.center
 		match role:
 			"warrior":
@@ -513,6 +515,8 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 			"necromancer":
 				person.become_wizard(post_at)
 				person.become_necromancer(post_at)
+			"banshee":
+				person.become_banshee(post_at)
 		person.hp = minf(float(p.hp), person.max_hp)
 	for p: Dictionary in d.get("others", []):
 		var at := _v3(p.pos)
@@ -550,6 +554,7 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 		var beast := play._make_creature(_v3(cd.pos), float(cd.yaw))
 		beast.age = float(cd.age)
 		beast.growth_paid = int(cd.growth_paid)
+		beast.resurrections = int(cd.get("resurrections", 0))
 		beast._grow(0.0)
 		for stat: String in cd.get("levels", {}):
 			beast.levels[stat] = int(cd.levels[stat])

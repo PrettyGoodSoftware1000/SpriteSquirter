@@ -140,6 +140,7 @@ func _ready() -> void:
 	raids.balrog_came.connect(func() -> void: _announce(Texts.line("balrog_came")))
 	raids.balrog_grown.connect(func() -> void: _announce(Texts.line("balrog_grown")))
 	raids.balrog_died.connect(func() -> void: _announce(Texts.line("balrog_died")))
+	raids.cave_fell.connect(func() -> void: _announce(Texts.line("cave_fell")))
 	raids.raid_ended.connect(func() -> void: _announce(Texts.line("raid_ended")))
 	raids.neutral_raid_started.connect(func(count: int) -> void: _announce(Texts.line("raid_neutral", {"goblins": count})))
 	GoblinRaids.neutral_start = 0
@@ -600,12 +601,11 @@ func _store_under(b: Destructible, p: Vector3) -> bool:
 
 ## The player's creature (Game.creature_kind), at `pos` facing `facing`.
 func _make_creature(pos: Vector3, facing: float) -> Creature:
-	creature = Creature.new()
+	creature = Creature.make(Game.creature_kind)
 	creature.name = "Creature"
-	creature.kind = Game.creature_kind
 	Game.world_root.add_child(creature)
 	creature.knocked_down.connect(func() -> void:
-		_announce(Texts.line("creature_died", {"creature": creature.species_name().to_lower(), "animus": roundi(Balance.num("resurrect_animus"))})))
+		_announce(Texts.line("creature_died", {"creature": creature.species_name().to_lower(), "animus": creature.resurrect_cost()})))
 	creature.got_up.connect(func() -> void: _announce(Texts.line("creature_resurrected", {"creature": creature.species_name().to_lower()})))
 	creature.place(pos, facing)
 	Game.creature = creature
@@ -791,12 +791,12 @@ func _on_left_click() -> void:
 
 
 ## The Resurrect button: brings the dead creature back to life at the
-## nearest Shrine, for Balance "resurrect_animus" animus.
+## nearest Shrine, for its resurrect_cost() animus.
 func resurrect() -> void:
 	if creature == null or not creature.knocked_out:
 		return
 	var who := creature.species_name().to_lower()
-	var cost := roundi(Balance.num("resurrect_animus"))
+	var cost := creature.resurrect_cost()
 	var shrines := village.shrines()
 	if shrines.is_empty():
 		_announce(Texts.line("resurrect_no_shrine", {"creature": who}))
@@ -855,6 +855,10 @@ func buff_cooling(id: String) -> float:
 func cast_buff(id: String) -> String:
 	var buff := BuffBook.find(id)
 	var problem := ""
+	if not buff.is_empty() and BuffBook.is_toggle(id) and creature != null and creature.buff_on(id):
+		# A toggle that is up: down it comes (for nothing).
+		lower_flag(id)
+		return ""
 	if buff.is_empty():
 		problem = "There is no such buff."
 	elif creature == null or creature.knocked_out:
@@ -871,10 +875,47 @@ func cast_buff(id: String) -> String:
 		hud.set_hint(problem)
 		return problem
 	village.give("animus", -BuffBook.cost(id))
+	if BuffBook.is_toggle(id):
+		creature.start_buff(id, INF)
+		_upkeep_due[id] = Game.now + Balance.num("buff_upkeep_seconds_" + id)
+		_announce(Texts.line("flag_raised", {"animus": roundi(Balance.num("buff_upkeep_" + id)),
+			"minutes": Hud._number(Balance.num("buff_upkeep_seconds_" + id) / 60.0)}))
+		return ""
 	creature.start_buff(id, BuffBook.seconds(id))
 	_buff_ready_at[id] = Game.now + BuffBook.seconds(id) + BuffBook.cooldown(id)
 	hud.set_hint("%s: %d seconds." % [buff.name, roundi(BuffBook.seconds(id))])
 	return ""
+
+
+## Toggle buffs (BuffBook): when each next costs its upkeep (Game.now).
+var _upkeep_due := {}
+
+
+## Takes toggle buff `id` (the Flag Bearer) down.
+func lower_flag(id: String, why := "flag_lowered") -> void:
+	if creature != null:
+		creature.stop_buff(id)
+	_upkeep_due.erase(id)
+	_announce(Texts.line(why))
+
+
+## Keeping the toggle buffs up: each costs its upkeep when it falls due,
+## and comes down when the animus runs out or the creature dies.
+func _update_toggle_buffs() -> void:
+	if creature == null:
+		return
+	for id: String in _upkeep_due.keys():
+		if not creature.buff_on(id):
+			_upkeep_due.erase(id)
+		elif creature.knocked_out:
+			lower_flag(id, "flag_fell")
+		elif Game.now >= float(_upkeep_due[id]):
+			var upkeep := roundi(Balance.num("buff_upkeep_" + id))
+			if village.amount("animus") < upkeep:
+				lower_flag(id, "flag_no_animus")
+			else:
+				village.give("animus", -upkeep)
+				_upkeep_due[id] = float(_upkeep_due[id]) + Balance.num("buff_upkeep_seconds_" + id)
 
 
 ## Right-click: the creature goes there, fighting whatever it meets on the
@@ -1820,6 +1861,7 @@ func _update_ui() -> void:
 	hud.update_spells(village.amount("magicko"), costs, cooling, states, not _choosing)
 	hud.update_creature(creature)
 	hud.update_buffs(village, creature, self)
+	_update_toggle_buffs()
 	hud.set_blood(village.blood_active())
 	if hud.is_build_menu_open():
 		hud.update_build_menu(village)

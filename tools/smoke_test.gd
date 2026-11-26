@@ -67,6 +67,11 @@ func _run() -> void:
 	game.settings.magicko_rate = 30.0
 	# The test's timings were made with a 24-minute day and night.
 	game.settings.day_minutes = 16.0
+	# (The test's villages are far bigger than a real one: at 0.61's 3 m of
+	# influence a villager they would cover the island, and leave the
+	# goblins nowhere to build. The influence it was made with.)
+	game.settings.influence_start = 45.0
+	game.settings.influence_per_person = 1.0
 	game.settings.night_minutes = 8.0
 	# Goblins spawn and build as they used to, for the raid checks.
 	game.settings.goblin_rate = 2.0
@@ -422,7 +427,7 @@ func _run() -> void:
 		rocks.set_meta("kind", "moon_tower")
 		rocks.global_position = village.center + Vector3(-12, 0, 10)
 		rocks.add_to_group("player_buildings")
-		_check(village.max_count("wizard") == wizards_allowed + PlayerVillage.WIZARDS_PER_ROCKS, "a Wizardry tower allows 2 wizards (%d)" % village.max_count("wizard"))
+		_check(village.max_count("wizard") == wizards_allowed + PlayerVillage.MAGES_PER_TOWER, "a Wizardry tower allows 4 mages (%d)" % village.max_count("wizard"))
 		village.set_wanted("wizard", 1)
 		# Training pauses while the recruit fights or flees, so allow for a raid.
 		for k in 30:
@@ -761,6 +766,12 @@ func _run() -> void:
 		play.resurrect()
 		_check(not beast.knocked_out and is_equal_approx(beast.hp, beast.max_hp) and village.amount("animus") == 7
 			and beast.global_position.distance_to(shrine.global_position) < 20.0, "5 animus brings it back to life at the Shrine")
+		var next_life := beast.resurrect_cost()
+		beast.resurrections = 50
+		_check(next_life == mini(roundi(Balance.num("resurrect_animus") + Balance.num("resurrect_animus_step")), roundi(Balance.num("resurrect_animus_most")))
+			and beast.resurrect_cost() == roundi(Balance.num("resurrect_animus_most")),
+			"each resurrection costs resurrect_animus_step more than the last, up to resurrect_animus_most (%d next, %d at most)" % [next_life, beast.resurrect_cost()])
+		beast.resurrections = 1
 		# A Granary stores more food.
 		var food_cap := village.capacity("food")
 		var granary := BuildingFactory.create("windmill", RandomNumberGenerator.new())
@@ -1979,6 +1990,117 @@ func _run() -> void:
 		beast._buffs.clear()
 		if is_instance_valid(singed):
 			singed.queue_free()
+		# Where the magicko comes from, when the mouse is over its rate.
+		var magicko_sum := 0.0
+		for part: Array in village.magicko_sources():
+			magicko_sum += float(part[0])
+		await _wait(0.2)
+		var magicko_tip: String = play.hud._resource_items.magicko.tooltip_text
+		_check(is_equal_approx(magicko_sum, village.magicko_per_minute()) and magicko_tip.contains("mage") and magicko_tip.contains("villager"),
+			"the mouse over the magicko rate shows where it comes from (%s)" % magicko_tip.replace("
+", " / "))
+		# The Storm Spire (the Crystal tower): Storm Essence, chain lightning, Storm Banshees.
+		var spire := BuildingFactory.create("crystal_tower", RandomNumberGenerator.new())
+		game.world_root.add_child(spire)
+		spire.set_meta("kind", "crystal_tower")
+		spire.global_position = village.center + Vector3(18, 0, -16)
+		spire.add_to_group("player_buildings")
+		_check(BuildingCatalog.role("crystal_tower") == "storm" and BuildingCatalog.title("crystal_tower") == "Storm Spire"
+			and village.max_count("banshee") == roundi(Balance.num("banshees_per_spire")), "the Crystal tower is the Storm Spire, and trains Storm Banshees")
+		village.resources.storm_essence = 0.0
+		village._spire_ready[spire] = game.now + 1000.0
+		await _wait(6.0)
+		var essence: float = village.resources.storm_essence
+		_check(essence > Balance.num("storm_essence_per_minute") * 0.1 * 0.7, "a Storm Spire makes Storm Essence (%.2f in 6 s)" % essence)
+		var zapped := WorldPopulator.spawn_villager(game.world_root, game.terrain, spire.global_position + Vector3(20, 0, 0), 0.5, true)
+		zapped.process_mode = Node.PROCESS_MODE_DISABLED
+		var zapped_hp := zapped.hp
+		village.resources.storm_essence = Balance.num("storm_lightning_cost") + 1.0
+		village._spire_ready.clear()
+		await _wait(1.5)
+		_check((not is_instance_valid(zapped) or zapped.hp < zapped_hp) and village.resources.storm_essence < 2.0,
+			"it strikes a goblin within storm_lightning_range with chain lightning, for storm_lightning_cost Storm Essence")
+		if is_instance_valid(zapped):
+			zapped.queue_free()
+		var banshee_time := Balance.num("banshee_training_seconds")
+		Balance.values["banshee_training_seconds"] = 1.0
+		village.give("food", 100.0)
+		village.set_wanted("banshee", 1)
+		# (The recruit walks to the Spire first.)
+		for k in 40:
+			await _wait(4.0)
+			if village.count("banshee") > 0:
+				break
+		var banshees := get_tree().get_nodes_in_group("banshees")
+		var storm_girl: Villager = banshees[0] if not banshees.is_empty() else null
+		_check(storm_girl != null and storm_girl.banshee and not storm_girl._wings.is_empty() and is_equal_approx(storm_girl.max_hp, Balance.num("banshee_health")),
+			"a Storm Spire trains a Storm Banshee, with wings (wanted %d, most %d, free %d, training %d, banshees %d)" % [village.wanted.banshee,
+			village.max_count("banshee"), village.free_workers(), village.training_progress("banshee").size(), banshees.size()])
+		if storm_girl != null:
+			# (Blown out of the village, where no wall stops it.)
+			var out := storm_girl.global_position - village.center
+			out.y = 0.0
+			out = out.normalized()
+			var blown := WorldPopulator.spawn_villager(game.world_root, game.terrain, storm_girl.global_position + out * 8.0, 0.5, true)
+			blown.raiding = true
+			# (The village's people would cut it down before it stops sliding.)
+			blown.max_hp = 1e6
+			blown.hp = 1e6
+			var blown_from := blown.global_position
+			var gusted := storm_girl.storm_wind(out)
+			var fallen := blown._fallen_until > game.now
+			await _wait(3.0)
+			var pushed := Vector2(blown.global_position.x - blown_from.x, blown.global_position.z - blown_from.z).length()
+			_check(gusted >= 1 and fallen and pushed > Balance.num("banshee_wind_push") * 0.5,
+				"its gust knocks attacking goblins over and pushes them back (%.1f m)" % pushed)
+			blown.queue_free()
+		village.set_wanted("banshee", 0)
+		Balance.values["banshee_training_seconds"] = banshee_time
+		await _wait(1.0)
+		_check(village.count("banshee") == 0, "a Storm Banshee goes back to work when no longer wanted")
+		spire.queue_free()
+		# Flag Bearer: the fighters march on the nearest goblin cave.
+		village.buffs_known["flag"] = true
+		village.resources.animus = 20.0
+		_check(play.cast_buff("flag") == "" and beast.buff_on("flag") and village.amount("animus") == 20 - BuffBook.cost("flag"),
+			"Flag Bearer is raised for buff_cost_flag animus")
+		var flagman: Villager = null
+		for v in village.people():
+			if v.can_work() and v.is_adult():
+				flagman = v
+				break
+		# (A warrior needs a Town guard to belong to, or it is stood down.)
+		var flag_guard := BuildingFactory.create("tall_house", RandomNumberGenerator.new())
+		game.world_root.add_child(flag_guard)
+		flag_guard.set_meta("kind", "tall_house")
+		flag_guard.global_position = village.center + Vector3(30, 0, -12)
+		flag_guard.add_to_group("player_buildings")
+		village.wanted.warrior = village.soldiers() + 1
+		flagman.become_soldier(flagman.global_position)
+		var march_cave := flagman._flag_cave()
+		var cave_d := flagman._flat_to(march_cave.global_position) if march_cave != null else 0.0
+		await _wait(8.0)
+		_check(march_cave != null and flagman.marching() and (flagman.state == Villager.State.FIGHT or flagman._flat_to(march_cave.global_position) < cave_d - 2.0),
+			"with the flag up, a warrior marches on the nearest goblin cave (%.0f m -> %.0f m, state %d, foe %s, target %.0f m from the cave)" % [cave_d,
+			flagman._flat_to(march_cave.global_position) if march_cave != null else 0.0, flagman.state, flagman._foe,
+			flagman._target.distance_to(march_cave.global_position) if march_cave != null else 0.0])
+		var animus_up := village.amount("animus")
+		play._upkeep_due["flag"] = game.now
+		await _wait(0.5)
+		_check(beast.buff_on("flag") and village.amount("animus") == animus_up - roundi(Balance.num("buff_upkeep_flag")), "keeping the flag up costs buff_upkeep_flag animus every buff_upkeep_seconds_flag")
+		_check(play.cast_buff("flag") == "" and not beast.buff_on("flag") and village.amount("animus") == animus_up - roundi(Balance.num("buff_upkeep_flag")),
+			"clicked again, the flag comes down (for nothing)")
+		village.wanted.warrior = 0
+		flag_guard.queue_free()
+		# A goblin cave has goblin_cave_health, and is gone at none.
+		var test_cave := WorldPopulator.place_cave(game.world_root, game.terrain, Vector2(village.center.x + 60.0, village.center.z + 60.0), 0.0, RandomNumberGenerator.new(), false, false)
+		play.raids.add_cave(test_cave)
+		var cave_life := GoblinRaids.cave_hp(test_cave)
+		GoblinRaids.hurt_cave(test_cave, cave_life - 1.0)
+		var still := GoblinRaids.cave_standing(test_cave)
+		GoblinRaids.hurt_cave(test_cave, 5.0)
+		_check(is_equal_approx(cave_life, Balance.num("goblin_cave_health")) and still and not test_cave.is_in_group("caves") and not play.raids._caves.has(test_cave),
+			"a goblin cave has goblin_cave_health (%.0f), and caves in at none" % cave_life)
 		# Over a building: what it is researching.
 		village.give("lumber", 300.0)
 		village.give("stone", 300.0)
@@ -2120,12 +2242,18 @@ func _run() -> void:
 			village._army_timer = 1.0e9
 			bowman_v.global_position = RopeBridge.ladder_foot(perch) + Vector3(2, 0, 0)
 			bowman_v.become_archer(perch_spot)
+			# (Sent up this treehouse: left to choose, it may take another post
+			# the test's other archers left free.)
+			bowman_v.post = perch
+			bowman_v._post_stage = 0
+			bowman_v.state = Villager.State.POST
 			for k in 120:
 				await _wait(0.5)
 				if bowman_v.on_post():
 					break
 			_check(bowman_v.on_post() and bowman_v.global_position.y > perch.global_position.y + 2.0,
-				"an archer climbs a treehouse to stand on it (%s)" % Villager.State.keys()[bowman_v.state])
+				"an archer climbs a treehouse to stand on it (%s, stage %d, %.1f m from the ladder)" % [Villager.State.keys()[bowman_v.state],
+				bowman_v._post_stage, bowman_v._flat_to(RopeBridge.ladder_foot(perch))])
 			_check(is_equal_approx(bowman_v.shot_range(), Villager.ARCHER_RANGE * Balance.num("archer_post_range")), "up there it shoots archer_post_range as far")
 			var blade := WorldPopulator.spawn_villager(game.world_root, game.terrain, perch_spot, 1.0, true)
 			await _wait(0.1)
@@ -2683,16 +2811,43 @@ func _run() -> void:
 		_check(fighters.size() == 2 and fighters[0].hp < fighters[0].max_hp and fighters[1].hp < fighters[1].max_hp,
 			"two giants there fight each other (%s)" % env._giants_text().replace("\n", " / "))
 		env._clear_giants()
+		# The game's raven is the two-model one, posed by its clips.
+		var raven := env._spawn_giant("raven", Vector3.ZERO, 0.0) as RavenGiant
+		var steps := [0]
+		raven.footfall.connect(func(_p: Vector3) -> void: steps[0] += 1)
+		# (Walked, not flown: straight there.)
+		raven.target = Vector3(0.0, 0.0, 40.0)
+		raven.has_target = true
+		await _wait(3.0)
+		var strode: bool = raven._walk_w > 0.5 and steps[0] >= 2 and raven._walk_model.visible
+		raven.has_target = false
+		await _wait(1.5)
+		raven._start_strike()
+		await _wait(0.4)
+		var clawing: bool = not raven._current().is_empty() and raven._current()[0] in RavenGiant.CLAW_CLIPS
+		await _wait(1.5)
+		raven.target = raven.global_position + Vector3(60.0, 0.0, 0.0)
+		raven.has_target = true
+		raven._flight_length = 60.0
+		raven._take_off()
+		await _wait(1.5)
+		var up: bool = raven.flying and raven._fly_model.visible and not raven._walk_model.visible and raven._skel == raven._fly_skel
+		_check(env._giants.has(raven) and strode and clawing and up,
+			"the game's raven walks by its Walk clip (%d footfalls), claws with its attack clips, and flies on its flying model (%s, %s, %s)" % [steps[0], strode, clawing, up])
+		env._clear_giants()
 		# The new raven: walks, takes off (the flying model takes over) and lands.
 		env._new_raven("walk")
 		await _wait(2.0)
 		var walking: bool = env._nr_walk.visible and not env._nr_fly.visible and env._nr_speed > 0.5 \
 			and env._nr_walk_player != null and env._nr_walk_player.is_playing() and env._nr_walk_player.current_animation == "Walk"
-		env._new_raven("attack")
+		var clips_there := true
+		for clip in ["Walk", "AttackLeft", "AttackRight", "Throw", "StompLeft", "StompRight"]:
+			clips_there = clips_there and env._nr_walk_player.has_animation(clip)
+		env._new_raven("AttackRight")
 		await _wait(0.5)
-		var attacking: bool = env._nr_state == "attack" and env._nr_walk_player.current_animation == "Attack"
+		var attacking: bool = env._nr_state == "attack" and env._nr_walk_player.current_animation == "AttackRight"
 		await _wait(2.5)
-		_check(attacking and env._nr_state == "stand", "the new raven swipes with its left claw (its Attack clip) and stands again")
+		_check(clips_there and attacking and env._nr_state == "stand", "the raven's walking model has its claw, throw and stomp clips, and plays one and stands again")
 		env._new_raven("rise")
 		await _wait(TestEnvironment.NEW_RAVEN_LIFT_SECONDS + 1.0)
 		var flying: bool = env._nr_fly.visible and not env._nr_walk.visible and env._nr_state == "fly" and env._nr_height > 10.0 \

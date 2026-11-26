@@ -50,7 +50,9 @@ creature_strike_damage = 200     # a blow with the fists at the other giant (you
 creature_gather_amount = 25     # lumber, stone or food a full-grown creature brings in one trip
 creature_shrink_on_knockout = 0.25  # share of its size the creature loses when it dies (it grows back)
 creature_getup_health = 1       # share of its health it has when it is brought back to life
-resurrect_animus = 5            # animus it costs to bring the creature back to life, at the Shrine
+resurrect_animus = 5            # animus it costs to bring the creature back to life, at the Shrine, the first time...
+resurrect_animus_step = 5       # ...and this much more each time after...
+resurrect_animus_most = 25      # ...but never more than this
 creature_young_appetite = 0.5   # under half grown it eats this share of what it otherwise would
 creature_aggro_range = 45       # metres: it goes after any enemy this close to it
 growth_animus_step = 0          # 0: the creature grows by itself, for nothing. Above 0, growing takes
@@ -110,10 +112,12 @@ cost_decoration_lumber = 30
 cost_decoration_stone = 30
 cost_showpiece_lumber = 0           # a Showpiece (StoreHouseAlt) costs nothing to build
 cost_showpiece_stone = 0
+cost_storm_spire_lumber = 40        # the Storm Spire (the Crystal tower)
+cost_storm_spire_stone = 60
 
 cost_necromancer_tower_lumber = 0
 cost_necromancer_tower_stone = 60
-cost_necromancer_tower_bones = 66
+cost_necromancer_tower_bones = 30
 cost_bridge_lumber_per_metre = 1    # rope bridges between treehouses
 bridge_max_length = 50              # metres: about 20 villagers lying end to end
 home_housing = 10                    # villagers a Home has room for
@@ -187,6 +191,11 @@ growth_buff_speed = 100%            # how much faster the creature grows while i
 buff_cost_aura = 1                  # Flaming Aura: animus to cast
 buff_seconds_aura = 30              # how long it lasts
 buff_cooldown_aura = 0              # seconds after it wears off before it can be cast again
+buff_cost_flag = 5                  # Flag Bearer: animus to raise the flag (every time)...
+buff_upkeep_flag = 1                # ...and this much animus to keep it up...
+buff_upkeep_seconds_flag = 300      # ...every this many seconds (it comes down when the animus runs out)
+buff_cooldown_flag = 0
+goblin_cave_health = 10000          # a goblin cave's health (the Flag Bearer's fighters can bring one down)
 aura_radius = 10                    # metres round the creature it burns
 aura_damage = 5                     # fire damage a second to every enemy that close
 
@@ -227,7 +236,25 @@ builders_per_building = 5           # the most villagers that work on one buildi
 warrior_training_seconds = 20       # at a Town guard
 fey_archer_training_seconds = 50    # a Fey Archer, at a Town guard: twice an archer's
 archer_training_seconds = 20      # at a Town guard, once bows are researched
-wizard_training_seconds = 30        # at a Wizardry tower
+wizard_training_seconds = 30        # a mage, at a Wizardry tower
+banshee_training_seconds = 40       # a Storm Banshee, at a Storm Spire
+
+# --- The Storm Spire and its Storm Banshees -------------------------------------
+# A Storm Spire (the Crystal tower) makes Storm Essence and trains Storm
+# Banshees (winged villagers in purple). Every so often a banshee blows a
+# gust of wind down a row in front of it: every attacking goblin in the row
+# is pushed back and knocked over (not hurt). The Spire itself strikes
+# enemies that come near with chain lightning, paid for in Storm Essence.
+banshees_per_spire = 2              # Storm Banshees each Storm Spire can keep
+banshee_health = 40                 # a Storm Banshee's health
+banshee_wind_seconds = 6            # time between its gusts
+banshee_wind_push = 20              # metres a gust pushes the goblins back
+banshee_wind_width = 10             # metres wide the row is
+banshee_wind_range = 25             # metres long the row is (it blows at goblins this close)
+storm_essence_per_minute = 10       # Storm Essence each Storm Spire makes a minute
+storm_lightning_range = 50          # metres: the Spire strikes enemies this close...
+storm_lightning_seconds = 20        # ...no more often than this...
+storm_lightning_cost = 25           # ...and each strike costs this much Storm Essence
 
 # --- Gathering --------------------------------------------------------------------
 farmer_speed = 2                    # foraging, sowing and reaping go this many times faster

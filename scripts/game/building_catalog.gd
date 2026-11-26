@@ -23,6 +23,8 @@ extends RefCounted
 ##   smith  the Blacksmith: wheelbarrows for the workers, and research
 ##   wizard the Wizardry tower: trains wizards
 ##   necro  the Necromancer tower: turns wizards into necromancers
+##   storm  the Storm Spire: trains Storm Banshees, makes Storm Essence and
+##          strikes enemies with chain lightning
 ##   field  a wheat field, drawn on the ground instead of placed (CropField)
 ##   bridge a rope bridge, hung between two treehouses instead of placed (RopeBridge)
 
@@ -55,7 +57,7 @@ const DEFAULT_GAMEPLAY := {
 	"treehouse": "Home", "lookout_treehouse": "Home", "twin_treehouse": "Home", "great_treehouse": "Home",
 	"store": "Storehouse", "store_house": "Storehouse", "moon_tower": "Wizardry tower", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
 	"singing_rocks": "Shrine", "necro_tower": "Necromancer tower", "windmill": "Granary",
-	"crystal_tower": "Decoration", "tall_house": "Town guard", "store_house_alt": "Showpiece",
+	"crystal_tower": "Storm Spire", "tall_house": "Town guard", "store_house_alt": "Showpiece",
 }
 ## gameplay effect (lower case) -> [name, role, cost id, what the menu says].
 ## Players never see the gameplay effect: the game shows in-game names.
@@ -67,9 +69,10 @@ const GAMEPLAY := {
 	"shrine": ["Shrine", "shrine", "shrine", "Makes animus\nRevives the creature"],
 	"town guard": ["Town guard", "guard", "town_guard", "Trains warriors"],
 	"blacksmith": ["Blacksmith", "smith", "blacksmith", "Wheelbarrows; research"],
-	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Trains wizards\nResearches spells"],
-	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Turns wizards into necromancers\nBlood Sacrifice upgrade"],
+	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Trains mages\nResearches spells"],
+	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Turns mages into necromancers\nBlood Sacrifice upgrade"],
 	"decoration": ["Decoration", "", "decoration", "No use yet"],
+	"storm spire": ["Storm Spire", "storm", "storm_spire", "Trains Storm Banshees\nStorm Essence; chain lightning"],
 	"showpiece": ["Showpiece", "", "showpiece", "Free; no use"],
 }
 ## Menu entries that are not placed like buildings.

@@ -1,8 +1,9 @@
-# New raven: animation review (0.57)
+# New raven: animation review (0.57, in the game since 0.61)
 
-The owner's two new Meshy ravens, rigged and animated for review. They are
-not in the game yet; the test environment shows them ("New raven": Walk,
-Stand, Take off, Land). See `docs/ART_PLAN.md` for how they were made.
+The owner's two new Meshy ravens, rigged and animated. Since 0.61 they are
+the game's raven (`RavenGiant`). The test environment shows their clips
+("Raven's clips": Walk, Stand, Take off, Land, Claw L, Claw R, Throw,
+Stomp L, Stomp R). See `docs/ART_PLAN.md` for how they were made.
 
 - `assets/creature/raven_walk.glb` (and `.blend`): the raven on the ground,
   its **Walk** clip: 61 frames at 30 fps (2 s, two steps; frame 61 is frame 1
@@ -62,12 +63,15 @@ judge well from pictures alone happens.
 7. **Fly, all frames: the head.** It is meant to stay level while the body
    rises and dips; check it does not nod.
 
-## The attack (0.60)
+## The attacks (0.60; 50% faster and mirrored in 0.61)
 
-`raven_walk.glb` / `.blend` also have an **Attack** clip: the left claw, 55
-frames at 30 fps (1.8 s), after the balrog's claw slash but with a shallower
-wind-up. Video: `raven_review/raven_attack.mp4`. In the test environment,
-"New raven" then "Attack".
+`raven_walk.glb` / `.blend` have **AttackLeft** and **AttackRight**: the
+owner's attack (made at 0.60 as "Attack", 1.8 s, and kept in
+`raven_walk_slow.blend`) played 50% faster, 37 frames at 30 fps (1.2 s), and
+its mirror for the right claw. The table below is the 0.60 timing: divide
+the frames by 1.5 (the strike is at frame 18 now). Video (the 0.60 speed):
+`raven_review/raven_attack.mp4`. The fastest change is now in the fingers
+(about 11 degrees a frame per frame as the claw opens at the top).
 
 | Frames | What happens |
 |---|---|
@@ -80,6 +84,25 @@ wind-up. Video: `raven_review/raven_attack.mp4`. In the test environment,
 Worth a check: frames 16-26 (the swipe: fast enough, or too fast?), frames
 1-16 (does the wing clear the raised arm?), and frame 26 (the strike). The
 wrist does not twist; the arm never straightens past 90% of its length.
+
+## Throw and stomps (0.61)
+
+- **Throw** (73 frames, 2.4 s; the right hand): it crouches and reaches down
+  (goblins in hand at 0.6 s, frame 19), straightens and lifts them, winds up
+  over its right shoulder while the right wing lifts up and back out of the
+  way (frames 30-46), hurls them (let go at 1.62 s, frame 49), follows
+  through and comes back to rest. The left hand reaches down for balance.
+  Worth a check: frames 40-52 (the wind-up and release; the fingers open
+  fastest there, about 9 degrees a frame per frame).
+- **StompRight** / **StompLeft** (35 frames, 1.15 s): the hips sway over the
+  standing foot, the stamping knee comes up high with the toes curled, and
+  the foot slams down a little ahead at 0.8 s (frame 25); the arms come out
+  for balance and the wings lift, then drop with the stamp.
+  Worth a check: frames 16-25 (the knee at its highest, and the drop).
+
+In the game the throw is timed to the game's grab (goblins picked up at
+0.7 s, let go at 1.95 s); to eat them it lifts them the same way and holds
+them up. The stomp's foot lands when the game's stomp does.
 
 ## Joint limits
 

@@ -54,6 +54,8 @@ signal bat_took
 signal balrog_came
 signal balrog_grown
 signal balrog_died
+## A cave was brought down (see hurt_cave()).
+signal cave_fell
 
 ## The goblin buildings that ogres and giant bats come from.
 const OGRE_HOME := "goblin_war_hut"
@@ -113,6 +115,50 @@ func spawn_rate() -> float:
 ## neutral village there was at the start.
 static func build_speed() -> float:
 	return Game.settings.goblin_build_speed * (1.0 + neutral_start * Balance.num("neutral_goblin_build_speed"))
+
+
+## The goblins' raids at work in this game (for hurt_cave()).
+static var current: GoblinRaids
+
+
+func _enter_tree() -> void:
+	current = self
+
+
+func _exit_tree() -> void:
+	if current == self:
+		current = null
+
+
+## A cave's health: Balance "goblin_cave_health" to begin with.
+static func cave_hp(cave: Node3D) -> float:
+	return float(cave.get_meta("hp", Balance.num("goblin_cave_health")))
+
+
+## True while `cave` stands.
+static func cave_standing(cave: Node3D) -> bool:
+	return is_instance_valid(cave) and cave.is_in_group("caves") and cave_hp(cave) > 0.0
+
+
+## The Flag Bearer's fighters hack at a cave: at no health it caves in
+## (it spawns no more goblins) and is gone.
+static func hurt_cave(cave: Node3D, amount: float) -> void:
+	if not cave_standing(cave):
+		return
+	var left := cave_hp(cave) - amount
+	cave.set_meta("hp", left)
+	if left > 0.0:
+		if randf() < 0.15:
+			Game.effects.spawn_dust(cave.global_position + Vector3(randf_range(-5.0, 5.0), 3.0, randf_range(-3.0, 3.0)), 2.0)
+		return
+	cave.remove_from_group("caves")
+	for k in 6:
+		Game.effects.spawn_dust(cave.global_position + Vector3(randf_range(-7.0, 7.0), randf_range(0.0, 6.0), randf_range(-6.0, 4.0)), 6.0)
+	Game.shake(1.2, cave.global_position)
+	if current != null:
+		current._caves.erase(cave)
+		current.cave_fell.emit()
+	cave.queue_free()
 
 
 ## A new cave (where a neutral village was wiped out): it spawns goblins

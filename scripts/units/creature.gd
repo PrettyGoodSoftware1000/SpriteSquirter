@@ -59,8 +59,10 @@ extends Node3D
 ## no stamina left.
 ##
 ## At no health the creature dies (`knocked_out` stays true) and lies
-## where it fell until the player pays Balance "resurrect_animus" animus to
-## bring it back at a Shrine (resurrect()).
+## where it fell until the player pays resurrect_cost() animus to bring it
+## back at a Shrine (resurrect()): Balance "resurrect_animus" the first
+## time, "resurrect_animus_step" more each time after, up to
+## "resurrect_animus_most".
 ##
 ## The face is drawn on top of the model: eyeballs, pupils that look about,
 ## lids that blink and slant with its mood, and an inked mouth line that
@@ -93,7 +95,10 @@ const SPECIES := {
 		"arm": Vector3(0.25, -0.85, 0.4), "elbow": -0.4, "fore": Vector3(-0.35, 0.5, 0.8),
 	},
 	"raven": {
-		"name": "Raven", "model": "res://assets/creature/raven.glb", "speed": 3.6,
+		# (0.61: the owner's two new ravens, walking and flying, posed by
+		# their own clips: see RavenGiant, which is the raven. What follows
+		# its "knows" is the old one-model raven's, raven.glb.)
+		"name": "Raven", "model": "res://assets/creature/raven_walk.glb", "speed": 3.6,
 		"nervous": 0.25, "flies": true,
 		# Born knowing these spells (CreatureMind): chain lightning.
 		"knows": ["lightning"],
@@ -122,6 +127,14 @@ const SPECIES := {
 		"wing_trail": ["wing_prim1b", "wing_prim2b", "wing_prim3b"],
 	},
 }
+
+## A new creature of `of_kind` (see SPECIES), not yet in the tree. (The
+## raven is a RavenGiant.)
+static func make(of_kind: String) -> Creature:
+	var beast: Creature = RavenGiant.new() if of_kind == "raven" else Creature.new()
+	beast.kind = of_kind
+	return beast
+
 
 ## At no health: the creature has died (the Balrog's death too).
 signal knocked_down
@@ -193,6 +206,8 @@ var _burst_until := 0.0
 var max_hp := 0.0
 var hp := 0.0
 var knocked_out := false
+## How many times it has been brought back to life (each costs more).
+var resurrections := 0
 ## True for the goblins' giant, which fights the village and not for it.
 var hostile := false
 ## Set in the test environment: the giant this one fights, whatever side
@@ -568,7 +583,12 @@ func buff_left(id: String) -> float:
 	return maxf(0.0, float(_buffs.get(id, -INF)) - Game.now)
 
 
-## Puts buff `id` on for `seconds`.
+## Takes buff `id` off.
+func stop_buff(id: String) -> void:
+	_buffs.erase(id)
+
+
+## Puts buff `id` on for `seconds` (INF: until stop_buff()).
 func start_buff(id: String, seconds: float) -> void:
 	_buffs[id] = Game.now + seconds
 	if not _buff_fx.has(id):
@@ -723,10 +743,17 @@ func take_hit(amount: float, _from: Node3D) -> void:
 
 ## Brings the dead creature back to life at `at` (a Shrine), in a shaft
 ## of light, with Balance "creature_getup_health" of its health.
+## Animus it costs to bring it back to life now.
+func resurrect_cost() -> int:
+	return mini(roundi(Balance.num("resurrect_animus") + Balance.num("resurrect_animus_step") * resurrections),
+		roundi(Balance.num("resurrect_animus_most")))
+
+
 func resurrect(at: Vector3) -> void:
 	if not knocked_out:
 		return
 	knocked_out = false
+	resurrections += 1
 	_crouch = 0.0
 	_jaw_want = 0.0
 	hp = max_hp * Balance.num("creature_getup_health")

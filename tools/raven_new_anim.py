@@ -3,8 +3,9 @@ the rigs), keyed on every frame and exported for the game:
 
     blender -b --factory-startup --python tools/raven_new_anim.py -- [walk|fly|both] [render_dir]
 
-    assets/creature/raven_walk.glb   the walking raven, its "Walk" clip and
-                                     its "Attack" (the left claw)
+    assets/creature/raven_walk.glb   the walking raven: "Walk", "AttackLeft",
+                                     "AttackRight", "Throw", "StompRight",
+                                     "StompLeft"
     assets/creature/raven_fly.glb    the flying raven and its "Fly" clip
     (and both .blend files, with the clip, for editing)
 
@@ -25,8 +26,9 @@ as the body passes over it, sway over the standing foot and turn with the
 stride; the chest turns back against them, the arms swing a little against
 the legs, the head stays steady, and the wings and tail follow a little late.
 
-Attack (ATTACK_SECONDS, on the walking model, after the balrog's claw
-slash): the left claw rises up and out to the side (not as far back as the
+AttackLeft and AttackRight (ATTACK_SECONDS, on the walking model, after
+the balrog's claw slash; the owner's timing, ATTACK_SPEEDUP times as fast,
+and its mirror): the left claw rises up and out to the side (not as far back as the
 balrog's), holds a moment, swipes down and across in front, strikes at
 ATTACK_HIT, follows through and comes back to rest. The torso turns away on
 the wind-up and whips round and leans into the swipe, the hips dropping a
@@ -71,9 +73,18 @@ WALK_DUTY = 0.62
 STEP_HEIGHT = 0.11
 FLY_SECONDS = 1.2
 FLY_DOWN = 0.52
-# The left-claw attack (on the walking model): how long, and when it strikes.
-ATTACK_SECONDS = 1.8
-ATTACK_HIT = 0.84
+# The claw attacks (on the walking model): the owner's, 50% faster; how
+# long, and when the claw strikes.
+ATTACK_SPEEDUP = 1.5
+ATTACK_SECONDS = 1.8 / ATTACK_SPEEDUP
+ATTACK_HIT = 0.84 / ATTACK_SPEEDUP
+# The throw: when the goblins are in hand, and when they are let go.
+THROW_SECONDS = 2.4
+THROW_GRAB = 0.6
+THROW_RELEASE = 1.62
+# The stomp: how long, and when the foot lands.
+STOMP_SECONDS = 1.15
+STOMP_IMPACT = 0.8
 
 
 def log(*a):
@@ -274,7 +285,13 @@ def open_rig(model):
     return arm
 
 
+MADE = ("Walk", "Fly", "Attack", "AttackLeft", "AttackRight", "Throw", "StompRight", "StompLeft")
+
+
 def new_action(arm, name, frames):
+    # (A clip made before, and its numbered copies, gives way to the new one.)
+    for old in [a for a in bpy.data.actions if a.name.split(".")[0] in MADE and a.name.split(".")[0] == name]:
+        bpy.data.actions.remove(old)
     act = bpy.data.actions.new(name)
     arm.animation_data.action = act
     sc = bpy.context.scene
@@ -470,112 +487,266 @@ def walk():
 
 # --- The attack -----------------------------------------------------------------------------
 
-def attack(arm):
-    pose, solve_leg, rest_ankle = walk.legs
-    frames = int(round(ATTACK_SECONDS * FPS))
-    act = new_action(arm, "Attack", frames + 1)
-    act.use_fake_user = True
-    pose._last = {}
-    fwd = Vector((0, -1, 0))
-    up = Vector((0, 0, 1))
-    side_x = Vector((1, 0, 0))
-    pose.reset()
-    wrist0 = pose.tail("arm_lower_l").copy()
-    hit = ATTACK_HIT
-    # Where the left wrist goes (in the raven's own space; -X is its left).
-    wrist = track([
-        (0.00, wrist0),
-        (0.32, Vector((-0.64, -0.32, 1.20))),
-        (0.52, Vector((-0.67, -0.29, 1.28))),
-        (0.68, Vector((-0.54, -0.55, 1.20))),
-        (hit, Vector((-0.20, -0.78, 0.96))),
-        (1.02, Vector((0.00, -0.70, 0.82))),
-        (1.30, Vector((-0.22, -0.62, 0.78))),
-        (ATTACK_SECONDS, wrist0),
-    ])
-    # The body: turn (+: the left shoulder forward), lean (+: forward), tip
-    # (+: the top towards its right), hips down (metres), collarbone lift.
-    twist = track([(0.0, 0.0), (0.32, -0.12), (0.52, -0.16), (0.68, -0.06), (hit, 0.17), (1.02, 0.23), (1.30, 0.09), (ATTACK_SECONDS, 0.0)])
-    lean = track([(0.0, 0.0), (0.32, -0.03), (0.52, -0.04), (hit, 0.14), (1.02, 0.17), (1.30, 0.06), (ATTACK_SECONDS, 0.0)])
-    tip = track([(0.0, 0.0), (0.52, 0.03), (hit, 0.07), (1.02, 0.08), (1.30, 0.03), (ATTACK_SECONDS, 0.0)])
-    drop = track([(0.0, 0.0), (0.52, 0.006), (hit, 0.03), (1.02, 0.035), (1.30, 0.014), (ATTACK_SECONDS, 0.0)])
-    lift = track([(0.0, 0.0), (0.32, 0.14), (0.52, 0.17), (hit, 0.02), (1.02, -0.03), (1.30, 0.0), (ATTACK_SECONDS, 0.0)])
-    # Fingers (degrees: - open, + close), closing through the swipe.
-    grip = track([(0.0, 0.0), (0.45, -12.0), (0.64, -10.0), (hit, 14.0), (1.05, 26.0), (1.40, 8.0), (ATTACK_SECONDS, 0.0)])
-    # The arm: its two bones, and which way its elbow points (out, a little
-    # back and down, as the balrog's).
-    L1 = arm.data.bones["arm_upper_l"].length
-    L2 = arm.data.bones["arm_lower_l"].length
-    pole = Vector((-1.0, 0.25, -0.35)).normalized()
-    rel = (pose.rest["arm_upper_l"].inverted() @ pose.rest["arm_lower_l"]).to_3x3()
-    fore_x = (rel @ Vector((1, 0, 0))).normalized()
-    s0, e0, w0 = pose.head("arm_upper_l"), pose.tail("arm_upper_l"), pose.tail("arm_lower_l")
-    n0 = (e0 - s0).cross(w0 - e0).normalized()
-    fx0 = (pose.world("arm_lower_l").to_3x3() @ Vector((1, 0, 0))).normalized()
-    arm_side = 1.0 if fx0.dot(n0) >= 0 else -1.0
-    reach_worst = [0.0]
-    for f in range(frames + 1):
-        t = f / FPS
-        pose.reset()
-        # Hips drop and turn a little; the feet stay where they stand.
-        pose.loc["pelvis"] = pose.rest["pelvis"].to_3x3().inverted() @ Vector((0.0, 0.3 * drop(t), -drop(t)))
-        pose.changed()
-        pose.turn("pelvis", up, 0.3 * twist(t))
-        pose.turn("pelvis", side_x, 0.2 * lean(t))
-        for name, share in (("spine", 0.25), ("chest", 0.3), ("chest_upper", 0.25)):
-            pose.turn(name, up, 0.7 * twist(t) * share / 0.8)
-            pose.turn(name, side_x, 0.8 * lean(t) * share / 0.8)
-            pose.turn(name, fwd, -tip(t) * share / 0.8)
+def mirror_v(v, m):
+    """`v` for the side `m` (1: as written, the raven's left; -1: its right)."""
+    return Vector((v.x * m, v.y, v.z))
+
+
+class Body:
+    """What the attack, the throw and the stomp share: the hips, spine and
+    head; the legs planted (or one stepping); an arm reaching for a point;
+    the wings and tail following. Every hinge stays inside its limits."""
+
+    def __init__(self, arm):
+        self.arm = arm
+        self.pose, self.solve_leg, self.rest_ankle = walk.legs
+        p = self.pose
+        p.reset()
+        self.wrist0 = {s: p.tail("arm_lower" + s).copy() for s in ("_r", "_l")}
+        self.L1 = arm.data.bones["arm_upper_l"].length
+        self.L2 = arm.data.bones["arm_lower_l"].length
+        self.fore_x = {}
+        self.arm_side = {}
         for s in ("_r", "_l"):
-            solve_leg(s, rest_ankle[s], 0.0, 0.0)
-        # The collarbone lifts with the wind-up.
-        clav = (pose.tail("clavicle_l") - pose.head("clavicle_l")).normalized()
-        pose.turn("clavicle_l", clav.cross(up), -lift(t))
-        # The left arm reaches for the wrist's place.
-        shoulder = pose.head("arm_upper_l")
-        target = wrist(t)
+            rel = (p.rest["arm_upper" + s].inverted() @ p.rest["arm_lower" + s]).to_3x3()
+            self.fore_x[s] = (rel @ Vector((1, 0, 0))).normalized()
+            s0, e0, w0 = p.head("arm_upper" + s), p.tail("arm_upper" + s), p.tail("arm_lower" + s)
+            n0 = (e0 - s0).cross(w0 - e0).normalized()
+            fx0 = (p.world("arm_lower" + s).to_3x3() @ Vector((1, 0, 0))).normalized()
+            self.arm_side[s] = 1.0 if fx0.dot(n0) >= 0 else -1.0
+        self.reach_worst = 0.0
+
+    def torso(self, twist, lean, tip, drop, sway=0.0):
+        """Hips down `drop` (and over `sway` sideways), turned `twist` (+:
+        the left shoulder forward), leaning `lean` (+: forward) and tipped
+        `tip` (+: the top to its right); the spine takes most of it."""
+        p = self.pose
+        p.loc["pelvis"] = p.rest["pelvis"].to_3x3().inverted() @ Vector((sway, 0.3 * drop, -drop))
+        p.changed()
+        p.turn("pelvis", UP, 0.3 * twist)
+        p.turn("pelvis", SIDE, 0.2 * lean)
+        for name, share in (("spine", 0.25), ("chest", 0.3), ("chest_upper", 0.25)):
+            p.turn(name, UP, 0.7 * twist * share / 0.8)
+            p.turn(name, SIDE, 0.8 * lean * share / 0.8)
+            p.turn(name, FWD, -tip * share / 0.8)
+
+    def legs(self, step=None):
+        """Both feet where they stand, or `step` = (side, ankle, pitch, curl)
+        for one lifted."""
+        for s in ("_r", "_l"):
+            if step is not None and step[0] == s:
+                self.solve_leg(s, step[1], step[2], step[3])
+            else:
+                self.solve_leg(s, self.rest_ankle[s], 0.0, 0.0)
+
+    def reach(self, s, target, pole, lift=0.0):
+        """The arm on side `s` reaches for `target` (its wrist), the elbow
+        towards `pole`, the collarbone lifted `lift`; never straight, never
+        folded tight; the hand stays in line with the forearm."""
+        p = self.pose
+        clav = (p.tail("clavicle" + s) - p.head("clavicle" + s)).normalized()
+        p.turn("clavicle" + s, clav.cross(UP), -lift)
+        shoulder = p.head("arm_upper" + s)
+        L1, L2 = self.L1, self.L2
         d = target - shoulder
-        reach_worst[0] = max(reach_worst[0], d.length / (L1 + L2))
+        self.reach_worst = max(self.reach_worst, d.length / (L1 + L2))
         dist = min(max(d.length, 0.45 * (L1 + L2)), 0.94 * (L1 + L2))
         dn = d.normalized()
         cos_a = (L1 * L1 + dist * dist - L2 * L2) / (2 * L1 * dist)
         a = math.acos(max(-1.0, min(1.0, cos_a)))
+        pole = pole.normalized()
         bend_dir = (pole - dn * pole.dot(dn)).normalized()
         elbow = shoulder + (dn * math.cos(a) + bend_dir * math.sin(a)) * L1
         hand_at = shoulder + dn * dist
         plane_n = (elbow - shoulder).cross(hand_at - elbow).normalized()
-        pose.aim("arm_upper_l", elbow, keep_axis=fore_x, keep_dir=plane_n * arm_side)
-        pose.bend_toward("arm_lower_l", hand_at)
-        # (The hand stays in line with the forearm: no twist at the wrist.)
+        p.aim("arm_upper" + s, elbow, keep_axis=self.fore_x[s], keep_dir=plane_n * self.arm_side[s])
+        p.bend_toward("arm_lower" + s, hand_at)
+
+    def grip(self, s, degrees):
         for name in ("thumb", "index", "middle", "ring"):
             for k in (1, 2, 3):
-                pose.bend("%s%d_l" % (name, k), math.radians(grip(t) * (0.6 + 0.2 * k)))
-        # The other arm swings back a little against the strike.
-        pose.turn("arm_upper_r", side_x, 0.5 * twist(t) * 0.6)
-        # The left wing lifts up and back out of the arm's way, as high as the hand goes.
-        raised = smooth_step((target.z - wrist0.z) / 0.45)
-        pose.turn("wing_root_l", fwd, -0.25 * raised)
-        pose.turn("wing_upper_l", fwd, -0.40 * raised)
-        pose.turn("wing_upper_l", up, -0.35 * raised)
-        # The right wing and the tail follow the turn, late.
-        late = twist(max(0.0, t - 0.12))
-        later = twist(max(0.0, t - 0.22))
-        pose.turn("wing_upper_r", up, -0.35 * (twist(t) - late))
-        pose.turn("tail1", up, -0.5 * later)
-        pose.turn("tail2", up, -0.3 * later)
-        # The head holds steady, looking a little down into the strike.
-        chest_q = pose.world("chest_upper").to_quaternion() @ pose.rest["chest_upper"].to_quaternion().inverted()
+                self.pose.bend("%s%d%s" % (name, k, s), math.radians(degrees * (0.6 + 0.2 * k)))
+
+    def wing(self, s, lift, back):
+        """Lifts the wing on side `s` up (`lift`) and back (`back`), radians."""
+        m = 1.0 if s == "_l" else -1.0
+        self.pose.turn("wing_root" + s, FWD, -0.4 * lift * m)
+        self.pose.turn("wing_upper" + s, FWD, -0.6 * lift * m)
+        self.pose.turn("wing_upper" + s, UP, -back * m)
+
+    def head_steady(self, nod=0.0):
+        p = self.pose
+        chest_q = p.world("chest_upper").to_quaternion() @ p.rest["chest_upper"].to_quaternion().inverted()
         axis, ang = short_turn(chest_q.inverted())
-        pose.turn("neck1", axis, ang * 0.35)
-        pose.turn("neck2", axis, ang * 0.3)
-        pose.turn("head", axis, ang * 0.2)
-        pose.turn("head", side_x, 0.4 * lean(t))
-        pose.write(f + 1)
+        p.turn("neck1", axis, ang * 0.35)
+        p.turn("neck2", axis, ang * 0.3)
+        p.turn("head", axis, ang * 0.2)
+        p.turn("head", SIDE, nod)
+
+    def tail(self, twist_late):
+        self.pose.turn("tail1", UP, -0.5 * twist_late)
+        self.pose.turn("tail2", UP, -0.3 * twist_late)
+
+
+UP = Vector((0, 0, 1))
+FWD = Vector((0, -1, 0))
+SIDE = Vector((1, 0, 0))
+
+
+def bake(arm, name, seconds, pose_at):
+    """Keys `pose_at(t)` on every frame of a new clip `name`, `seconds` long."""
+    frames = int(round(seconds * FPS))
+    act = new_action(arm, name, frames + 1)
+    act.use_fake_user = True
+    walk.legs[0]._last = {}
+    for f in range(frames + 1):
+        walk.legs[0].reset()
+        pose_at(f / FPS)
+        walk.legs[0].write(f + 1)
     act.use_frame_range = True
     act.frame_start = 1
     act.frame_end = frames + 1
     act.use_cyclic = False
-    log("attack: frames", frames + 1, "farthest reach %.2f of the arm" % reach_worst[0])
+    return act, frames
+
+
+def attack(arm, s):
+    """The claw attack with the arm on side `s` (AttackLeft, AttackRight):
+    the owner's (raven_walk_slow.blend: the one made at 0.60, 1.8 s) played
+    ATTACK_SPEEDUP times as fast, and its mirror for the right claw."""
+    body = Body(arm)
+    m = 1.0 if s == "_l" else -1.0
+    other = "_r" if s == "_l" else "_l"
+    k = 1.0 / ATTACK_SPEEDUP
+    hit = ATTACK_HIT
+
+    def T(t):
+        return t * k
+    wrist0 = body.wrist0[s]
+    wrist = track([
+        (0.0, wrist0),
+        (T(0.32), mirror_v(Vector((-0.64, -0.32, 1.20)), m)),
+        (T(0.52), mirror_v(Vector((-0.67, -0.29, 1.28)), m)),
+        (T(0.68), mirror_v(Vector((-0.54, -0.55, 1.20)), m)),
+        (hit, mirror_v(Vector((-0.20, -0.78, 0.96)), m)),
+        (T(1.02), mirror_v(Vector((0.00, -0.70, 0.82)), m)),
+        (T(1.30), mirror_v(Vector((-0.22, -0.62, 0.78)), m)),
+        (ATTACK_SECONDS, wrist0),
+    ])
+    twist = track([(0.0, 0.0), (T(0.32), -0.12), (T(0.52), -0.16), (T(0.68), -0.06), (hit, 0.17), (T(1.02), 0.23), (T(1.30), 0.09), (ATTACK_SECONDS, 0.0)])
+    lean = track([(0.0, 0.0), (T(0.32), -0.03), (T(0.52), -0.04), (hit, 0.14), (T(1.02), 0.17), (T(1.30), 0.06), (ATTACK_SECONDS, 0.0)])
+    tip = track([(0.0, 0.0), (T(0.52), 0.03), (hit, 0.07), (T(1.02), 0.08), (T(1.30), 0.03), (ATTACK_SECONDS, 0.0)])
+    drop = track([(0.0, 0.0), (T(0.52), 0.006), (hit, 0.03), (T(1.02), 0.035), (T(1.30), 0.014), (ATTACK_SECONDS, 0.0)])
+    lift = track([(0.0, 0.0), (T(0.32), 0.14), (T(0.52), 0.17), (hit, 0.02), (T(1.02), -0.03), (T(1.30), 0.0), (ATTACK_SECONDS, 0.0)])
+    grip = track([(0.0, 0.0), (T(0.45), -12.0), (T(0.64), -10.0), (hit, 14.0), (T(1.05), 26.0), (T(1.40), 8.0), (ATTACK_SECONDS, 0.0)])
+    pole = mirror_v(Vector((-1.0, 0.25, -0.35)), m)
+
+    def pose_at(t):
+        tw = twist(t)
+        body.torso(m * tw, lean(t), m * tip(t), drop(t))
+        body.legs()
+        target = wrist(t)
+        body.reach(s, target, pole, lift(t))
+        body.grip(s, grip(t))
+        body.pose.turn("arm_upper" + other, SIDE, 0.3 * tw)
+        raised = smooth_step((target.z - wrist0.z) / 0.45)
+        body.wing(s, 0.6 * raised, 0.35 * raised)
+        late = twist(max(0.0, t - T(0.12)))
+        body.pose.turn("wing_upper" + other, UP, -0.35 * m * (tw - late))
+        body.tail(m * twist(max(0.0, t - T(0.22))))
+        body.head_steady(0.4 * lean(t))
+    act, frames = bake(arm, "Attack" + ("Left" if s == "_l" else "Right"), ATTACK_SECONDS, pose_at)
+    log("attack%s: frames %d, farthest reach %.2f of the arm" % (s, frames + 1, body.reach_worst))
+    return act, frames
+
+
+def throw(arm):
+    """Throw (THROW_SECONDS), with the right hand: crouches and reaches down
+    to scoop goblins up (in hand at THROW_GRAB), straightens and lifts them,
+    winds up over its shoulder (the right wing lifts back out of the way)
+    and hurls them forward (let go at THROW_RELEASE), following through
+    and coming back to rest. The left arm balances it."""
+    body = Body(arm)
+    s, other = "_r", "_l"
+    w0 = body.wrist0[s]
+    g, r = THROW_GRAB, THROW_RELEASE
+    wrist = track([
+        (0.0, w0),
+        (g, Vector((0.30, -0.78, 0.30))),
+        (g + 0.42, Vector((0.46, -0.48, 0.98))),
+        (r - 0.24, Vector((0.56, -0.06, 1.42))),
+        (r, Vector((0.24, -0.76, 1.24))),
+        (r + 0.24, Vector((0.02, -0.74, 0.84))),
+        (r + 0.5, Vector((0.32, -0.60, 0.78))),
+        (THROW_SECONDS, w0),
+    ])
+    twist = track([(0.0, 0.0), (g, -0.06), (g + 0.42, 0.04), (r - 0.24, 0.20), (r, -0.16), (r + 0.24, -0.24), (r + 0.5, -0.08), (THROW_SECONDS, 0.0)])
+    lean = track([(0.0, 0.0), (g, 0.42), (g + 0.42, 0.10), (r - 0.24, -0.08), (r, 0.16), (r + 0.24, 0.20), (r + 0.5, 0.06), (THROW_SECONDS, 0.0)])
+    drop = track([(0.0, 0.0), (g, 0.12), (g + 0.42, 0.02), (r - 0.24, 0.0), (r, 0.03), (r + 0.24, 0.035), (THROW_SECONDS, 0.0)])
+    tip = track([(0.0, 0.0), (g, 0.05), (r - 0.24, -0.05), (r, 0.06), (THROW_SECONDS, 0.0)])
+    lift = track([(0.0, 0.0), (g, -0.05), (r - 0.24, 0.18), (r, 0.04), (THROW_SECONDS, 0.0)])
+    grip = track([(0.0, 0.0), (g - 0.3, -12.0), (g + 0.08, 30.0), (r - 0.12, 30.0), (r + 0.14, -10.0), (r + 0.6, 0.0), (THROW_SECONDS, 0.0)])
+    # The wing on the throwing side: up and back while the hand is behind the shoulder.
+    wing_up = track([(0.0, 0.0), (g + 0.3, 0.0), (r - 0.36, 1.0), (r - 0.12, 1.0), (r + 0.34, 0.0), (THROW_SECONDS, 0.0)])
+    # The left hand reaches down a little for balance, then swings back.
+    other_w = track([(0.0, body.wrist0[other]), (g, Vector((-0.40, -0.62, 0.50))), (g + 0.42, body.wrist0[other]),
+                     (r, Vector((-0.50, -0.20, 0.82))), (r + 0.5, body.wrist0[other]), (THROW_SECONDS, body.wrist0[other])])
+
+    def pose_at(t):
+        tw = twist(t)
+        body.torso(tw, lean(t), tip(t), drop(t))
+        body.legs()
+        target = wrist(t)
+        body.reach(s, target, Vector((1.0, 0.35, -0.4)), lift(t))
+        body.grip(s, grip(t))
+        body.reach(other, other_w(t), Vector((-1.0, 0.25, -0.35)))
+        # The wing on the throwing side goes up and back while the hand is behind the shoulder.
+        behind = wing_up(t)
+        body.wing(s, 0.9 * behind, 0.45 * behind)
+        body.wing(other, 0.0, 0.25 * (tw - twist(max(0.0, t - 0.12))))
+        body.tail(twist(max(0.0, t - 0.22)))
+        body.head_steady(0.3 * lean(t))
+    act, frames = bake(arm, "Throw", THROW_SECONDS, pose_at)
+    log("throw: frames %d, farthest reach %.2f of the arm" % (frames + 1, body.reach_worst))
+    return act, frames
+
+
+def stomp(arm, s):
+    """Stomp (StompRight, StompLeft; STOMP_SECONDS): the weight goes onto the
+    other foot, the knee comes up high, and the foot slams down a little
+    ahead (lands at STOMP_IMPACT) and the body settles. The arms come out
+    for balance, the wings lift and drop with it."""
+    body = Body(arm)
+    m = -1.0 if s == "_r" else 1.0  # (+ for the left foot, as the attack's sides)
+    ankle0 = body.rest_ankle[s]
+    hit = STOMP_IMPACT
+    ankle = track([
+        (0.0, ankle0),
+        (0.22, ankle0 + Vector((0.0, -0.04, 0.12))),
+        (0.50, ankle0 + Vector((m * 0.02, -0.16, 0.36))),
+        (0.62, ankle0 + Vector((m * 0.02, -0.18, 0.38))),
+        (hit, ankle0 + Vector((0.0, -0.10, 0.0))),
+        (STOMP_SECONDS, ankle0 + Vector((0.0, -0.10, 0.0))),
+    ])
+    pitch = track([(0.0, 0.0), (0.22, 18.0), (0.55, 10.0), (hit - 0.05, -6.0), (hit, 0.0), (STOMP_SECONDS, 0.0)])
+    curl = track([(0.0, 0.0), (0.3, 14.0), (0.6, 6.0), (hit, 0.0), (STOMP_SECONDS, 0.0)])
+    # Weight over the standing foot, a lean back as the knee rises, and down into the stamp.
+    sway = track([(0.0, 0.0), (0.25, 0.05), (0.6, 0.06), (hit, 0.02), (STOMP_SECONDS, 0.0)])
+    lean = track([(0.0, 0.0), (0.5, -0.07), (0.62, -0.06), (hit, 0.12), (hit + 0.12, 0.13), (STOMP_SECONDS, 0.0)])
+    drop = track([(0.0, 0.0), (0.5, -0.01), (hit, 0.035), (hit + 0.12, 0.04), (STOMP_SECONDS, 0.0)])
+    arms = track([(0.0, 0.0), (0.5, 1.0), (0.62, 1.0), (hit, 0.6), (STOMP_SECONDS, 0.0)])
+    wings = track([(0.0, 0.0), (0.5, 0.35), (0.62, 0.38), (hit, -0.08), (hit + 0.15, 0.06), (STOMP_SECONDS, 0.0)])
+
+    def pose_at(t):
+        # (Sway towards the standing foot: away from the stamping one.)
+        body.torso(0.0, lean(t), 0.0, drop(t), sway=m * sway(t))
+        body.legs(step=(s, ankle(t), pitch(t), curl(t)))
+        for side, sgn in (("_r", 1.0), ("_l", -1.0)):
+            out = arms(t)
+            body.reach(side, body.wrist0[side].lerp(Vector((sgn * 0.62, -0.42, 0.98)), out), Vector((sgn, 0.25, -0.35)))
+            body.wing(side, wings(t), 0.0)
+        body.head_steady(0.2 * lean(t))
+    act, frames = bake(arm, "Stomp" + ("Right" if s == "_r" else "Left"), STOMP_SECONDS, pose_at)
     return act, frames
 
 
@@ -705,7 +876,7 @@ def export(arm, act, model):
     log("exported", out)
 
 
-def render_frames(arm, model, frames, picks):
+def render_frames(arm, model, frames, picks, name=None):
     if not RENDER_DIR:
         return
     os.makedirs(RENDER_DIR, exist_ok=True)
@@ -731,7 +902,7 @@ def render_frames(arm, model, frames, picks):
         for vname, d in views:
             cam.location = c + d.normalized() * 20
             cam.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
-            sc.render.filepath = os.path.join(RENDER_DIR, "%s_f%02d_%s.png" % (model, f, vname))
+            sc.render.filepath = os.path.join(RENDER_DIR, "%s_f%02d_%s.png" % (name or model, f, vname))
             bpy.ops.render.render(write_still=True)
     bpy.data.objects.remove(cam)
 
@@ -750,12 +921,18 @@ def main():
         for w in worst[:12]:
             log("  walk smooth: %-14s max change %.2f deg/frame/frame at frame %d (top speed %.2f deg/frame)" % (w[2], w[0], w[3], w[1]))
         render_frames(arm, "walk", frames, [1, 8, 16, 23, 31, 38, 46, 53])
-        act2, frames2 = attack(arm)
-        worst = smoothness(arm, frames2, loop=False)
-        report["attack"] = worst[:12]
-        for w in worst[:12]:
-            log("  attack smooth: %-14s max change %.2f deg/frame/frame at frame %d (top speed %.2f deg/frame)" % (w[2], w[0], w[3], w[1]))
-        export(arm, act2, "walk")
+        last = act
+        for maker, args in ((attack, ("_l",)), (attack, ("_r",)), (throw, ()), (stomp, ("_r",)), (stomp, ("_l",))):
+            last, n = maker(arm, *args)
+            worst = smoothness(arm, n, loop=False)
+            report[last.name] = worst[:6]
+            render_frames(arm, "walk", n, [1 + round(i * n / 7) for i in range(8)], last.name)
+            for w in worst[:3]:
+                log("  %s smooth: %-14s max change %.2f deg/frame/frame at frame %d (top speed %.2f deg/frame)" % (last.name, w[2], w[0], w[3], w[1]))
+        for old in [a for a in bpy.data.actions if a.name.split(".")[0] == "Attack"]:
+            bpy.data.actions.remove(old)
+        log("clips:", ", ".join(sorted(a.name for a in bpy.data.actions)))
+        export(arm, last, "walk")
     if WHICH in ("fly", "both"):
         arm, act, frames = fly()
         worst = smoothness(arm, frames)

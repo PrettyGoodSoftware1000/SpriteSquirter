@@ -200,11 +200,11 @@ starts; they carry over into it.
    Each **Storm Spire** (the Crystal tower) allows 2 **Storm Banshees**
    (40 seconds each): winged villagers (dressed in purple for now) who
    blow a gust of wind every 6 seconds down a row 10 m wide in front of
-   them, which pushes every attacking gooblin in it 20 m back and knocks it
-   over (it is not hurt). The Spire itself makes 10 **Storm Essence** a
+   them (pale streaks of wind race down it), which pushes every attacking
+   gooblin in it 20 m back and knocks it over (it is not hurt). The Spire itself makes 10 **Storm Essence** a
    minute (the violet bolt in the village panel), and strikes any enemy
    that comes within 50 m with **chain lightning**, no more often than
-   every 20 seconds, for 25 Storm Essence a strike (all in
+   every 10 seconds, for 25 Storm Essence a strike (all in
    `balancing.txt`).
 5. **Feed everyone.** Each villager (children too) eats 1 food a minute,
    each warrior 3 and each archer, mage or Storm Banshee 2; the counter shows how much
@@ -322,7 +322,8 @@ starts; they carry over into it.
    and no slope slows it. Running and the raven's flying use stamina, and
    stop when it runs out. The tortoise can do neither; it tires slowly as
    it walks, and walks at half speed with no stamina left. When it is hit
-   it may pull into its **shell**, where blows do a fifth of the harm
+   it may pull into its **shell** (with half its health or more, only a
+   quarter as readily: `shell_healthy_weight`), where blows do a fifth of the harm
    and it heals at half its usual rate even while they land
    (`shell_regen_share`),
    until nothing has hit it for 5 seconds. Stamina, magicko and health
@@ -371,8 +372,11 @@ starts; they carry over into it.
    tenth of the harm. For every 100 lumber, stone or food your villagers
    carry into the store it gains 25 knowledge of harvesting that; once
    learned it pulls up a tree or a boulder (or reaps ripe wheat) and
-   carries it to the Storehouse, 25 at a time when full grown. The
-   tortoise is born knowing how to fetch all three.
+   carries it to the Storehouse, 25 at a time when full grown. Left to
+   itself it is half as likely again to fetch something it knows how to
+   fetch as its affinities alone make it (`gather_weight`, against
+   wandering about). The tortoise is born knowing how to fetch all three,
+   and fetches from the start, however small.
    **Gooblin caves and buildings.** With no gooblin within its
    aggressiveness range, the creature goes for the nearest gooblin
    building or cave in it and hits it (a cave has 10,000 health). Once it

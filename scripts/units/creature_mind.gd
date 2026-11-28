@@ -538,7 +538,7 @@ func marching_on_stores() -> Node3D:
 ## Left to itself: come home if it has strayed; otherwise pick at random,
 ## weighted by its affinities, between a short wander, exploring (now and
 ## then: Balance "explore_weight" of the weight it would have) and
-## fetching what it has learned to fetch.
+## fetching what it has learned to fetch ("gather_weight" of its weight).
 func _choose_idle() -> void:
 	_idle_timer = randf_range(6.0, 12.0)
 	var from_home := Vector2(creature.global_position.x - home.x, creature.global_position.z - home.z).length()
@@ -553,11 +553,14 @@ func _choose_idle() -> void:
 	if creature.kind == "squirrel" and Game.now >= seed_ready_at and is_instance_valid(Game.village) and Game.village.founded:
 		facts["seed"] = {"battle": _battle_raging()}
 		options["seed"] = Balance.num("forest_seed_weight") * personality("forestSeeder") * weight("seed", facts["seed"])
-	if creature.size >= 0.3:
+	# (Big enough to carry something home, or a tortoise: Creature.SPECIES
+	# "gathers_small".) Fetching what it knows is Balance "gather_weight" as
+	# likely as its affinities alone make it.
+	if creature.size >= 0.3 or creature._species().get("gathers_small", false):
 		for kind: String in HARVESTS:
 			if learned(kind) and _harvest_target(kind) != null:
 				facts[kind] = gather_facts(kind)
-				options[kind] = weight(kind, facts[kind])
+				options[kind] = weight(kind, facts[kind]) * Balance.num("gather_weight")
 	var choice: String = pick(options)
 	match choice:
 		"wander":

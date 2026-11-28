@@ -2387,9 +2387,46 @@ func storm_wind(dir: Vector3) -> int:
 		if along > -1.0 and along < reach and absf(rel.dot(across)) < half:
 			g.knock_over(dir, Balance.num("banshee_wind_push"))
 			hit += 1
-	for k in 5:
-		Game.effects.spawn_dust(global_position + dir * (2.0 + k * reach / 5.0), 1.0 + 0.3 * k)
+	_wind_burst(dir, reach, half)
 	return hit
+
+
+## A gust's look: pale streaks of wind (as Hasty sheds) racing down the
+## row, `reach` long and `half` either side, and a little dust.
+func _wind_burst(dir: Vector3, reach: float, half: float) -> void:
+	var fx := CPUParticles3D.new()
+	var streak := QuadMesh.new()
+	streak.size = Vector2(0.25, 1.1)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.vertex_color_use_as_albedo = true
+	streak.material = mat
+	fx.mesh = streak
+	fx.one_shot = true
+	fx.explosiveness = 0.6
+	fx.amount = 70
+	fx.lifetime = 0.9
+	fx.local_coords = false
+	fx.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	fx.emission_box_extents = Vector3(half, 1.0, 1.5)
+	fx.direction = Vector3(0, 0.05, 1)
+	fx.spread = 8.0
+	fx.gravity = Vector3.ZERO
+	fx.initial_velocity_min = reach * 0.9
+	fx.initial_velocity_max = reach * 1.3
+	var fade := Gradient.new()
+	fade.set_color(0, Color(0.85, 0.95, 1.0, 0.85))
+	fade.set_color(1, Color(0.6, 0.8, 1.0, 0.0))
+	fx.color_ramp = fade
+	Game.world_root.add_child(fx)
+	fx.global_position = global_position + Vector3.UP * 1.2 + dir * 1.5
+	fx.look_at(fx.global_position - dir, Vector3.UP)
+	fx.emitting = true
+	fx.finished.connect(fx.queue_free)
+	for k in 3:
+		Game.effects.spawn_dust(global_position + dir * (3.0 + k * reach / 3.0), 0.8 + 0.3 * k)
 
 
 ## Blown over (by a Storm Banshee's gust): it slides `metres` along `dir`

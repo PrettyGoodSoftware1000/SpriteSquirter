@@ -78,8 +78,9 @@ const SPECIES := {
 	"tortoise": {
 		"name": "Tortoise", "model": "res://assets/creature/creature.glb", "speed": 3.6,
 		"nervous": 0.0, "shell": true,
-		# Born knowing how to fetch every resource (CreatureMind).
-		"knows": ["lumber", "stone", "food"],
+		# Born knowing how to fetch every resource, and fetching from the
+		# start, however small (CreatureMind).
+		"knows": ["lumber", "stone", "food"], "gathers_small": true,
 		"eye": Vector3(0.74, 0.5, 1.22), "eye_size": 0.34, "eye_color": Color(0.96, 0.94, 0.84),
 		"lid_color": Color(0.36, 0.38, 0.2), "lid_y": [0.2, 0.14], "lid_tilt": [-0.38, 0.5], "pupil": [1.0, 0.72],
 		# Mouth: half width, height, how far forward, how far its corners curve back.
@@ -750,7 +751,12 @@ func take_hit(amount: float, _from: Node3D) -> void:
 		if _spec.get("shell", false) and not hiding and Game.now >= _shell_think_at and Balance.num("shell_damage_share") < 1.0:
 			# Hurt in a fight: into the shell, if it is that way inclined.
 			_shell_think_at = Game.now + Balance.num("shell_think_seconds")
-			if mind.likely("shell", {"health": health_share(), "battle": true}):
+			# (Less keen while it still has half its health or more:
+			# Balance "shell_healthy_weight".)
+			var keen := mind.weight("shell", {"health": health_share(), "battle": true})
+			if health_share() >= 0.5:
+				keen *= Balance.num("shell_healthy_weight")
+			if randf() < keen / (1.0 + keen):
 				_hide()
 		return
 	hp = 0.0

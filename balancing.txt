@@ -265,7 +265,7 @@ banshee_wind_width = 10             # metres wide the row is
 banshee_wind_range = 25             # metres long the row is (it blows at gooblins this close)
 storm_essence_per_minute = 10       # Storm Essence each Storm Spire makes a minute
 storm_lightning_range = 50          # metres: the Spire strikes enemies this close...
-storm_lightning_seconds = 20        # ...no more often than this...
+storm_lightning_seconds = 10        # ...no more often than this (each Spire still makes storm_essence_per_minute)...
 storm_lightning_cost = 25           # ...and each strike costs this much Storm Essence
 
 # --- Gathering --------------------------------------------------------------------
@@ -404,6 +404,7 @@ level_regen_gain = 0.2          # ...and this much quicker to refill
 # --- The tortoise's shell ---------------------------------------------------------
 shell_damage_share = 0.2        # share of the damage it takes while hiding (1 = the shell is no use, and it never hides)
 shell_think_seconds = 8         # when it is hit, it decides whether to hide at most this often
+shell_healthy_weight = 25%      # with half its health or more it is this much as keen to hide (an even chance at affinity 0 becomes 1 in 5)
 shell_calm_seconds = 5          # it comes out when nothing has hit it for this long...
 shell_max_seconds = 15          # ...or after this long whatever happens
 shell_burst_radius = 9          # coming out, an unseen blast (no harm) knocks enemies this close away...
@@ -440,6 +441,7 @@ flee_chance = 10%
 # something it has learned to fetch (its affinity's weight: 1 at 0).
 wander_weight = 100%
 explore_weight = 25%
+gather_weight = 150%                # fetching a resource it knows how to fetch is this much as likely as its affinity alone makes it (against wandering)
 explore_least = 40              # metres: the shortest trip that counts as exploring
 
 # Forest seeding (the squirrel only): now and then it tosses a magic acorn

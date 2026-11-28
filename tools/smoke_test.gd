@@ -2472,6 +2472,25 @@ func _run() -> void:
 		var raider := get_tree().get_nodes_in_group("goblins")[0] as Villager
 		var route := play.raids._route_for(raider.home)
 		_check(play.raids.paths.size() == placed and route.size() >= 2, "goblins take the map's painted path to the village (%d points)" % route.size())
+		# Behind the Flag Bearer, the fighters march down a painted path to a cave
+		# that stands, and never to one that has fallen.
+		var plan := play.raids.march_route(play.village.center)
+		var plan_cave: Node3D = plan.get("cave", null)
+		var plan_route: PackedVector3Array = plan.get("route", PackedVector3Array())
+		var flag_marcher := play.village.people()[0]
+		var march_step: Variant = flag_marcher._march_target()
+		var on_path := false
+		for p in plan_route:
+			if march_step != null and Vector2(p.x - (march_step as Vector3).x, p.z - (march_step as Vector3).z).length() < 0.5:
+				on_path = true
+		_check(plan_cave != null and plan_route.size() >= 2 and on_path and flag_marcher._march_cave == plan_cave
+			and Vector2(plan_route[plan_route.size() - 1].x - plan_cave.global_position.x, plan_route[plan_route.size() - 1].z - plan_cave.global_position.z).length() < GoblinRaids.PATH_SNAP,
+			"with the flag up, fighters march down the painted path to a standing cave (%d points)" % plan_route.size())
+		for node in get_tree().get_nodes_in_group("caves"):
+			GoblinRaids.hurt_cave(node as Node3D, Balance.num("goblin_cave_health") * 2.0)
+		await _wait(0.2)
+		_check(play.raids.march_route(play.village.center).is_empty() and flag_marcher._march_target() == null,
+			"and no path leads them to a fallen cave")
 		await _wait(3.0)
 		_check(get_tree().get_nodes_in_group("start_markers").is_empty(), "banners removed after choosing")
 

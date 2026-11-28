@@ -637,6 +637,49 @@ func _route_for(from: Vector3) -> PackedVector3Array:
 	return out
 
 
+## The way the village's fighters march on a gooblin cave while the flag
+## is up (the Flag Bearer): the map's painted path, run backwards, from its
+## point nearest `from` to a cave that still stands. Only paths to standing
+## caves count; of those, the one that passes nearest `from`. Returns
+## {"cave": the cave, "route": the points to walk, ending at the path's
+## cave end}, or {} if no painted path leads to a standing cave (the
+## fighters then find their own way to the nearest one).
+func march_route(from: Vector3) -> Dictionary:
+	var here := Vector2(from.x, from.z)
+	var best := {}
+	var best_d := INF
+	for path: PackedVector2Array in paths:
+		if path.size() < 2:
+			continue
+		# (A path runs from its cave to a start location.)
+		var cave: Node3D = null
+		var cave_d := PATH_SNAP
+		for node in get_tree().get_nodes_in_group("caves"):
+			var c := node as Node3D
+			if not cave_standing(c):
+				continue
+			var d := Vector2(c.global_position.x, c.global_position.z).distance_to(path[0])
+			if d < cave_d:
+				cave_d = d
+				cave = c
+		if cave == null:
+			continue
+		var join := 0
+		var join_d := INF
+		for k in path.size():
+			var d := here.distance_to(path[k])
+			if d < join_d:
+				join_d = d
+				join = k
+		if join_d < best_d:
+			best_d = join_d
+			var route := PackedVector3Array()
+			for k in range(join, -1, -1):
+				route.append(Vector3(path[k].x, 0.0, path[k].y))
+			best = {"cave": cave, "route": route}
+	return best
+
+
 func end_raid() -> void:
 	for node in get_tree().get_nodes_in_group("raiders"):
 		(node as Villager).end_raid()

@@ -238,6 +238,11 @@ const CAVE_REACH := 9.0
 var banshee := false
 ## On the march behind the Flag Bearer (see marching()).
 var _marched := false
+## The cave it marches on, and the way there (a painted path, backwards:
+## GoblinRaids.march_route()), and how far along it is.
+var _march_cave: Node3D
+var _march_route := PackedVector3Array()
+var _march_i := 0
 ## Knocked over by a gust: lying on its back until then (Game.now).
 var _fallen_until := 0.0
 ## The banshees' looks: a woman's, in purple (made from the villagers' own).
@@ -2524,6 +2529,34 @@ func marching() -> bool:
 	return owned and (soldier or archer or wizard or banshee) and flag_up()
 
 
+## Where to walk next on the march: down the painted path to a cave that
+## still stands (picking the way again whenever its cave has fallen), and
+## at the path's end up to the cave. With no painted path to a standing
+## cave, straight for the nearest standing one. Null if no cave stands.
+func _march_target() -> Variant:
+	if not GoblinRaids.cave_standing(_march_cave):
+		_march_cave = null
+		_march_route = PackedVector3Array()
+		_march_i = 0
+		var plan: Dictionary = GoblinRaids.current.march_route(global_position) if GoblinRaids.current != null else {}
+		if not plan.is_empty():
+			_march_cave = plan.cave
+			_march_route = plan.route
+		else:
+			_march_cave = _flag_cave()
+		if _march_cave == null:
+			return null
+	# (Points already reached, or passed while fighting, are skipped.)
+	while _march_i < _march_route.size() and _flat_to(_march_route[_march_i]) < 3.0:
+		_march_i += 1
+	if _march_i < _march_route.size() - 1:
+		var p := _march_route[_march_i]
+		return Vector3(p.x, Game.terrain.get_height(p.x, p.z), p.z)
+	var to_us := global_position - _march_cave.global_position
+	to_us.y = 0.0
+	return _march_cave.global_position + (to_us.normalized() if to_us.length_squared() > 0.01 else Vector3.FORWARD) * CAVE_REACH
+
+
 ## The cave the flag leads to: the standing one nearest this villager.
 func _flag_cave() -> Node3D:
 	var best: Node3D = null
@@ -2615,6 +2648,8 @@ func _think() -> void:
 	# The flag is down again: those who marched on the cave come home.
 	if _marched and not marching():
 		_marched = false
+		_march_cave = null
+		_march_route = PackedVector3Array()
 		_foe = null
 		if state == State.FIGHT or state == State.WALK:
 			state = State.IDLE
@@ -2637,11 +2672,9 @@ func _think() -> void:
 			if not (state == State.FIGHT and foe == _foe):
 				_engage(foe)
 			return
-		var cave := _flag_cave()
-		if cave != null:
-			var to_us := global_position - cave.global_position
-			to_us.y = 0.0
-			_target = cave.global_position + (to_us.normalized() if to_us.length_squared() > 0.01 else Vector3.FORWARD) * CAVE_REACH
+		var next: Variant = _march_target()
+		if next != null:
+			_target = next
 			state = State.WALK
 		return
 	# Archers take up posts on treehouses and rope bridges, and shoot from there.

@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS := {
 	"creature_grow_minutes": 30.0, # time for the creature to reach full size
 	"goblin_build_speed": 5.0, # how many times as fast the goblins start and finish buildings
 	"goblin_junk_rate": 50.0, # Gooblin Junk the gooblins get a minute on the first day...
-	"goblin_junk_per_day": 25.0, # ...and this much more a minute for every day after
+	"goblin_junk_per_day": 10.0, # ...and this much more a minute for every day after
 	"sapling_rate": 2.0, # saplings the village plants a minute (balancing.txt saplings_per_minute)
 	"villager_detail": 300.0, # metres from the camera within which villagers are drawn in full detail (300: always)
 	"construction_rate": 1.0, # how many times as fast the village's buildings go up

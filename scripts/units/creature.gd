@@ -412,7 +412,12 @@ func _top_speed() -> float:
 	# (The tortoise drags its feet when it has no stamina left.)
 	var weary := 0.5 if _tired and _spec.get("shell", false) else 1.0
 	var burst := 1.0 + Balance.num("shell_burst_speed") if Game.now < _burst_until else 1.0
-	return max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0) * weary * burst
+	return max_speed * lerpf(0.5, 1.0, size) * (ALERT_SPEED if _alert else 1.0) * weary * burst * haste_factor()
+
+
+## Hasty (the buff): Balance "hasty_speed" times as fast while it is on.
+func haste_factor() -> float:
+	return Balance.num("hasty_speed") if buff_on("hasty") else 1.0
 
 
 ## Out of its shell with a whoosh: an unseen blast that hurts nobody but
@@ -574,6 +579,10 @@ func _grow(delta: float) -> void:
 	_hurt_timer = maxf(0.0, _hurt_timer - delta)
 	if knocked_out:
 		hp = 0.0
+	elif not hungry and hiding:
+		# In its shell it heals, at Balance "shell_regen_share" of the usual
+		# rate, even with blows still landing.
+		hp = minf(max_hp, hp + max_hp * 0.01 * regen_boost("health") * Balance.num("shell_regen_share") * delta)
 	elif _hurt_timer <= 0.0 and not hungry:
 		hp = minf(max_hp, hp + max_hp * 0.01 * regen_boost("health") * delta)
 
@@ -660,6 +669,22 @@ func _make_buff_fx(id: String) -> CPUParticles3D:
 		fade.set_color(0, Color(1.0, 0.95, 0.4, 1.0))
 		fade.set_color(1, Color(1.0, 0.8, 0.15, 0.0))
 		fade.add_point(0.7, Color(1.0, 0.88, 0.25, 0.9))
+	elif id == "hasty":
+		# Pale wind streaking off it.
+		dot.size = Vector2(0.18, 0.7)
+		fx.amount = 40
+		fx.lifetime = 0.6
+		fx.gravity = Vector3.ZERO
+		fx.initial_velocity_min = 2.0
+		fx.initial_velocity_max = 4.0
+		fade.set_color(0, Color(0.85, 0.95, 1.0, 0.8))
+		fade.set_color(1, Color(0.6, 0.8, 1.0, 0.0))
+	elif id != "aura":
+		# (The flag has no sparkle of its own.)
+		fx.amount = 1
+		dot.size = Vector2.ZERO
+		fade.set_color(0, Color(1, 1, 1, 0))
+		fade.set_color(1, Color(1, 1, 1, 0))
 	else:
 		dot.size = Vector2(0.6, 0.6)
 		fx.amount = 70
@@ -990,7 +1015,7 @@ func _update_flight(delta: float) -> void:
 			var want := atan2(to.x, to.z)
 			heading = rotate_toward(heading, want, turn_speed * 2.2 * delta)
 			var facing := cos(angle_difference(heading, want))
-			var top := max_speed * lerpf(0.5, 1.0, size) * Balance.num("raven_fly_speed")
+			var top := max_speed * lerpf(0.5, 1.0, size) * Balance.num("raven_fly_speed") * haste_factor()
 			# Slow until it is off the ground, and again as it comes in.
 			desired_speed = top * clampf(facing, 0.15, 1.0) * clampf(dist / (cruise * 1.5 + 2.0), 0.2, 1.0) * clampf(_alt / (cruise * 0.4) + 0.25, 0.25, 1.0)
 	speed = move_toward(speed, desired_speed, 7.0 * delta)

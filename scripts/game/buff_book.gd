@@ -19,6 +19,8 @@ const BUFFS := [
 		"hint": "Your creature grows twice as fast for 2 minutes, shedding yellow sparkles."},
 	{"id": "aura", "name": "Flaming Aura",
 		"hint": "Flames fall from your creature for 30 seconds, burning every enemy within 10 metres."},
+	{"id": "hasty", "name": "Hasty",
+		"hint": "Your creature moves 50% faster for 15 seconds, wind streaming off it."},
 	{"id": "flag", "name": "Flag Bearer", "toggle": true,
 		"hint": "Your fighters march on the nearest gooblin cave, fighting every gooblin and gooblin building on the way. 5 animus to raise the flag, then 1 every 5 minutes; click again to lower it."},
 ]

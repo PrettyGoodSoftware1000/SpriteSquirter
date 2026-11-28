@@ -25,8 +25,8 @@ extends Node
 ## The goblins build, too, with **Gooblin Junk** (0.64). Junk piles up all
 ## the time: Game.settings.goblin_junk_rate a minute, and
 ## goblin_junk_per_day more a minute for every day gone by (both dev menu
-## sliders); and every morning each standing building of a kind with
-## Balance "<kind>_junk_per_day" adds that much. Every
+## sliders), and Balance "<kind>_junk_per_minute" more a minute for each
+## standing building of a kind that makes it. Every
 ## "goblin_build_minutes" (divided by the dev menu's goblin build speed,
 ## which also hurries the builders) they mark out one of
 ## BuildingFactory.GOBLIN_KINDS near one of their caves, if they have the
@@ -109,31 +109,37 @@ func setup(day_cycle: DayCycle) -> void:
 	day_cycle.nightfall.connect(func() -> void:
 		nights += 1
 		start_raid())
-	day_cycle.morning.connect(func() -> void:
-		end_raid()
-		_daily_junk())
+	day_cycle.morning.connect(end_raid)
 	for node in get_tree().get_nodes_in_group("caves"):
 		_caves.append(node as Node3D)
 
 
-## Gooblin Junk a minute now: the dev menu's goblin_junk_rate, and
-## goblin_junk_per_day more for every day gone by.
+## Gooblin Junk a minute now: base_junk_rate(), and what the buildings
+## that make it bring in.
 func junk_rate() -> float:
+	return base_junk_rate() + buildings_junk_rate()
+
+
+## The dev menu's goblin_junk_rate, and goblin_junk_per_day more for every
+## day gone by.
+func base_junk_rate() -> float:
 	var days := (_day_cycle.day - 1) if _day_cycle != null else 0
-	return maxf(0.0, float(Game.settings.get("goblin_junk_rate", 50.0)) + float(Game.settings.get("goblin_junk_per_day", 25.0)) * days)
+	return maxf(0.0, float(Game.settings.get("goblin_junk_rate", 50.0)) + float(Game.settings.get("goblin_junk_per_day", 10.0)) * days)
+
+
+## Junk a minute from the standing buildings that make it.
+func buildings_junk_rate() -> float:
+	var more := 0.0
+	for kind: String in BuildingFactory.GOBLIN_KINDS:
+		var each := Balance.num(kind + "_junk_per_minute")
+		if each > 0.0:
+			more += each * standing(kind).size()
+	return more
 
 
 ## What a goblin building of `kind` costs in junk.
 static func junk_cost(kind: String) -> float:
 	return Balance.num(kind + "_junk")
-
-
-## Every morning, the junk the buildings that make it bring in.
-func _daily_junk() -> void:
-	for kind: String in BuildingFactory.GOBLIN_KINDS:
-		var each := Balance.num(kind + "_junk_per_day")
-		if each > 0.0:
-			junk += each * standing(kind).size()
 
 
 ## Goblins each starting cave spawns per minute before its buildings add
@@ -576,8 +582,8 @@ func cave_tip(cave: Node3D) -> String:
 ## What pointing at one of the goblins' buildings shows: what it does.
 static func building_tip(kind: String) -> String:
 	var more := "Makes %s more gooblins spawn a minute" % _num(Balance.num(kind + "_spawn"))
-	if Balance.num(kind + "_junk_per_day") > 0.0:
-		more += "\nBrings in %s Gooblin Junk a day" % _num(Balance.num(kind + "_junk_per_day"))
+	if Balance.num(kind + "_junk_per_minute") > 0.0:
+		more += "\nBrings in %s Gooblin Junk a minute" % _num(Balance.num(kind + "_junk_per_minute"))
 	match kind:
 		OGRE_HOME:
 			var n := roundi(Balance.num("ogres_per_war_hut"))

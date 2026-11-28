@@ -237,17 +237,17 @@ starts; they carry over into it.
    watchtower (`<kind>_spawn`). Only their buildings make them spawn
    faster; the nights alone do not.
    **Gooblin Junk.** The gooblins build with junk: 50 a minute on the
-   first day and 25 a minute more every day after (the dev menu's
-   **Gooblin Junk rate** and **Gooblin Junk growth**), and 10 more every
-   morning for each potion hut and forge. They build each kind once,
+   first day and 10 a minute more every day after (the dev menu's
+   **Gooblin Junk rate** and **Gooblin Junk growth**), and 10 a minute
+   more for each potion hut and forge. They build each kind once,
    cheapest first, and wait until they can pay for the next: a tent (200
    junk), a potion hut (350), a forge (500), a war hut (1,500), a
    watchtower (2,000), then round again (`<kind>_junk`). With the
    standard 5-minute day and 3-minute night that is a tent on day 1, the
-   potion hut and forge on day 2, the war hut about day 4 and the
-   watchtower about day 5, so each night's raid is bigger than the last:
-   about 15 gooblins on night 1, 35 on night 2, 55 on night 3, 100 and an
-   ogre on night 4, 140 on night 5, then giant bats too. Pointing at a
+   potion hut and forge on day 2, the war hut about the end of day 4 and
+   the watchtower about day 6, so each night's raid is bigger than the
+   last: about 15 gooblins on night 1, 35 on night 2, 55 on night 3,
+   60-100 and an ogre on night 4, 140 on night 5, then giant bats too. Pointing at a
    cave shows their junk and how fast it comes in.
    **Ogres and giant bats come from gooblin buildings.** Every **war hut**
    the gooblins finish adds an **ogre** with a spiked club (ten times a
@@ -322,7 +322,9 @@ starts; they carry over into it.
    and no slope slows it. Running and the raven's flying use stamina, and
    stop when it runs out. The tortoise can do neither; it tires slowly as
    it walks, and walks at half speed with no stamina left. When it is hit
-   it may pull into its **shell**, where blows do a fifth of the harm,
+   it may pull into its **shell**, where blows do a fifth of the harm
+   and it heals at half its usual rate even while they land
+   (`shell_regen_share`),
    until nothing has hit it for 5 seconds. Stamina, magicko and health
    each **level up** with use (stamina spent, magicko spent on its spells,
    health lost): the first level after 100, the next after 200 more, then
@@ -575,7 +577,7 @@ In the game, press **Esc** and **Show controls** for this list.
 | Double-click the creature's bars | Find the creature |
 | Click a Shrine / a Blacksmith | Research spells and creature buffs / research |
 | Mouse over a building | Its name, and what it is researching or training and how far along |
-| A buff on the buff bar (over the creature's health bar) | Cast that creature buff: **Creature Growth** (it grows twice as fast for 2 minutes, shedding yellow sparkles; then a minute's cooldown) or **Flaming Aura** (flames fall from it for 30 seconds and burn every enemy within 10 m for 5 a second). Each costs 1 animus and cannot be cast while it is on (`buff_...` in `balancing.txt`). **Flag Bearer** is on until you click it again: raising the flag costs 5 animus every time and keeping it up 1 animus every 5 minutes (it comes down by itself when the animus runs out or the creature dies). While it is up your warriors, archers, mages, necromancers and Storm Banshees march on a gooblin cave, fighting every gooblin and gooblin building they meet: on a map with painted gooblin paths they march down the path (from where it passes nearest them) to its cave, only ever a cave that still stands, and pick another path when theirs falls; without one they go straight for the nearest standing cave; and then hack at the cave itself: a cave has 10,000 health (`goblin_cave_health`), and when it falls it spawns no more gooblins |
+| A buff on the buff bar (over the creature's health bar) | Cast that creature buff: **Creature Growth** (it grows twice as fast for 2 minutes, shedding yellow sparkles; then a minute's cooldown) or **Flaming Aura** (flames fall from it for 30 seconds and burn every enemy within 10 m for 5 a second). Each costs 1 animus and cannot be cast while it is on (`buff_...` in `balancing.txt`). **Hasty** (1 animus) makes it move 50% faster for 15 seconds, walking, running or flying, with pale wind streaming off it (`hasty_speed`). **Flag Bearer** is on until you click it again: raising the flag costs 5 animus every time and keeping it up 1 animus every 5 minutes (it comes down by itself when the animus runs out or the creature dies). While it is up your warriors, archers, mages, necromancers and Storm Banshees march on a gooblin cave, fighting every gooblin and gooblin building they meet: on a map with painted gooblin paths they march down the path (from where it passes nearest them) to its cave, only ever a cave that still stands, and pick another path when theirs falls; without one they go straight for the nearest standing cave; and then hack at the cave itself: a cave has 10,000 health (`goblin_cave_health`), and when it falls it spawns no more gooblins |
 | Click outside a menu | Close it |
 | Click with a spell in hand | Cast it (Bless and Condemn: click anywhere); Shift+click keeps it in hand |
 | B / Backspace (or the hammer) | Open or close the build menu (1–9 pick the field, the bridge or a building) |
@@ -605,7 +607,7 @@ before a game starts.
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
 | Gooblin build speed | How many times as fast the gooblins start and finish buildings (5 by default; every neutral village at the start adds `neutral_goblin_build_speed`) |
 | Gooblin Junk rate | Gooblin Junk the gooblins get a minute on the first day (50) |
-| Gooblin Junk growth | How much more junk a minute they get for every day after (25) |
+| Gooblin Junk growth | How much more junk a minute they get for every day after (10) |
 | Construction rate | How many times as fast your buildings go up |
 | Training time | Multiplies every training time |
 | Starting influence / Influence per person | How far the village's influence reaches at first, and how much further for every villager |

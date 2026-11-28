@@ -193,6 +193,10 @@ growth_buff_speed = 100%            # how much faster the creature grows while i
 buff_cost_aura = 1                  # Flaming Aura: animus to cast
 buff_seconds_aura = 30              # how long it lasts
 buff_cooldown_aura = 0              # seconds after it wears off before it can be cast again
+buff_cost_hasty = 1                 # Hasty: animus to cast
+buff_seconds_hasty = 15             # how long it lasts
+buff_cooldown_hasty = 0             # seconds after it wears off before it can be cast again
+hasty_speed = 150%                  # how fast the creature moves meanwhile (walking, running and flying)
 buff_cost_flag = 5                  # Flag Bearer: animus to raise the flag (every time)...
 buff_upkeep_flag = 1                # ...and this much animus to keep it up...
 buff_upkeep_seconds_flag = 300      # ...every this many seconds (it comes down when the animus runs out)
@@ -289,27 +293,27 @@ skeleton_share = 0.5                # its health and damage, as a share of who i
 goblin_build_minutes = 5            # the gooblins start a new building this often
 goblin_buildings_max = 40          # and stop when they have this many
 # Gooblin Junk (0.64): what the gooblins build with. They get the dev
-# menu's Gooblin Junk rate a minute (50) and its Gooblin Junk growth (25)
+# menu's Gooblin Junk rate a minute (50) and its Gooblin Junk growth (10)
 # more a minute for every day gone by. Each building costs <kind>_junk,
 # paid when they mark it out (they build the kinds cheapest first, and
 # wait until they can pay); once finished it makes its cave spawn
-# <kind>_spawn more gooblins a minute, and <kind>_junk_per_day brings in
-# that much junk every morning.
-# At 50 + 25 a day, with a 5-minute day and 3-minute night, they get about
-# 400 junk on day 1, 600 on day 2, 800 on day 3 ... so: a tent on day 1,
-# the potion hut early on day 2 and the forge by its end, the war hut (and
-# its ogre) about day 4, the watchtower (and its bats) about day 5, then
+# <kind>_spawn more gooblins a minute, and <kind>_junk_per_minute brings
+# in that much more junk a minute.
+# At 50 + 10 a day, with a 5-minute day and 3-minute night, and the potion
+# hut's and forge's 10 a minute each: a tent on day 1, the potion hut
+# early on day 2 and the forge by its end, the war hut (and its ogre)
+# about the end of day 4, the watchtower (and its bats) about day 6, then
 # round again. Most gooblins die each night, so each raid is about one
-# day's spawning: about 15 on night 1, 35 on night 2, 55 on night 3, 100
-# with an ogre on night 4, 140 on night 5, then more with bats.
+# day's spawning: about 15 on night 1, 35 on night 2, 55 on night 3,
+# 60-100 with an ogre on night 4, 140 on night 5, then more with bats.
 goblin_tent_junk = 200
 goblin_tent_spawn = 2
 goblin_potion_hut_junk = 350
 goblin_potion_hut_spawn = 2
-goblin_potion_hut_junk_per_day = 10
+goblin_potion_hut_junk_per_minute = 10
 goblin_forge_junk = 500
 goblin_forge_spawn = 2
-goblin_forge_junk_per_day = 10
+goblin_forge_junk_per_minute = 10
 goblin_war_hut_junk = 1500
 goblin_war_hut_spawn = 10
 goblin_watchtower_junk = 2000
@@ -404,6 +408,7 @@ shell_calm_seconds = 5          # it comes out when nothing has hit it for this 
 shell_max_seconds = 15          # ...or after this long whatever happens
 shell_burst_radius = 9          # coming out, an unseen blast (no harm) knocks enemies this close away...
 shell_burst_force = 14          # ...sliding them off at this many metres a second
+shell_regen_share = 50%         # in its shell it heals at this share of its usual rate, even in a fight
 shell_burst_speed = 25%         # and it moves this much faster...
 shell_burst_seconds = 6         # ...for this long
 

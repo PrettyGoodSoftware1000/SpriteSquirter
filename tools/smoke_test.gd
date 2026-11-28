@@ -1109,9 +1109,9 @@ func _run() -> void:
 		# can pay, and some buildings bring in more each morning.
 		var junk_day: int = play.day_cycle.day
 		play.day_cycle.day = 1
-		var rate_day_1 := play.raids.junk_rate()
+		var rate_day_1 := play.raids.base_junk_rate()
 		play.day_cycle.day = 3
-		var rate_day_3 := play.raids.junk_rate()
+		var rate_day_3 := play.raids.base_junk_rate()
 		play.day_cycle.day = junk_day
 		_check(is_equal_approx(rate_day_1, game.settings.goblin_junk_rate) and is_equal_approx(rate_day_3, game.settings.goblin_junk_rate + 2.0 * game.settings.goblin_junk_per_day),
 			"the gooblins get Gooblin Junk at the dev menu's rate, more each day (%.0f a minute on day 1, %.0f on day 3)" % [rate_day_1, rate_day_3])
@@ -1138,12 +1138,11 @@ func _run() -> void:
 		if paid != null:
 			paid.remove_from_group("goblin_sites")
 			paid.queue_free()
-		var junk_then := play.raids.junk
-		play.raids._daily_junk()
 		var junk_makers := 0.0
 		for kind: String in BuildingFactory.GOBLIN_KINDS:
-			junk_makers += Balance.num(kind + "_junk_per_day") * play.raids.standing(kind).size()
-		_check(is_equal_approx(play.raids.junk - junk_then, junk_makers), "each morning the buildings that make junk bring it in (%.0f)" % junk_makers)
+			junk_makers += Balance.num(kind + "_junk_per_minute") * play.raids.standing(kind).size()
+		_check(is_equal_approx(play.raids.junk_rate() - play.raids.base_junk_rate(), junk_makers)
+			and Balance.num("goblin_forge_junk_per_minute") > 0.0, "the buildings that make junk bring it in every minute (%.0f a minute)" % junk_makers)
 		play.raids.junk = junk_before
 
 		# Chain lightning jumps from one to the next; a wet one may give it a jump more.
@@ -1521,9 +1520,9 @@ func _run() -> void:
 			"there is no limit to how far lumberjacks go for wood")
 		far_tree.queue_free()
 		_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 5.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 1.0)
-			and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_junk_rate, 50.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_junk_per_day, 25.0)
+			and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_junk_rate, 50.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_junk_per_day, 10.0)
 			and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"),
-			"the owner's sliders are the defaults: Goblin Spawn Rate 1, gooblin build speed 5, Gooblin Junk 50 a minute and 25 more each day")
+			"the owner's sliders are the defaults: Goblin Spawn Rate 1, gooblin build speed 5, Gooblin Junk 50 a minute and 10 more each day")
 		_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 5.0) and play.day_cycle.clock_text().contains(":"), "a day is 5 minutes by default (%s)" % play.day_cycle.clock_text())
 		_check(DayCycle.twelve_hour(16.0) == "4:00 pm" and DayCycle.twelve_hour(0.5) == "12:30 am" and DayCycle.twelve_hour(12.25) == "12:15 pm"
 			and DayCycle.twelve_hour(9.0) == "9:00 am" and (play.day_cycle.clock_text().ends_with(" am") or play.day_cycle.clock_text().ends_with(" pm")),
@@ -2077,6 +2076,30 @@ func _run() -> void:
 		beast._buffs.clear()
 		if is_instance_valid(singed):
 			singed.queue_free()
+		# Hasty: 50% faster for 15 seconds, for 1 animus.
+		village.buffs_known["hasty"] = true
+		village.resources.animus = 10.0
+		var pace_before := beast._top_speed()
+		_check(play.cast_buff("hasty") == "" and beast.buff_on("hasty") and village.amount("animus") == 10 - BuffBook.cost("hasty")
+			and is_equal_approx(beast._top_speed(), pace_before * Balance.num("hasty_speed")) and absf(beast.buff_left("hasty") - Balance.num("buff_seconds_hasty")) < 0.5,
+			"Hasty makes the creature hasty_speed as fast for buff_seconds_hasty, for buff_cost_hasty animus")
+		beast._buffs.clear()
+		# In its shell the tortoise heals at shell_regen_share of its rate, even while being hit.
+		if beast.kind == "tortoise":
+			var heal_from := beast.max_hp * 0.5
+			beast.hp = heal_from
+			beast.hiding = true
+			beast._hid_at = game.now
+			beast._last_hit_at = game.now
+			beast._hurt_timer = 100.0
+			var heal_t := game.now
+			await _wait(1.0)
+			var healed := beast.hp - heal_from
+			var expected := beast.max_hp * 0.01 * beast.regen_boost("health") * Balance.num("shell_regen_share") * (game.now - heal_t)
+			beast.hiding = false
+			beast._hurt_timer = 0.0
+			_check(healed > expected * 0.6 and healed < expected * 1.4,
+				"in its shell the tortoise heals at shell_regen_share of its rate, even in a fight (%.1f, %.1f expected)" % [healed, expected])
 		# Where the magicko comes from, when the mouse is over its rate.
 		var magicko_sum := 0.0
 		for part: Array in village.magicko_sources():

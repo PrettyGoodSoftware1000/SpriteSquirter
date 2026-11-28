@@ -129,6 +129,12 @@ static func _draw(id: String) -> Image:
 			for step: Array in [[1.36, Color(1.0, 0.85, 0.2, 0.35)], [1.17, Color(1.0, 0.88, 0.25, 0.6)], [0.9, Color(1.0, 0.92, 0.3)]]:
 				var k: float = step[0]
 				_shape(img, func(p: Vector2) -> float: return _beast((p - Vector2(25, 26)) / k + Vector2(25, 26)) * k, step[1], k < 1.0)
+		"hasty":
+			# A creature dashing along, speed lines behind it.
+			for k in 3:
+				var y := 16.0 + k * 8.0
+				_shape(img, func(p: Vector2) -> float: return _segment(p, Vector2(4, y), Vector2(18 - k * 3, y)) - 1.6, Color(0.75, 0.9, 1.0))
+			_shape(img, func(p: Vector2) -> float: return _beast(p - Vector2(5, 0)), Color(0.35, 0.7, 0.95))
 		"flag":
 			# A banner on a pole, streaming out.
 			_shape(img, func(p: Vector2) -> float: return _segment(p, Vector2(15, 5), Vector2(15, 44)) - 2.0, Color(0.55, 0.36, 0.18))

@@ -88,7 +88,7 @@ wrist does not twist; the arm never straightens past 90% of its length.
 ## Throw and stomps (0.61)
 
 - **Throw** (73 frames, 2.4 s; the right hand): it crouches and reaches down
-  (goblins in hand at 0.6 s, frame 19), straightens and lifts them, winds up
+  (gooblins in hand at 0.6 s, frame 19), straightens and lifts them, winds up
   over its right shoulder while the right wing lifts up and back out of the
   way (frames 30-46), hurls them (let go at 1.62 s, frame 49), follows
   through and comes back to rest. The left hand reaches down for balance.
@@ -100,9 +100,22 @@ wrist does not twist; the arm never straightens past 90% of its length.
   for balance and the wings lift, then drop with the stamp.
   Worth a check: frames 16-25 (the knee at its highest, and the drop).
 
-In the game the throw is timed to the game's grab (goblins picked up at
+In the game the throw is timed to the game's grab (gooblins picked up at
 0.7 s, let go at 1.95 s); to eat them it lifts them the same way and holds
 them up. The stomp's foot lands when the game's stomp does.
+
+## Cast, and the longer walk (0.62)
+
+- **Walk**: the stride is longer (the feet travel 1.2 model units over the
+  two steps, where they travelled 0.95); the clip is still 2 s, so the game
+  plays it more slowly for the same speed. Worth a check: frames 20-31 and
+  50-61 (the foot reaching ahead).
+- **Cast** (49 frames, 1.6 s; the right hand): the arm comes up and out
+  ahead at shoulder height by frame 14, the hand bends back so the palm
+  faces ahead and the fingers open and spread (the knuckles allow only 6
+  degrees to the side), holds until frame 26 and goes back to rest. The
+  wing on that side lifts out of the way. Worth a check: frames 1-14 (the
+  hand turning palm-forward) and the fingers (the talons keep their hook).
 
 ## Joint limits
 

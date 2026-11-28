@@ -2122,7 +2122,7 @@ func _update_post(delta: float) -> void:
 				_attack_timer = ARROW_SECONDS
 				var arrow := Arrow.new()
 				Game.world_root.add_child(arrow)
-				arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to_foe.normalized() * 0.5, _foe, self, ARROW_DAMAGE)
+				arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to_foe.normalized() * 0.5, _foe, self, arrow_damage())
 			return
 	_in_reach = false
 	var span := (post as RopeBridge).length if post is RopeBridge else maxf(post.get_meta("deck_r", 3.5) - 0.7, 0.5)
@@ -2623,7 +2623,9 @@ func _think() -> void:
 	# they meet on the way.
 	if marching():
 		_marched = true
-		if state == State.FIGHT and _foe_ok():
+		# (Busy with a gooblin: on with it. With a building or the cave, a
+		# gooblin that turns up comes first.)
+		if state == State.FIGHT and _foe_ok() and _foe is Villager:
 			return
 		if state == State.POST:
 			_leave_post()
@@ -2632,7 +2634,8 @@ func _think() -> void:
 			return
 		var foe := _march_foe()
 		if foe != null:
-			_engage(foe)
+			if not (state == State.FIGHT and foe == _foe):
+				_engage(foe)
 			return
 		var cave := _flag_cave()
 		if cave != null:
@@ -2822,6 +2825,10 @@ func _update_fight(delta: float) -> void:
 	if archer and (_foe is Villager or _foe is Creature or _foe is GiantBat):
 		_shoot_at(_foe, to, delta)
 		return
+	if archer and not goblin and (_foe is Destructible or _foe.is_in_group("caves")):
+		# A building or a cave: archers shoot at it from where they stand.
+		_shoot_at(_foe, to, delta)
+		return
 	if not (_foe is Destructible) and not (_foe is Creature) and not (_foe is Villager) and not (_foe is GiantBat):
 		# A goblin cave (the flag is up): hacked at from its edge.
 		_in_reach = to.length() <= CAVE_REACH + 1.0
@@ -2856,7 +2863,15 @@ func _update_fight(delta: float) -> void:
 			(_foe as Villager).take_hit(damage, self)
 
 
-## Archers stand off and shoot (goblin archers too).
+## An archer's arrow: Balance "archer_arrow_damage", and
+## "fancy_arrows_damage" times that once its village has The Fancy Arrows.
+func arrow_damage() -> float:
+	var vil := my_village()
+	var fancy := is_instance_valid(vil) and vil.has_research("fancy_arrows")
+	return ARROW_DAMAGE * (Balance.num("fancy_arrows_damage") if fancy else 1.0)
+
+
+## Archers stand off and shoot (gooblin archers too).
 func _shoot_at(foe: Node3D, to: Vector3, delta: float) -> void:
 	_in_reach = to.length() <= shot_range()
 	if not _in_reach:
@@ -2873,7 +2888,7 @@ func _shoot_at(foe: Node3D, to: Vector3, delta: float) -> void:
 		_attack_timer = ARROW_SECONDS / (Balance.num("fey_archer_shot_speed") if fey_archer else 1.0)
 		var arrow := Arrow.new()
 		Game.world_root.add_child(arrow)
-		arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to.normalized() * 0.5, foe, self, damage if skeleton else ARROW_DAMAGE)
+		arrow.launch(global_position + Vector3.UP * 1.35 * scale.y + to.normalized() * 0.5, foe, self, damage if skeleton else arrow_damage())
 
 
 ## How far an archer shoots: ARCHER_RANGE, or GOBLIN_ARCHER_RANGE for a

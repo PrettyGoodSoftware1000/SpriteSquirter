@@ -3,9 +3,9 @@
 A 3D village game built with [Godot 4](https://godotengine.org). Pick a start
 location on an island floating in the sky, and your tiny villagers gather
 lumber, stone and food, farm wheat, raise surreal buildings and have
-children. Every night at nightfall the **goblins raid**: your villagers,
+children. Every night at nightfall the **gooblins raid**: your villagers,
 warriors and mages fight them off, helped by a giant, gloomy tortoise that
-stomps, throws and eats goblins. You cast **fireballs**, **rain**, **roots**
+stomps, throws and eats gooblins. You cast **fireballs**, **rain**, **roots**
 and a **blood sacrifice** with magicko. Make your own islands in the **map editor**. The long-term plan is
 to grow it into an RTS / tower-defense game (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
@@ -49,7 +49,7 @@ button (or ~) opens the gameplay sliders, so they can be set before a game
 starts; they carry over into it.
 
 1. **Choose a start location.** Numbered banners mark them; click one. A
-   random island is just its start locations and one goblin cave: nothing
+   random island is just its start locations and one gooblin cave: nothing
    is built anywhere, and your first **Storehouse** goes up free where you
    click. A map from the editor is the same. The village starts with 20
    villagers, and 100 each of lumber, stone, food and magicko (`start_...`
@@ -121,7 +121,7 @@ starts; they carry over into it.
    and the villagers hang a bridge between the two decks. It costs 1
    lumber a metre. Villagers climb up and walk over a bridge when it is
    on their way, and idle ones stroll across.
-   **Bones and necromancers.** Whenever a villager, goblin or ogre dies
+   **Bones and necromancers.** Whenever a villager, gooblin or ogre dies
    the village gets 2 to 4 **bones** (the bone counter in the top bar).
    Build a Necromancer tower (it costs bones too) and ask for
    necromancers in the village panel: a mage trains at the tower for 75
@@ -137,7 +137,7 @@ starts; they carry over into it.
    to research. It is paid for up front, and each Blacksmith researches
    one thing at a time (two Blacksmiths, two things at once; the same for
    Shrines and spells, and for Wizardry towers): **Sharper swords** (5 minutes; warriors do 50%
-   more damage), **Bows** (3 minutes; unlocks archers), **Wheelbarrows**,
+   more damage), **Wheelbarrows**,
    and **Pitchforks**, **Mining picks** and **Axes** in three tiers each
    (food, stone or lumber gathered 50% faster after the third;
    `tool_tier_bonus` a tier; a tier shows in the menu once the one
@@ -182,14 +182,25 @@ starts; they carry over into it.
    the village panel to see where it comes from (so much from the mages,
    so much from the villagers, the fey, the worshipers in neutral villages
    and a Blood Sacrifice). **Mages** make 5 magicko every 2 minutes each (`wizard_magicko`, 2.5 a minute; a worshiper makes 1 a minute, the dev menu's Magicko rate) and throw tiny
-   **firebolts** at goblins from a distance, faster than a warrior's sword,
-   sometimes setting them alight. Once **Bows** are researched an Archers
-   count appears: each Town guard allows 2 **archers** (22½ seconds each),
-   who shoot goblins from 22 m.
+   **firebolts** at gooblins from a distance, faster than a warrior's sword,
+   sometimes setting them alight. A **Lumber mill** (the Stacked houses)
+   trains **archers**: each allows 4 (`archers_per_mill`; there are no
+   bows to research any more), who shoot gooblins from 22 m, and stores
+   150 more lumber (`lumber_mill_holds`). Click a Lumber mill to research
+   **The Fancy Arrows**: archers' and Fey Archers' arrows do 25% more
+   damage (`fancy_arrows_damage`). Every arrow (gooblin archers' too)
+   leaves a short bright streak behind it, so it shows in flight, at
+   night too. Archers shoot at buildings and caves rather than walk up to
+   hack at them.
+   **Necromancers** are mages trained on: pressing + for a necromancer
+   gives up that mage's place at once (one fewer mage asked for), so the
+   Wizardry tower can start on the next mage while the necromancer
+   trains. (Archers, Fey Archers and Storm Banshees are trained from
+   workers, so nobody's place is given up for them.)
    Each **Storm Spire** (the Crystal tower) allows 2 **Storm Banshees**
    (40 seconds each): winged villagers (dressed in purple for now) who
    blow a gust of wind every 6 seconds down a row 10 m wide in front of
-   them, which pushes every attacking goblin in it 20 m back and knocks it
+   them, which pushes every attacking gooblin in it 20 m back and knocks it
    over (it is not hurt). The Spire itself makes 10 **Storm Essence** a
    minute (the violet bolt in the village panel), and strikes any enemy
    that comes within 50 m with **chain lightning**, no more often than
@@ -215,17 +226,17 @@ starts; they carry over into it.
    is housing (10, plus what your Homes add) and food. Children grow up in a minute
    and then start working.
 8. **Survive the night.** The night is half as long as the daylight. Halfway
-   through it every goblin leaves its cave and marches on your village,
+   through it every gooblin leaves its cave and marches on your village,
    swimming rivers on the way. They attack villagers first, then buildings,
    and go home in the morning. Every cave that was there when the game
-   began keeps spawning goblins (1 a minute, the dev menu's goblin
+   began keeps spawning gooblins (1 a minute, the dev menu's gooblin
    spawn, and 2 more for every neutral village there was at the start),
-   and every goblin building finished near a cave adds
+   and every gooblin building finished near a cave adds
    `goblin_rate_per_building` a minute more there. Only their buildings
    make them spawn faster; the nights alone do not.
-   **Ogres and giant bats come from goblin buildings.** Every **war hut**
-   the goblins finish adds an **ogre** with a spiked club (ten times a
-   goblin's health, three times its damage, too big to pick up or throw,
+   **Ogres and giant bats come from gooblin buildings.** Every **war hut**
+   the gooblins finish adds an **ogre** with a spiked club (ten times a
+   gooblin's health, three times its damage, too big to pick up or throw,
    and only singed by fire); if it dies, the hut sends another at the next
    nightfall. From the third night on, every **watchtower** sends a
    **giant bat** with each raid, which snatches one of
@@ -234,28 +245,28 @@ starts; they carry over into it.
    fireball or chain lightning brings it down, and so does a single arrow
    or mage's firebolt: archers and mages always go for a bat they can
    see first. A villager it was carrying drops and lives.
-   The goblins have a giant of their own, the **balrog**: a horned demon
+   The gooblins have a giant of their own, the **balrog**: a horned demon
    that hatches at one of their caves and grows just as your creature
    does. Until it is full grown it only guards its cave, attacking whoever
    comes within 40 m of it. Full grown, it marches with every nightfall
    raid and stamps your buildings down. From half its full size it spits
    a **fireball** every 20 seconds (half as strong as yours). It has
-   wings but cannot fly, and it walks a little slower than a goblin.
+   wings but cannot fly, and it walks a little slower than a gooblin.
    Your creature and the balrog fight each other with their fists; your
    archers, mages and everyone else join in, and fireballs and chain
    lightning hurt it. When it dies the village gets bones, and another
    hatches ten minutes later.
-   A goblin has the same health, damage and attack speed as a grown-up
+   A gooblin has the same health, damage and attack speed as a grown-up
    villager. Every grown-up in the village turns out to fight raiders
-   that come within 50 m of its centre (and any goblin that wanders
+   that come within 50 m of its centre (and any gooblin that wanders
    within 25 m, raid or no raid); children run, and **warriors** (leather
    armour, helmet, sword and shield; four times the health and twice the
-   damage) go looking for raiders. The **tortoise** helps by itself: goblins
+   damage) go looking for raiders. The **tortoise** helps by itself: gooblins
    within its reach get a **stomp** that hurts everything round its foot
    (it never stomps when a villager or one of your buildings would be
    caught), or it scoops up three to five of them and **throws** or
    **eats** them. During a raid it walks to the raiders unless you have
-   sent it somewhere. With goblins about it moves 20% faster, scowls and
+   sent it somewhere. With gooblins about it moves 20% faster, scowls and
    opens its mouth. Nobody runs away from the tortoise any more.
    **Your creature.** Choose a **tortoise**, a **squirrel** or a **raven**
    in the main menu. (The raven is the owner's two Meshy ravens since 0.61:
@@ -270,7 +281,7 @@ starts; they carry over into it.
    it flies. Shorter trips on the flat it walks, and so does any trip with
    a load in its arms (wood, stone or food it is taking home). Each starts at 15% of its full size and grows for 30 minutes,
    getting faster, stronger and tougher as it does (a small one cannot pick
-   goblins up or flatten buildings, and stays out of raids unless you send
+   gooblins up or flatten buildings, and stays out of raids unless you send
    it). Growing takes **animus**: it grows a tenth of the way at a time,
    and each tenth must be paid for first, 1 for the first tenth, 2 for
    the second, and so on (55 in all; `growth_animus_step` in
@@ -283,7 +294,7 @@ starts; they carry over into it.
    animus for the next tenth: click it to pay. Hold the mouse over it to
    see how far it has grown and what the next tenth costs. It also stops
    growing while the village has no food. Double-click any of its bars to
-   find it. Goblins attack a
+   find it. Gooblins attack a
    creature that comes close; at no health it **dies**, shrinks by a
    quarter of its size (it grows back) and lies where it fell. A
    **Resurrect** button then appears above its bars: it costs 5 animus the
@@ -315,17 +326,17 @@ starts; they carry over into it.
    can chop it down. After the first acorn the squirrel must wait 15
    minutes, after the second 30, and after that 60. It is a rare thing,
    so Bless and Condemn count 30 for it, not 10. In a fight the creatures
-   and the balrog punch with one fist and then the other, and a goblin or
+   and the balrog punch with one fist and then the other, and a gooblin or
    villager is thrown with one hand.
    **Saplings.** Now and then an unassigned worker or a lumberjack kneels
    for 20 seconds and plants a sapling near where they work, so the
    forest grows back; it grows into a tree in 2 days and is not chopped
    until then. How often is `saplings_per_minute` in `balancing.txt` (2)
-   and the dev menu's Saplings planted slider. When goblins raid, or hang about within 50 m of
+   and the dev menu's Saplings planted slider. When gooblins raid, or hang about within 50 m of
    the village, it chases them, turning 30% faster in a fight. A line of
    text floats up from its head when it does something: the sentence for
    it from `Actions.csv` (the most specific one that fits, such as "The
-   creature cast fireball at a goblin. They probably deserved it."). In a fight it may **run from battle**: how hurt it is
+   creature cast fireball at a gooblin. They probably deserved it."). In a fight it may **run from battle**: how hurt it is
    only matters as far as you have trained it to care (Bless and Condemn
    on the running-from-battle rows), and the rest is its nature: the
    squirrel, being nervous, runs half as readily again as the others.
@@ -343,7 +354,14 @@ starts; they carry over into it.
    tenth of the harm. For every 100 lumber, stone or food your villagers
    carry into the store it gains 25 knowledge of harvesting that; once
    learned it pulls up a tree or a boulder (or reaps ripe wheat) and
-   carries it to the Storehouse, 25 at a time when full grown.
+   carries it to the Storehouse, 25 at a time when full grown. The
+   tortoise is born knowing how to fetch all three.
+   **Gooblin caves and buildings.** With no gooblin within its
+   aggressiveness range, the creature goes for the nearest gooblin
+   building or cave in it and hits it (a cave has 10,000 health). Once it
+   is hitting a cave it keeps at it for 15 seconds whatever gooblins come
+   (`creature_siege_seconds`), unless you order it somewhere; then the
+   gooblins come first again. (Villagers turn on a gooblin at once.)
    **Bless and Condemn.** Press the **Bless** key or square (golden
    sparkles, 10 magicko): the pointer becomes a golden star and the top of
    the screen says what the creature last did (holding the mouse over the
@@ -367,7 +385,7 @@ starts; they carry over into it.
    with no brackets is the general action. A line break in a cell (a new
    line in the Google Sheet, Alt+Enter, or `\n` typed out) is a line
    break in what the game shows; in `Announcements.txt` write `\n`. In a sentence, `[enemy name]`
-   becomes the enemy (goblin, ogre, giant bat, balrog) and `[a or an]` the
+   becomes the enemy (gooblin, ogre, giant bat, balrog) and `[a or an]` the
    right word before it. The game reads each bracket by its key words and
    takes any numbers in it as written: highest, lowest, zero or at 0, over
    250 in storage, battle, combat or invaded; full health, over 80%, 50%
@@ -436,14 +454,16 @@ starts; they carry over into it.
    until it is overcast; then the lightning bursts outwards and goes, and
    the cost turns red. **Fireball** blows
    things up and starts fires, **Rain** puts fires out and soaks the ground
-   so it can't burn for a while (and makes wheat under the cloud grow three
-   times as fast while it is wet), and **Roots** grows a glowing green patch
-   of roots for 20 seconds: goblins and the tortoise in it are held where
+   so it can't burn for a while (and makes wheat under the cloud grow 4.125
+   times as fast while it is wet, `rain_crop_growth`), and **Roots** grows a glowing green patch
+   of roots for 20 seconds: gooblins and the tortoise in it are held where
    they stand, and your own people wade through at a quarter of their
    speed. The cost in magicko (the blue droplet) is under each spell.
    **Chain Lightning** strikes whoever is nearest the mouse and jumps
-   on through up to twelve things, each within 9 m of the last: goblins,
-   ogres, bats and your own people alike. Every wet thing it strikes (rained
+   on through up to twelve things, each within 9 m of the last: gooblins,
+   ogres, bats and your own people alike, one jump every 0.15 seconds
+   (`lightning_jump_seconds`; the creature's and the Storm Spire's
+   too). Every wet thing it strikes (rained
    on lately, or standing in a river or lake) has a 75% chance of giving it
    one jump more (`lightning_wet_jump_chance`). The raven is born knowing
    it.
@@ -464,13 +484,13 @@ starts; they carry over into it.
    is a **fey** girl with four dragonfly wings, front and back pairs
    beating in turn. The fey fly (over water and cliffs too, landing only
    to gather), 50% faster,
-   and make twice the magicko. Once archers can be trained, **Fey
-   Archers** can be too (up to the number of winged villagers, taking
+   and make twice the magicko. Once there is a Lumber mill, **Fey
+   Archers** can be trained too (up to the number of winged villagers, taking
    twice as long): they fly about, landing now and then but never with
    enemies inside the influence, shoot twice as fast, and drop green
    pixie dust (`fey_...` in `balancing.txt`).
    **Charm Offensive** (25 magicko; a pink heart): pink hearts float up
-   all over the spot, and about half the goblins caught in it (8 m
+   all over the spot, and about half the gooblins caught in it (8 m
    across from the middle) are charmed for 60 seconds: their eyes turn
    pink and they fight their own kind, who fight back. Your people and
    your creature leave them alone while it lasts (`charm_...` in
@@ -485,7 +505,7 @@ location) you pick how many **neutral villages** there are: at most one
 fewer than the map has start locations. They take start locations you did
 not pick, at random. Each starts as yours does, with a free Storehouse and
 as many villagers, and then lives on its own: its people gather, eat, have
-children, build and fight off goblins for their own village.
+children, build and fight off gooblins for their own village.
 
 - **What they build** comes from a build order file in the
   `NeutralVillages` folder: `Neutral_Build_Order_1.txt`, and any
@@ -498,11 +518,11 @@ children, build and fight off goblins for their own village.
   minutes for.
 - **Their people:** 5 workers always (`neutral_keep_workers`; they build,
   and gather what the village has least of), as many warriors, archers
-  and wizards as their buildings can train (they have bows from the
-  start), and a third of everyone else on each of lumber, stone and food.
+  and mages as their buildings can train (archers at their Lumber
+  mill), and a third of everyone else on each of lumber, stone and food.
 - **Worshipers.** Their people do not worship your creature at first. While
   your creature is in their village, one is won over every 5 minutes
-  (`convert_minutes`); when it casts rain, or a spell at the goblins there,
+  (`convert_minutes`); when it casts rain, or a spell at the gooblins there,
   or gathers near them, 1 or 2 more are won over at once
   (`convert_on_help_min` and `_max`). Worshipers make you magicko like
   your own villagers. At most 80% of a village can be won over peacefully
@@ -513,12 +533,12 @@ children, build and fight off goblins for their own village.
   the ground round it. It is yours at once, too, when everyone left in it
   worships the creature, or when everyone in it is dead and its buildings
   still stand.
-- **Goblins.** Every neutral village there is at the start makes the
-  goblins stronger: 2 more goblins a minute at every starting cave
+- **Gooblins.** Every neutral village there is at the start makes the
+  gooblins stronger: 2 more gooblins a minute at every starting cave
   (`neutral_goblin_spawn`) and 40% faster building
-  (`neutral_goblin_build_speed`). The goblins raid them too (each raider
+  (`neutral_goblin_build_speed`). The gooblins raid them too (each raider
   picks your village or one of theirs). If they kill everyone in a neutral
-  village and knock everything down, a goblin cave opens where it stood.
+  village and knock everything down, a gooblin cave opens where it stood.
 
 ## Controls
 
@@ -540,7 +560,7 @@ In the game, press **Esc** and **Show controls** for this list.
 | Double-click the creature's bars | Find the creature |
 | Click a Shrine / a Blacksmith | Research spells and creature buffs / research |
 | Mouse over a building | Its name, and what it is researching or training and how far along |
-| A buff on the buff bar (over the creature's health bar) | Cast that creature buff: **Creature Growth** (it grows twice as fast for 2 minutes, shedding yellow sparkles; then a minute's cooldown) or **Flaming Aura** (flames fall from it for 30 seconds and burn every enemy within 10 m for 5 a second). Each costs 1 animus and cannot be cast while it is on (`buff_...` in `balancing.txt`). **Flag Bearer** is on until you click it again: raising the flag costs 5 animus every time and keeping it up 1 animus every 5 minutes (it comes down by itself when the animus runs out or the creature dies). While it is up your warriors, archers, mages, necromancers and Storm Banshees march on the nearest goblin cave, fighting every goblin and goblin building they meet, and then hack at the cave itself: a cave has 10,000 health (`goblin_cave_health`), and when it falls it spawns no more goblins |
+| A buff on the buff bar (over the creature's health bar) | Cast that creature buff: **Creature Growth** (it grows twice as fast for 2 minutes, shedding yellow sparkles; then a minute's cooldown) or **Flaming Aura** (flames fall from it for 30 seconds and burn every enemy within 10 m for 5 a second). Each costs 1 animus and cannot be cast while it is on (`buff_...` in `balancing.txt`). **Flag Bearer** is on until you click it again: raising the flag costs 5 animus every time and keeping it up 1 animus every 5 minutes (it comes down by itself when the animus runs out or the creature dies). While it is up your warriors, archers, mages, necromancers and Storm Banshees march on the nearest gooblin cave, fighting every gooblin and gooblin building they meet, and then hack at the cave itself: a cave has 10,000 health (`goblin_cave_health`), and when it falls it spawns no more gooblins |
 | Click outside a menu | Close it |
 | Click with a spell in hand | Cast it (Bless and Condemn: click anywhere); Shift+click keeps it in hand |
 | B / Backspace (or the hammer) | Open or close the build menu (1–9 pick the field, the bridge or a building) |
@@ -565,10 +585,10 @@ before a game starts.
 | Lumber / Stone / Food rate | Units each worker gathers per minute |
 | Birth timer | Seconds between new villagers |
 | Magicko rate | Magicko each grown-up worshiper adds per minute (1 by default; mages make `wizard_magicko`) |
-| Goblin Spawn Rate | Goblins each starting cave spawns per minute before its buildings add more (each finished goblin building adds `goblin_rate_per_building`, and every neutral village at the start `neutral_goblin_spawn`). 1 by default. **Goblin population bounce back**: with fewer than 5 goblins left, the caves spawn 5 a minute until there are 6 (`goblin_bounce_...` in `balancing.txt`) |
+| Gooblin Spawn Rate | Gooblins each starting cave spawns per minute before its buildings add more (each finished gooblin building adds `goblin_rate_per_building`, and every neutral village at the start `neutral_goblin_spawn`). 1 by default. **Gooblin population bounce back**: with fewer than 5 gooblins left, the caves spawn 5 a minute until there are 6 (`goblin_bounce_...` in `balancing.txt`) |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
-| Goblin build speed | How many times as fast the goblins start and finish buildings (1.5 by default; every neutral village at the start adds `neutral_goblin_build_speed`) |
+| Gooblin build speed | How many times as fast the gooblins start and finish buildings (1.5 by default; every neutral village at the start adds `neutral_goblin_build_speed`) |
 | Construction rate | How many times as fast your buildings go up |
 | Training time | Multiplies every training time |
 | Starting influence / Influence per person | How far the village's influence reaches at first, and how much further for every villager |
@@ -605,12 +625,12 @@ game, villagers build everything.
 | Grass (7) | Paint grass; clears sand, stone and dirt, and fills in water |
 | Water (8) | Flood the ground at the height where you clicked; the ground is flattened under it with a bank round it, so ponds can sit up on hills |
 | Start location (9) | Click to place a numbered start banner (1 to 8 per map) |
-| Goblin cave (0) | Click to place a cave; R / Shift+R turn it first. Goblins move in when the game starts |
+| Gooblin cave (0) | Click to place a cave; R / Shift+R turn it first. Gooblins move in when the game starts |
 | Trees | Hold to plant trees inside the brush |
 | Rocks | Click or hold to place rocks |
 | Erase | Hold to remove trees, rocks, start locations and caves inside the brush |
 | Cut cliff | Click on low ground and drag into a hill: it is sliced down to that height, leaving a sheer cliff nobody can climb |
-| Goblin path | Draw from a goblin cave to a start location (or back): raiders from that cave loosely follow it. Several paths can join the same two; each has its own colour, shown only while this brush is picked. Right-click (or Shift+click) removes one |
+| Gooblin path | Draw from a gooblin cave to a start location (or back): raiders from that cave loosely follow it. Several paths can join the same two; each has its own colour, shown only while this brush is picked. Right-click (or Shift+click) removes one |
 
 **Ctrl+Z** undoes the last change (each click or stroke is one change).
 Pick the map's **colour palette** in the editor panel: the map is played
@@ -628,10 +648,10 @@ saved as compressed files in Godot's user folder under `maps/` (on Windows
 `%APPDATA%\Godot\app_userdata\SpriteSquirter\maps`); **Open maps folder** in
 the main menu opens it, so maps can be copied and shared.
 
-**Slopes.** Villagers, goblins and the creature slow down a lot walking
+**Slopes.** Villagers, gooblins and the creature slow down a lot walking
 uphill, and nobody can walk up or down the grey rock slopes
 (`cliff_grade` in `balancing.txt`) except the squirrel; the raven and the
-giant bats fly over them. Villagers and goblins plan
+giant bats fly over them. Villagers and gooblins plan
 their way to keep off steep ground and round cliffs and water, unless
 there is no other way.
 
@@ -661,9 +681,9 @@ personality traits are.
 
 `balancing.txt`, in the game's folder next to `project.godot`, holds the
 numbers you may want to tune: the health and damage of villagers,
-warriors, archers, wizards, goblins, ogres and the creatures, building
+warriors, archers, wizards, gooblins, ogres and the creatures, building
 health, what every building costs and how long building takes, bones,
-necromancers and skeletons, how often the goblins build, chain
+necromancers and skeletons, how often the gooblins build, chain
 lightning, the giant bat, the raven's flying, the balrog, the creature's stamina and magicko, the tortoise's shell, how steep a slope slows or stops walkers,
 how many villagers build one building, training times, how fast farmers
 work, how much stone a boulder holds, fireball damage, how much knowledge the creature needs to learn
@@ -691,23 +711,23 @@ and start the game again. Words in `{braces}` are filled in by the game.
   crystal tower, the moon tower, the mushroom house, the singing rocks,
   the store-in-a-tree, the winged windmill and the skull-topped
   Necromancer tower. Your villagers build more from the build menu.
-- **Goblin buildings:** every 5 minutes (2.5 at the default goblin build
+- **Gooblin buildings:** every 5 minutes (2.5 at the default gooblin build
   speed of 2), once the last one is finished,
-  the goblins start a building of their own near a cave: a tent, war
+  the gooblins start a building of their own near a cave: a tent, war
   hut, forge, potion hut or watchtower of planks, rags and bones. A few
-  goblins build it, going back to the cave for what they need, and they
+  gooblins build it, going back to the cave for what they need, and they
   stay behind when the others raid until it is finished. Each finished
-  one makes its cave spawn more goblins; a fireball or the creature's
+  one makes its cave spawn more gooblins; a fireball or the creature's
   feet knock them down.
-- **Villagers and goblins:** villagers wander their villages; goblins
+- **Villagers and gooblins:** villagers wander their villages; gooblins
   loiter around a cave and their huts, far from the villages, until the
   nightfall raid. Both catch fire and get flung by explosions; the
-  tortoise's footsteps squash goblins and strangers but not your own people.
+  tortoise's footsteps squash gooblins and strangers but not your own people.
 - **The creatures:** a 12 m gloomy tortoise of about 110,000 triangles,
   an 11 m nervous squirrel of about 65,000, a raven of about 155,000
   with two-jointed wings, on the same skeleton. Walking is procedural: feet
   plant on the terrain with two-bone IK, and the body, arms, head, jaw and
-  tail react. The goblins' balrog is a painted Meshy model (about 12,800
+  tail react. The gooblins' balrog is a painted Meshy model (about 12,800
   triangles, one 2048 px texture) on a humanoid skeleton: it plays its
   walk clip as fast as it really walks, and code adds the rest (head
   turning, leaning, punches, stomps, its fall). Its lava cracks glow.
@@ -716,13 +736,13 @@ and start the game again. Words in `{braces}` are filled in by the game.
   spread, char buildings and eventually collapse them.
 - **Rain:** a storm cloud that puts out fires, burning buildings and burning
   villagers, and leaves the ground too wet to burn for a while.
-- **Roots:** glowing green roots in a 9 m circle for 20 seconds: goblins
+- **Roots:** glowing green roots in a 9 m circle for 20 seconds: gooblins
   and the tortoise are held, your own people slowed.
 - **Cel shading:** sunlight that is either on or off, with halftone dots
   where light meets shadow, dark blue-violet shadows, ink outlines, pen
   strokes hatched over the ground, a sun that never sits overhead, weather
   moods and swappable nature palettes (the default is "Alpine").
-- **Detail up close:** villagers, warriors and goblins switch to detailed
+- **Detail up close:** villagers, warriors and gooblins switch to detailed
   models with inked faces, hands, belts and trims when the camera is
   within about 60 m, and back to simple ones when they are small.
 
@@ -749,15 +769,15 @@ scripts/
   game/build_order.gd      Reads the build order files in NeutralVillages/
 tools/raven_new_*.py       The new two-model raven: prepare, rig, animate (from art_sources/, not in git)
 NeutralVillages/           The owner's build orders for neutral villages (Neutral_Build_Order_1.txt, ...)
-  game/construction_site.gd  A building going up (the villagers', or the goblins')
+  game/construction_site.gd  A building going up (the villagers', or the gooblins')
   world/rope_bridge.gd       A rope bridge between two treehouses, and the way over it
   world/path_grid.gd         Routes over the island that keep off slopes, cliffs, water and buildings
   units/bat.gd               The giant bat that carries villagers off during raids
-  units/balrog.gd            The goblins' giant: guards its cave, grows, raids and casts fireball
+  units/balrog.gd            The gooblins' giant: guards its cave, grows, raids and casts fireball
   spells/chain_lightning.gd  The chain lightning spell
   game/building_catalog.gd   Build menu: names, costs and what each building is for
   game/crop_field.gd       A wheat field: sowing, growing, reaping
-  game/goblin_raids.gd     Goblins spawning at the caves, the nightfall raid, and what the goblins build
+  game/goblin_raids.gd     Gooblins spawning at the caves, the nightfall raid, and what the gooblins build
   game/spell_book.gd       Spells: names, costs and hints
   core/texts.gd            Reads Announcements.txt
   ui/spell_sparkles.gd     The yellow sparkles on the creature's portrait while it can grow
@@ -768,10 +788,10 @@ NeutralVillages/           The owner's build orders for neutral villages (Neutra
                            layer that flows and pours off the edge, paint layers, sculpting
   world/grass.gd           Instanced grass with distance-based detail
   world/atmosphere.gd      Sun, sky, haze and the weather moods
-  world/building_factory.gd  The surreal buildings, goblin hut and cave
+  world/building_factory.gd  The surreal buildings, gooblin hut and cave
   world/flora_factory.gd   Trees, bushes and boulders
   world/destructible.gd    Shared burn / damage / shatter behaviour
-  world/world_populator.gd Places villages, goblin caves, trees, boulder fields, sky islands
+  world/world_populator.gd Places villages, gooblin caves, trees, boulder fields, sky islands
   world/fire_system.gd     Spreading ground fires, and rain-soaked ground
   world/day_cycle.gd       Dawn, daytime, evening and night from the weather moods
   world/start_marker.gd    Numbered start-location banners
@@ -782,8 +802,8 @@ NeutralVillages/           The owner's build orders for neutral villages (Neutra
   core/balance.gd          Reads balancing.txt
   ui/pause_menu.gd         The pause screen (Esc)
   game/research.gd         What the Blacksmith can research
-  spells/arrow.gd          An archer's arrow
-  units/villager.gd        Villager, warrior, mage (wizard), Storm Banshee and goblin looks, jobs, fighting, state machine
+  spells/arrow.gd          An arrow, and its bright streak
+  units/villager.gd        Villager, warrior, mage (wizard), Storm Banshee and gooblin looks, jobs, fighting, state machine
   spells/fireball.gd       Projectile
   spells/rain.gd           The rain cloud
   spells/roots.gd          The patch of snaring roots

@@ -25,7 +25,7 @@ wizard_magicko = 2.5            # magicko a wizard makes a minute (5 every 2 min
 wizard_firebolt_damage = 70
 wizard_firebolt_seconds = 1   # time between firebolts
 
-# --- Goblins ----------------------------------------------------------------
+# --- Gooblins ----------------------------------------------------------------
 goblin_health = 40
 goblin_damage = 6
 goblin_attack_seconds = 1.0
@@ -33,7 +33,7 @@ goblin_attack_seconds = 1.0
 ogre_health = 600
 ogre_damage = 40
 
-# Goblin archers: a goblin that crawls out of a cave is one this often. They
+# Gooblin archers: a gooblin that crawls out of a cave is one this often. They
 # shoot from afar, at the flying creature and at archers on posts too.
 goblin_archer_chance = 25%
 goblin_archer_health = 30
@@ -64,10 +64,10 @@ raven_fly_distance = 30         # metres: it flies any journey longer than this,
 raven_fly_height = 9            # metres above the ground when full grown
 raven_fly_speed = 2.5           # flying is this many times as fast as walking
 
-# --- The balrog (the goblins' giant; it grows as your creature does) ----------
-balrogs = 1                     # how many the goblins keep (0 = none)
+# --- The balrog (the gooblins' giant; it grows as your creature does) ----------
+balrogs = 1                     # how many the gooblins keep (0 = none)
 balrog_health = 3000            # full grown; a newborn has 30% of it
-balrog_speed = 2.3              # metres a second, at any size (goblins march at 2.6)
+balrog_speed = 2.3              # metres a second, at any size (gooblins march at 2.6)
 balrog_guard_radius = 40        # until it is full grown it attacks only what comes this close to its cave
 balrog_fireball_size = 0.5      # it can cast fireball from this share of its full size
 balrog_fireball_seconds = 20    # time between its fireballs
@@ -77,7 +77,7 @@ balrog_respawn_minutes = 10     # after one dies, the next hatches this much lat
 balrog_bones = 200              # bones the village gets for killing a full-grown one
 
 # --- Fireball ---------------------------------------------------------------
-fireball_damage = 150           # to villagers and goblins; anything with less health is killed
+fireball_damage = 150           # to villagers and gooblins; anything with less health is killed
 fireball_building_damage = 160  # in the middle of the blast
 creature_friendly_fire = 0.2    # share of that damage your own villagers and buildings take from the creature's fireball
 
@@ -112,6 +112,8 @@ cost_decoration_lumber = 30
 cost_decoration_stone = 30
 cost_showpiece_lumber = 0           # a Showpiece (StoreHouseAlt) costs nothing to build
 cost_showpiece_stone = 0
+cost_lumber_mill_lumber = 40        # the Lumber mill (the Stacked houses)
+cost_lumber_mill_stone = 30
 cost_storm_spire_lumber = 40        # the Storm Spire (the Crystal tower)
 cost_storm_spire_stone = 60
 
@@ -132,7 +134,7 @@ start_food = 200
 start_magicko = 100
 food_warning_seconds = 45           # "Out of food" floats up over the Storehouse no oftener than this
 crop_grow_seconds = 200             # how long sown wheat takes to ripen by itself (rain makes it faster)
-rain_crop_growth = 350%             # wet wheat grows this much as fast (it was 300%: rain is 25% more effective now)
+rain_crop_growth = 412.5%           # wet wheat grows this much as fast (0.62: rain 25% more effective again; it was 350%)
 crop_tend_bonus = 25%                # each farmer working a growing field (nothing to sow or reap) makes it grow this much faster
 crop_tend_most = 100%                # but no more than this in all
 
@@ -195,7 +197,8 @@ buff_cost_flag = 5                  # Flag Bearer: animus to raise the flag (eve
 buff_upkeep_flag = 1                # ...and this much animus to keep it up...
 buff_upkeep_seconds_flag = 300      # ...every this many seconds (it comes down when the animus runs out)
 buff_cooldown_flag = 0
-goblin_cave_health = 10000          # a goblin cave's health (the Flag Bearer's fighters can bring one down)
+creature_siege_seconds = 15         # once the creature is hitting a gooblin cave it keeps at it this long before it turns on gooblins again (unless you order it about)
+goblin_cave_health = 10000          # a gooblin cave's health (the Flag Bearer's fighters can bring one down)
 aura_radius = 10                    # metres round the creature it burns
 aura_damage = 5                     # fire damage a second to every enemy that close
 
@@ -221,8 +224,8 @@ fey_archer_shot_speed = 200%    # how much faster a Fey Archer shoots than an ar
 
 # --- Charm Offensive ----------------------------------------------------------
 charm_radius = 8                # metres across the spot, from its middle
-charm_seconds = 70              # how long a charmed goblin fights for you
-charm_share = 50%               # of the goblins caught in it, the share that are charmed
+charm_seconds = 70              # how long a charmed gooblin fights for you
+charm_share = 50%               # of the gooblins caught in it, the share that are charmed
 
 # Building time. A building needs this many seconds of work for every unit
 # of resource it costs, shared between the villagers building it. A Home
@@ -235,22 +238,27 @@ builders_per_building = 5           # the most villagers that work on one buildi
 # (The dev menu's training time slider multiplies all of them.)
 warrior_training_seconds = 20       # at a Town guard
 fey_archer_training_seconds = 50    # a Fey Archer, at a Town guard: twice an archer's
-archer_training_seconds = 20      # at a Town guard, once bows are researched
+archer_training_seconds = 20      # at a Lumber mill
+
+# --- The Lumber mill ------------------------------------------------------------
+archers_per_mill = 4                # archers each Lumber mill can keep (from the start: no bows to research)
+lumber_mill_holds = 150             # more lumber the village can store for each Lumber mill
+fancy_arrows_damage = 125%          # The Fancy Arrows (researched at a Lumber mill): archers' and Fey Archers' arrows do this much damage
 wizard_training_seconds = 30        # a mage, at a Wizardry tower
 banshee_training_seconds = 40       # a Storm Banshee, at a Storm Spire
 
 # --- The Storm Spire and its Storm Banshees -------------------------------------
 # A Storm Spire (the Crystal tower) makes Storm Essence and trains Storm
 # Banshees (winged villagers in purple). Every so often a banshee blows a
-# gust of wind down a row in front of it: every attacking goblin in the row
+# gust of wind down a row in front of it: every attacking gooblin in the row
 # is pushed back and knocked over (not hurt). The Spire itself strikes
 # enemies that come near with chain lightning, paid for in Storm Essence.
 banshees_per_spire = 2              # Storm Banshees each Storm Spire can keep
 banshee_health = 40                 # a Storm Banshee's health
 banshee_wind_seconds = 6            # time between its gusts
-banshee_wind_push = 20              # metres a gust pushes the goblins back
+banshee_wind_push = 20              # metres a gust pushes the gooblins back
 banshee_wind_width = 10             # metres wide the row is
-banshee_wind_range = 25             # metres long the row is (it blows at goblins this close)
+banshee_wind_range = 25             # metres long the row is (it blows at gooblins this close)
 storm_essence_per_minute = 10       # Storm Essence each Storm Spire makes a minute
 storm_lightning_range = 50          # metres: the Spire strikes enemies this close...
 storm_lightning_seconds = 20        # ...no more often than this...
@@ -262,7 +270,7 @@ rock_stone = 120                    # stone in a full-size boulder before it is 
 rock_crumble_seconds = 4            # how long a used-up boulder takes to crumble away
 
 # --- Bones, necromancers and skeletons ----------------------------------------
-bones_min = 1                       # bones the village gets when a villager, goblin or ogre dies...
+bones_min = 1                       # bones the village gets when a villager, gooblin or ogre dies...
 bones_max = 2                       # ...somewhere between these two
 necromancer_training_seconds = 30   # a wizard at a Necromancer tower
 necromancers_per_tower = 2
@@ -277,15 +285,15 @@ raise_bones = 3                     # bones a necromancer spends to raise a skel
 skeleton_seconds = 1800              # how long a skeleton lasts
 skeleton_share = 0.5                # its health and damage, as a share of who it was raised from
 
-# --- Goblin buildings -----------------------------------------------------------
-goblin_build_minutes = 5            # the goblins start a new building this often
+# --- Gooblin buildings -----------------------------------------------------------
+goblin_build_minutes = 5            # the gooblins start a new building this often
 goblin_buildings_max = 40          # and stop when they have this many
-goblin_rate_per_building = 5      # every finished goblin building adds this many goblins a minute at its cave
-# Goblin population bounce back: with fewer goblins than this left alive,
+goblin_rate_per_building = 5      # every finished gooblin building adds this many gooblins a minute at its cave
+# Gooblin population bounce back: with fewer gooblins than this left alive,
 goblin_bounce_below = 5
 goblin_bounce_rate = 5              # the caves spawn at least this many a minute in all
 goblin_bounce_until = 6             # until there are this many again
-# The goblins do not pay for theirs, but the bigger the number the longer
+# The gooblins do not pay for theirs, but the bigger the number the longer
 # it takes them (build_work_per_resource above applies to them too).
 goblin_tent_resources = 150
 goblin_war_hut_resources = 150
@@ -297,12 +305,13 @@ goblin_watchtower_resources = 150
 lightning_damage = 130              # to each thing the bolt jumps through
 lightning_jumps = 18                # how many things one bolt can hit
 lightning_jump_range = 15           # metres between one and the next
+lightning_jump_seconds = 0.15       # each jump of chain lightning comes this long after the last
 lightning_wet_jump_chance = 75%     # every wet thing it strikes has this chance of giving the bolt one jump more
-wet_seconds = 60                    # how long rain leaves villagers and goblins wet
+wet_seconds = 60                    # how long rain leaves villagers and gooblins wet
 
 # --- The giant bat --------------------------------------------------------------
-ogres_per_war_hut = 1               # ogres every goblin war hut keeps (dead ones are replaced at nightfall)
-bats_per_watchtower = 1             # giant bats every goblin watchtower sends with a raid; each carries one villager off to a cave
+ogres_per_war_hut = 1               # ogres every gooblin war hut keeps (dead ones are replaced at nightfall)
+bats_per_watchtower = 1             # giant bats every gooblin watchtower sends with a raid; each carries one villager off to a cave
 bats_from_night = 3                 # no bats before this night
 bat_health = 40                     # a fireball or lightning can bring it down
 bat_speed = 11                      # metres a second
@@ -464,7 +473,7 @@ bonus_knowledge = 100%
 #   once every 10 to 30 minutes for each spell it knows; at 1000%: every
 #   1 to 3 minutes; at 0%: never.
 # spellcaster_personality: how readily it casts any spell it knows, useful
-#   or mischief (against spell_hold_weight). At 100%, with goblins to hit
+#   or mischief (against spell_hold_weight). At 100%, with gooblins to hit
 #   and nothing trained: it casts about half the times it thinks of it
 #   (every second); at 150%: 60%; at 50%: a third; at 0% it never casts.
 # observant_personality: how readily it notices you casting a spell or the
@@ -477,7 +486,7 @@ bonus_knowledge = 100%
 #   only speeds up learning new abilities: it does not change its
 #   affinities, how Bless and Condemn work, or how likely it is to do
 #   anything.
-# defensive_personality: how readily it goes to attack goblins (or the
+# defensive_personality: how readily it goes to attack gooblins (or the
 #   balrog) marching on the village once they come within defend_range
 #   metres of a Storehouse (it multiplies defensive_weight). With k =
 #   defensive_weight x this, it sets off k/(1+k) of the times it checks
@@ -511,8 +520,8 @@ raven_knowledgeSeeker_personality = 150%     # curious
 # NeutralVillages folder says, keeps neutral_keep_workers workers, trains as
 # many warriors, archers and wizards as its buildings allow, and puts a
 # third of the rest on each of lumber, stone and food.
-neutral_goblin_spawn = 2            # every neutral village there is at the start adds this many goblins a minute at each starting cave
-neutral_goblin_build_speed = 40%    # and makes the goblins build this much faster
+neutral_goblin_spawn = 2            # every neutral village there is at the start adds this many gooblins a minute at each starting cave
+neutral_goblin_build_speed = 40%    # and makes the gooblins build this much faster
 neutral_keep_workers = 5            # workers a neutral village always keeps (they build, and gather what it has least of)
 neutral_field_size = 12             # metres on a side of the wheat fields a neutral village lays out
 neutral_build_seconds = 4           # how often a neutral village looks at its build order
@@ -520,7 +529,7 @@ neutral_build_seconds = 4           # how often a neutral village looks at its b
 # creature, and makes the player magicko (the Magicko rate slider); so do
 # the neutral villagers the creature wins over.
 convert_minutes = 5                 # one neutral villager is won over for every this many minutes the creature spends in their village
-convert_on_help_min = 1             # a helpful spell (rain, or one at the goblins there) or gathering near them wins over this many more at once...
+convert_on_help_min = 1             # a helpful spell (rain, or one at the gooblins there) or gathering near them wins over this many more at once...
 convert_on_help_max = 2             # ...up to this many
 neutral_help_reach = 20             # metres beyond a neutral village's influence that they still see the creature helping
 takeover_share = 75%                # the player takes over a neutral village once this share of its people worship the creature

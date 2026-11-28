@@ -21,6 +21,7 @@
 #   Granary            stores more food
 #   Shrine             makes animus; the creature is revived there
 #   Necromancer tower  turns mages into necromancers; the Blood Sacrifice upgrade
+#   Lumber mill        trains archers (4 each); stores 150 more lumber; The Fancy Arrows
 #   Storm Spire        trains Storm Banshees; makes Storm Essence; strikes enemies with chain lightning
 #   Decoration         can be built, but does nothing yet
 #   Showpiece          costs nothing to build, and does nothing
@@ -34,7 +35,7 @@ Treehouse           = Home              = House in a tree
 Lookout treehouse   = Home              = Lookout house
 Twin treehouse      = Home              = Double Treehouse
 Great treehouse     = Home              = Big Old Treehouse
-Stacked houses      =                   = Storehouse
+Stacked houses      = Lumber mill       = Lumber Mill
 Store house         = Storehouse        = StorehouseAlt
 Moon tower          = Wizardry tower    = Wizardry Tower
 Blacksmith          = Blacksmith        = Forger
@@ -59,6 +60,7 @@ Town guard description        = Trains warriors
 Blacksmith description        = Wheelbarrows; research
 Wizardry tower description    = Trains mages\nResearches spells
 Necromancer tower description = Turns mages into necromancers\nBlood Sacrifice upgrade
+Lumber mill description       = Trains archers\nStores lumber; Fancy Arrows
 Storm Spire description       = Trains Storm Banshees\nStorm Essence; chain lightning
 Decoration description        = No use yet
 Showpiece description         = Free; no use

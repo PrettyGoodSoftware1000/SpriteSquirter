@@ -136,8 +136,8 @@ static func cave_hp(cave: Node3D) -> float:
 
 
 ## True while `cave` stands.
-static func cave_standing(cave: Node3D) -> bool:
-	return is_instance_valid(cave) and cave.is_in_group("caves") and cave_hp(cave) > 0.0
+static func cave_standing(cave: Variant) -> bool:
+	return is_instance_valid(cave) and (cave as Node3D).is_in_group("caves") and cave_hp(cave) > 0.0
 
 
 ## The Flag Bearer's fighters hack at a cave: at no health it caves in
@@ -498,7 +498,7 @@ func cave_tip(cave: Node3D) -> String:
 	for node in get_tree().get_nodes_in_group("goblin_buildings"):
 		if node.get_meta("cave", null) == cave and not (node as Destructible).destroyed:
 			built += 1
-	var lines: PackedStringArray = ["Goblin cave", "Spawns %s goblins a minute" % _num(cave_rate(cave) if _caves.has(cave) else 0.0)]
+	var lines: PackedStringArray = ["Gooblin cave", "Spawns %s gooblins a minute" % _num(cave_rate(cave) if _caves.has(cave) else 0.0)]
 	if built > 0:
 		lines.append("(%s of them from its %d buildings)" % [_num(built * Balance.num("goblin_rate_per_building")), built])
 	var goblins := 0
@@ -517,14 +517,14 @@ func cave_tip(cave: Node3D) -> String:
 	var bats := 0
 	for tower in standing(BAT_HOME):
 		bats += roundi(Balance.num("bats_per_watchtower"))
-	lines.append("Goblins %d   Goblin archers %d   Ogres %d" % [goblins, archers, ogres])
+	lines.append("Gooblins %d   Gooblin archers %d   Ogres %d" % [goblins, archers, ogres])
 	lines.append("Giant bats %d a raid   Balrogs %d" % [bats, get_tree().get_nodes_in_group("balrogs").size()])
 	return "\n".join(lines)
 
 
 ## What pointing at one of the goblins' buildings shows: what it does.
 static func building_tip(kind: String) -> String:
-	var more := "Makes %s more goblins spawn a minute" % _num(Balance.num("goblin_rate_per_building"))
+	var more := "Makes %s more gooblins spawn a minute" % _num(Balance.num("goblin_rate_per_building"))
 	match kind:
 		OGRE_HOME:
 			var n := roundi(Balance.num("ogres_per_war_hut"))
@@ -533,7 +533,7 @@ static func building_tip(kind: String) -> String:
 			var n := roundi(Balance.num("bats_per_watchtower"))
 			return "Sends %d giant bat%s each raid\n%s" % [n, "" if n == 1 else "s", more]
 		"goblin_hut":
-			return "Goblins live here"
+			return "Gooblins live here"
 	return more
 
 

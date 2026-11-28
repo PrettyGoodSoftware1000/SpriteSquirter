@@ -7,7 +7,7 @@ it up to date as steps are done.
 ## Words
 
 - **Giants**: the player's creatures (tortoise, squirrel, raven) and the
-  goblins' balrog, together.
+  gooblins' balrog, together.
 - **Mesh**: the surface of a model (points, edges, faces).
 - **UVs**: where each point of a mesh takes its colour from on a flat
   texture image.
@@ -25,7 +25,7 @@ it up to date as steps are done.
    with Claude through the Meshy MCP), brought into the game.
 2. **Better villagers and enemies later**: cleaned up, less clipping. Meshy
    models, or a mix of the owner and Claude making variations of villagers
-   and goblins once the basic look is set.
+   and gooblins once the basic look is set.
 3. **Animation for the giants**, a lot of it over time. It starts basic.
    Claude keeps animating, and the owner may animate by hand in Blender too,
    so the editable source of every animation stays in the repo.
@@ -279,7 +279,7 @@ fires. There is a size slider and a "Walk somewhere" button.
   mesh's pieces are joined near the tip and the closed holes filled, 3
   polygons, with the horn's texture).
 
-- ✅ (0.47) **In the game** (ArtShift only): the goblins' balrog is now the
+- ✅ (0.47) **In the game** (ArtShift only): the gooblins' balrog is now the
   newer model. `balrog.gd` loads `NewerBalrog_anims.glb` (the re-skinned
   mesh and clips) dressed in `NewerBalrog.glb`'s own PBR material (no cel
   shading, no ink outline), scaled 6.5 times (11 m full grown), walks with
@@ -431,10 +431,15 @@ from one model to the other as it takes off and lands. The originals (about
   of the way, hurl, follow through) and **StompRight** / **StompLeft** (the
   weight onto the other foot, the knee up, the foot slammed down a little
   ahead), all inside the rig's joint limits.
+- ✅ (0.62) A longer stride on the walking raven (0.6 m a second of the
+  clip at the model's size, was 0.475), and a **Cast** clip: the right arm
+  out ahead, the hand bent back so the palm faces ahead, the fingers open
+  and spread as far as the knuckles allow; in the game the arm is turned
+  on top of it to point at where the spell goes.
 - ✅ (0.61) **In the game**: the raven is the two-model one (`RavenGiant`):
   the walking model on the ground, its Walk clip played as fast as it
   walks; the flying model in the air with its Fly clip; its strikes,
-  throws (and eating, which lifts the goblins the same way) and stomps
+  throws (and eating, which lifts the gooblins the same way) and stomps
   played by their clips, timed to the game's moments. The old `raven.glb`
   is no longer used.
 

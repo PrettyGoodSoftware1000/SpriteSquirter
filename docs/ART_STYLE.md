@@ -18,8 +18,8 @@ mushrooms and singing boulders, and a gloomy tortoise the size of a house.
 - **Buildings:** modelled on the concept drawings: treehouse Homes with
   rope bridges, crystal tower, moon tower, mushroom house, singing rocks,
   store-in-a-tree, winged windmill, the Necromancer tower with its giant
-  horned skull, goblin hut. Their colours are fixed and saturated.
-- **Goblin buildings:** crooked dark planks under roofs of coloured rags
+  horned skull, gooblin hut. Their colours are fixed and saturated.
+- **Gooblin buildings:** crooked dark planks under roofs of coloured rags
   (red, purple, blue, orange, green), held down by crossed bones with a
   horned skull over the door, and sharpened stakes round the bottom.
 - **Fire:** tongues of flame are solid teardrop shapes with hard colour

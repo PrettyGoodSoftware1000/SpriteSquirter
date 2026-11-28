@@ -864,7 +864,7 @@ func _enemy_cluster(radius: float, at_least: int, nearest: float, farthest: floa
 ## Casts `spell` at `target`. What it did is recorded with `facts`, and,
 ## for spells that catch things where they land, with everything caught.
 func _cast(spell: String, target: Vector3, facts: Dictionary) -> void:
-	creature.watch(target)
+	creature.casting_at(target)
 	var result := facts.duplicate()
 	match spell:
 		"fireball":

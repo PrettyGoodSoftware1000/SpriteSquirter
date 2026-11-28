@@ -77,7 +77,7 @@
 ## Art and animation
 
 - `docs/ART_PLAN.md` has the owner's goals for the giants (creatures and
-  the balrog), villagers and goblins, and the plan for the new Meshy models
+  the balrog), villagers and gooblins, and the plan for the new Meshy models
   and their animation. Read it before any modelling or animation work, and
   update it as steps are done.
 - Art and animation are done in desktop sessions on the owner's computer

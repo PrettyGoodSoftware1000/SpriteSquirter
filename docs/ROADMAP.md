@@ -15,13 +15,13 @@ stage.
 ## Milestone 0.5: Art style pass ✅
 - Surreal cel-shaded look: banded light, ink outlines, nature palettes
 - Floating island with rivers and waterfalls; weather moods
-- The eight concept-art buildings, a goblin cave and camp
+- The eight concept-art buildings, a gooblin cave and camp
 - High-poly skinned tortoise creature
 - Dev menu (~) for terrain tools, weather, palettes and world generation
 
 ## Milestone 0.75: Village game ✅
 - Main menu; map sizes (Small, Medium, Large)
-- Map editor: sculpting, start locations, goblin caves, trees, rocks; save / load
+- Map editor: sculpting, start locations, gooblin caves, trees, rocks; save / load
 - Pick a start location; villagers gather lumber, stone and food, earn magicko
 - Build menu with rotatable outlines; villagers raise the buildings
 - Births every few seconds while there is housing; children grow up in a minute
@@ -30,12 +30,12 @@ stage.
 - Headless smoke test (tools/smoke_test.tscn)
 
 ## Milestone 0.9: Night raids ✅
-- Nights half as long as days; goblins raid the village at midnight
-- Health, damage and attack speed for villagers and goblins; children don't fight
+- Nights half as long as days; gooblins raid the village at midnight
+- Health, damage and attack speed for villagers and gooblins; children don't fight
 - Named buildings with jobs: Home, Storehouse (villagers carry resources), Town guard (soldiers)
 - Wheat fields drawn on the ground from the build menu
 - Stone in boulder fields; Roots spell
-- The tortoise stomps, throws and eats goblins
+- The tortoise stomps, throws and eats gooblins
 
 ## Milestone 0.9: Bigger worlds, water and jobs ✅
 - Medium and Large islands 1.5x and 2x wider; half the forest, same density on every size
@@ -43,15 +43,15 @@ stage.
 - Editor: land, sand, grass and water brushes; growing the map square
 - Rock skirt along the island's edge; stone craters
 - Jobs row: warriors (Town guard) and wizards (Singing rocks) with training times
-- Food upkeep and starvation; goblin caves spawn faster every night
+- Food upkeep and starvation; gooblin caves spawn faster every night
 - Resource icons; UI scales with the window
 
 ## Milestone 0.95: Comic look and ogres ✅
 - Halftone cel shading, darker coloured shadows, inked terrain, "Alpine" palette
-- Detailed close-up models for villagers, soldiers and goblins (two levels of detail)
+- Detailed close-up models for villagers, soldiers and gooblins (two levels of detail)
 - Tortoise face: moving eyes, blinking, angry lids, an inked mouth that opens
 - Flame tongues drawn by a shader; wheelbarrows; roofs no longer cut by walls
-- Ogres join raids of 15 goblins
+- Ogres join raids of 15 gooblins
 - Blood Sacrifice spell; rain speeds up wheat
 
 ## Milestone 0.97: Creatures and research ✅
@@ -66,11 +66,11 @@ stage.
 - balancing.txt for health, damage, knowledge and cooldowns
 - Free first Storehouse; gatherer counts the player can set; Esc pauses; version number on the menu
 
-## Version 0.11: Treehouses, bones and goblin builders ✅
+## Version 0.11: Treehouses, bones and gooblin builders ✅
 - Homes are treehouses; the player hangs rope bridges between them and villagers walk over
 - Bones from the dead; Necromancer tower; necromancers raise skeleton warriors and archers
 - Building costs in balancing.txt; building time in proportion to the cost
-- Goblins put up their own buildings near the caves every 5 minutes
+- Gooblins put up their own buildings near the caves every 5 minutes
 
 ## Version 0.12: Names, builders, slopes and a bat ✅
 - Names.txt: asset names (Stacked houses, Moon tower, Skull tower...) paired with gameplay names
@@ -78,8 +78,8 @@ stage.
 - Three more treehouses; bridge tool lights up the treehouses it can join
 - The tiger becomes a squirrel; a giant bat carries villagers off during raids
 - Chain lightning (double damage to the wet); solid 3D flames; controls under Esc
-- Slopes slow walkers, cliffs stop them, and villagers and goblins find routes round both
-- Map editor: expand-island, cut-cliff and goblin-path brushes
+- Slopes slow walkers, cliffs stop them, and villagers and gooblins find routes round both
+- Map editor: expand-island, cut-cliff and gooblin-path brushes
 
 ## Version 0.13: Spells by number and a creature with context ✅
 - Spells cast by their number key where the mouse points; a soft cooldown makes repeats dearer
@@ -88,14 +88,14 @@ stage.
 
 ## Version 0.14: A raven and a balrog ✅
 - A third creature, the raven: flies long journeys and over climbs, and when it runs from battle
-- The balrog, the goblins' giant: guards its cave while it grows, then joins the raids; casts fireball from half size
+- The balrog, the gooblins' giant: guards its cave while it grows, then joins the raids; casts fireball from half size
 - Giants fight each other with their fists; glowing parts on creature models
 
 ## Version 0.15: Stamina, shells and jointed villagers ✅
 - Villagers of every kind rebuilt: elbows and knees that bend, hands, boots, faces, aprons, beards, armour
 - Creature health, stamina and magicko bars; stats level up with use; the creature's spells cost its own magicko
 - The squirrel runs on all fours; the tortoise hides in its shell; both, and flying, can be blessed and cursed
-- Ogres come from goblin war huts and giant bats from watchtowers; goblin build speed in the dev menu
+- Ogres come from gooblin war huts and giant bats from watchtowers; gooblin build speed in the dev menu
 - The balrog: slimmer, horns rooted in the skull, an open jaw of teeth, smoke, sparks and burning footprints
 
 ## Version 0.16: The village panel, animus and influence ✅
@@ -151,7 +151,7 @@ stage.
 - The creature's floating line is its sentence from Actions.csv
 - Pop-up messages 25% smaller; spell bar half size; smaller training rows
 - Grey rock slopes cannot be walked (except by the squirrel; fliers fly over)
-- Goblins build twice as fast; lumberjacks go as far as it takes for wood
+- Gooblins build twice as fast; lumberjacks go as far as it takes for wood
 - Bless and Condemn: the key twice casts it
 - Growing costs animus (1, 2, 3... for each tenth)
 - Out of its shell, the tortoise knocks nearby enemies away and has a burst of speed
@@ -162,7 +162,7 @@ stage.
 - Spell bar: 10 slots a row, up to 3 rows (Ctrl, Shift), numpad, drag anywhere, layout remembered between games
 - Hammer build button; click a Blacksmith for research; clicking outside a menu closes it
 - All HUD text the same size; no spell bar tooltips
-- Goblins raid at nightfall, spawn and rise twice as fast, build twice as fast again
+- Gooblins raid at nightfall, spawn and rise twice as fast, build twice as fast again
 - Magic tree: 10 to 100 magicko a minute; dev menu night darkness slider
 
 ## Version 0.25: Necromancer stats ✅
@@ -182,26 +182,26 @@ stage.
 - Spells cool down and cannot be cast meanwhile; Overcast (Wizardry tower, 10 animus) casts once during it for double
 - Blacksmith: Wheelbarrows research; Pitchforks, Mining picks and Axes in three tiers (+50%)
 - Line breaks in Actions.csv cells (and \n in Announcements.txt); a day is 16 hours of day and 8 of night (a minute an hour)
-- Nights lighter by default; goblins spawn faster only with their buildings (growth chart)
+- Nights lighter by default; gooblins spawn faster only with their buildings (growth chart)
 - Kinky Fey Stuff: pixie tryst, fey births, winged fey villagers, Fey Archers
 
 ## Version 0.29: Walls, tiers and the clock ✅
-- Villagers, warriors and goblins walk round buildings (only those going into one walk in)
+- Villagers, warriors and gooblins walk round buildings (only those going into one walk in)
 - Research menus show a higher tier only once the one before it is researched
 - 12-hour clock (4:00 pm, not 16:00)
-- "Goblin Spawn Rate" in the dev menu; goblin spawn rate charts
+- "Gooblin Spawn Rate" in the dev menu; gooblin spawn rate charts
 
 ## Version 0.30: Fields, research per building, cooldown bars ✅
 - "Out of food" floats over the Storehouse (every 45 s at most)
-- Right-click removes a goblin path in the editor
+- Right-click removes a gooblin path in the editor
 - Start with 100 of each resource; food only from crop fields; crops grow at a quarter of the speed
 - Cooldowns show as a rising band over the spell; cost red while cooling, blue (doubled, sparkling) while Overcast can cast it
 - One research per Shrine, per Blacksmith and per Wizardry tower at a time
 - Fey fly everywhere and land only to gather
 
 ## Version 0.31: Bounce back, crop slider, lightning ✅
-- The owner's saved sliders are the defaults (10-minute day, Goblin Spawn Rate 0, goblin build speed 1)
-- Goblin population bounce back: under 5 goblins, 5 a minute until there are 6
+- The owner's saved sliders are the defaults (10-minute day, Gooblin Spawn Rate 0, gooblin build speed 1)
+- Gooblin population bounce back: under 5 gooblins, 5 a minute until there are 6
 - Crop growth rate slider; a field shows how far it is to harvest under the mouse
 - Overcast: red lightning round the cost, bursting outwards when it is cast
 - Flying fey lean into their flight
@@ -229,7 +229,7 @@ stage.
 
 ## Version 0.38: Creature buffs, defence, tending fields ✅
 - A villager makes 1 magicko every 2 seconds, a wizard 5
-- defensive_personality: goblins marching within 200 m of a Storehouse draw the creature out to attack (the tortoise most)
+- defensive_personality: gooblins marching within 200 m of a Storehouse draw the creature out to attack (the tortoise most)
 - Creature buffs researched at the Shrines (5 animus, then 5 more each, 8 minutes): Creature Growth and Flaming Aura, cast from a buff bar over the health bar
 - The map editor is always at noon; half the Singing rocks' faces frown
 - Farmers with nothing to sow or reap work the growing fields, which grow faster
@@ -257,9 +257,9 @@ stage.
 - [ ] Save / load a game in progress (resources, buildings, villagers)
 
 ## Milestone 3: Tower defense / conflict
-- [x] Goblin raids: every goblin leaves the cave at midnight and attacks the village
+- [x] Gooblin raids: every gooblin leaves the cave at midnight and attacks the village
 - [x] Raids that grow night by night (caves spawn faster every night); ogres
-- [ ] More goblin types
+- [ ] More gooblin types
 - [ ] Health bars and player orders for warriors and wizards
 - [ ] Defensive buildings that shoot
 - [x] Spell bar (fireball, rain, roots), magicko, cooldowns

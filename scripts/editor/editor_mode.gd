@@ -16,7 +16,7 @@ enum Tool { RAISE, LOWER, FLATTEN, SMOOTH, LAND, SAND, GRASS, WATER, START, CAVE
 
 ## Keys 1-9 and 0 pick the first ten tools.
 const TOOL_NAMES := ["Raise", "Lower", "Flatten", "Smooth", "Expand island", "Sand", "Grass", "Water",
-	"Start location", "Goblin cave", "Trees", "Rocks", "Erase", "Cut cliff", "Goblin path"]
+	"Start location", "Gooblin cave", "Trees", "Rocks", "Erase", "Cut cliff", "Gooblin path"]
 const TOOL_HINTS := [
 	"Hold left mouse to raise the ground.",
 	"Hold left mouse to dig the ground down. Water next to it flows in.",
@@ -27,12 +27,12 @@ const TOOL_HINTS := [
 	"Hold left mouse to paint grass. It clears sand, stone and dirt, and fills in water.",
 	"Hold left mouse to flood the ground with water at the height where you first clicked. The ground is flattened under it, with a bank round it.",
 	"Click to place a start location (up to 8). Players pick one when the game begins.",
-	"Click to place a goblin cave. R / Shift+R turn it. Goblins live there.",
+	"Click to place a gooblin cave. R / Shift+R turn it. Gooblins live there.",
 	"Hold left mouse to plant trees inside the brush. Trees give lumber.",
 	"Click or hold to place rocks. Rocks give stone.",
 	"Hold left mouse to remove trees, rocks, start locations and caves inside the brush.",
 	"Click on low ground and drag into a hill: everything under the brush is sliced down to the height where you clicked, leaving a sheer cliff nobody can climb.",
-	"Draw the way the goblins take: hold left mouse from a goblin cave and drag to a start location (or the other way). A cave and a start can have several paths. Right-click (or Shift+click) a path to remove it.",
+	"Draw the way the gooblins take: hold left mouse from a gooblin cave and drag to a start location (or the other way). A cave and a start can have several paths. Right-click (or Shift+click) a path to remove it.",
 ]
 ## The colours of the goblin paths, in turn.
 const PATH_COLORS := [Color(1.0, 0.3, 0.25), Color(0.3, 0.7, 1.0), Color(1.0, 0.85, 0.2), Color(0.5, 1.0, 0.4), Color(1.0, 0.45, 0.9),
@@ -317,9 +317,9 @@ func _finish_path() -> void:
 			stroke[stroke.size() - 1] = start_b
 			_paths.append(stroke)
 			_changed()
-			hud.set_status("Goblin path %d added. Goblins from that cave follow it to that start location." % _paths.size())
+			hud.set_status("Gooblin path %d added. Gooblins from that cave follow it to that start location." % _paths.size())
 		else:
-			hud.set_status("A goblin path must run between a goblin cave and a start location (within %d m of each)." % int(PATH_SNAP))
+			hud.set_status("A gooblin path must run between a gooblin cave and a start location (within %d m of each)." % int(PATH_SNAP))
 	_draw_paths()
 
 
@@ -345,7 +345,7 @@ func _remove_path(p: Vector3) -> void:
 				_paths.remove_at(k)
 				_changed()
 				_draw_paths()
-				hud.set_status("Goblin path removed.")
+				hud.set_status("Gooblin path removed.")
 				return
 
 

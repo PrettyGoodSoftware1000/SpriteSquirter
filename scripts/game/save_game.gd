@@ -496,7 +496,7 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 			person._grow(0.0)
 		person.pin = str(p.get("pin", ""))
 		var role := str(p.get("role", ""))
-		var post := _nearest_with_role(tree, at, {"necromancer": "necro", "wizard": "wizard", "banshee": "storm"}.get(role, "guard"), home_village.buildings_group)
+		var post := _nearest_with_role(tree, at, {"necromancer": "necro", "wizard": "wizard", "banshee": "storm", "archer": "mill", "fey_archer": "mill"}.get(role, "guard"), home_village.buildings_group)
 		var post_at := post.global_position if post != null else home_village.center
 		match role:
 			"warrior":

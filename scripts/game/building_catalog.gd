@@ -23,6 +23,8 @@ extends RefCounted
 ##   smith  the Blacksmith: wheelbarrows for the workers, and research
 ##   wizard the Wizardry tower: trains wizards
 ##   necro  the Necromancer tower: turns wizards into necromancers
+##   mill   the Lumber mill: trains archers, stores lumber, researches
+##          The Fancy Arrows
 ##   storm  the Storm Spire: trains Storm Banshees, makes Storm Essence and
 ##          strikes enemies with chain lightning
 ##   field  a wheat field, drawn on the ground instead of placed (CropField)
@@ -55,7 +57,7 @@ const ASSETS := [
 ## The gameplay names used when Names.txt is missing or leaves an asset out.
 const DEFAULT_GAMEPLAY := {
 	"treehouse": "Home", "lookout_treehouse": "Home", "twin_treehouse": "Home", "great_treehouse": "Home",
-	"store": "Storehouse", "store_house": "Storehouse", "moon_tower": "Wizardry tower", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
+	"store": "Lumber mill", "store_house": "Storehouse", "moon_tower": "Wizardry tower", "blacksmith": "Blacksmith", "mushroom_house": "Cottage",
 	"singing_rocks": "Shrine", "necro_tower": "Necromancer tower", "windmill": "Granary",
 	"crystal_tower": "Storm Spire", "tall_house": "Town guard", "store_house_alt": "Showpiece",
 }
@@ -72,6 +74,7 @@ const GAMEPLAY := {
 	"wizardry tower": ["Wizardry tower", "wizard", "wizardry_tower", "Trains mages\nResearches spells"],
 	"necromancer tower": ["Necromancer tower", "necro", "necromancer_tower", "Turns mages into necromancers\nBlood Sacrifice upgrade"],
 	"decoration": ["Decoration", "", "decoration", "No use yet"],
+	"lumber mill": ["Lumber mill", "mill", "lumber_mill", "Trains archers\nStores lumber; Fancy Arrows"],
 	"storm spire": ["Storm Spire", "storm", "storm_spire", "Trains Storm Banshees\nStorm Essence; chain lightning"],
 	"showpiece": ["Showpiece", "", "showpiece", "Free; no use"],
 }
@@ -134,7 +137,8 @@ static func apply_balance() -> void:
 	for entry: Dictionary in SPECIAL:
 		_all[entry.kind] = entry
 	for kind: String in GOBLIN_NAMES:
-		_all[kind] = {"kind": kind, "name": GOBLIN_NAMES[kind], "asset": GOBLIN_NAMES[kind], "title": GOBLIN_NAMES[kind],
+		# (The gooblins' buildings keep their asset names; players see "Gooblin".)
+		_all[kind] = {"kind": kind, "name": GOBLIN_NAMES[kind], "asset": GOBLIN_NAMES[kind], "title": (GOBLIN_NAMES[kind] as String).replace("Goblin", "Gooblin"),
 			"gameplay": "", "role": "", "housing": 0, "desc": "", "cost": {}}
 
 

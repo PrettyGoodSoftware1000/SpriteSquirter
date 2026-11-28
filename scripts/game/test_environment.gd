@@ -72,7 +72,7 @@ const FIGHT_GAP := 26.0
 const NEW_RAVEN_WALK := "res://assets/creature/raven_walk.glb"
 const NEW_RAVEN_FLY := "res://assets/creature/raven_fly.glb"
 const NEW_RAVEN_SCALE := 8.0
-const NEW_RAVEN_CLIP_SPEED := 0.475
+const NEW_RAVEN_CLIP_SPEED := RavenGiant.CLIP_SPEED
 const NEW_RAVEN_WALK_RADIUS := 28.0
 const NEW_RAVEN_FLY_RADIUS := 45.0
 const NEW_RAVEN_FLY_SPEED := 10.0
@@ -597,7 +597,7 @@ func _build_ui() -> void:
 	box.add_child(_heading_label("Raven's clips (two models, to review)"))
 	var nr_row := HBoxContainer.new()
 	for pair: Array in [["Walk", "walk"], ["Stand", "stand"], ["Take off", "rise"], ["Land", "fall"],
-			["Claw L", "AttackLeft"], ["Claw R", "AttackRight"], ["Throw", "Throw"], ["Stomp L", "StompLeft"], ["Stomp R", "StompRight"]]:
+			["Claw L", "AttackLeft"], ["Claw R", "AttackRight"], ["Throw", "Throw"], ["Stomp L", "StompLeft"], ["Stomp R", "StompRight"], ["Cast", "Cast"]]:
 		if nr_row.get_child_count() % 5 == 0:
 			nr_row = HBoxContainer.new()
 			nr_row.add_theme_constant_override("separation", 6)
@@ -698,7 +698,7 @@ func _new_raven(order: String) -> void:
 		"walk", "stand":
 			if _nr_state in ["walk", "stand"]:
 				_nr_state = order
-		"AttackLeft", "AttackRight", "Throw", "StompLeft", "StompRight":
+		"AttackLeft", "AttackRight", "Throw", "StompLeft", "StompRight", "Cast":
 			# It stops, plays the clip once, and stands.
 			if _nr_state in ["walk", "stand"] and _nr_walk_player != null and _nr_walk_player.has_animation(order):
 				_nr_state = "attack"

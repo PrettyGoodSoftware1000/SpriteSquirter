@@ -20,7 +20,7 @@ const BUFFS := [
 	{"id": "aura", "name": "Flaming Aura",
 		"hint": "Flames fall from your creature for 30 seconds, burning every enemy within 10 metres."},
 	{"id": "flag", "name": "Flag Bearer", "toggle": true,
-		"hint": "Your fighters march on the nearest goblin cave, fighting every goblin and goblin building on the way. 5 animus to raise the flag, then 1 every 5 minutes; click again to lower it."},
+		"hint": "Your fighters march on the nearest gooblin cave, fighting every gooblin and gooblin building on the way. 5 animus to raise the flag, then 1 every 5 minutes; click again to lower it."},
 ]
 ## How many buttons the buff bar has room for.
 const SLOTS := 5

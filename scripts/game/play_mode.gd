@@ -773,6 +773,9 @@ func _on_left_click() -> void:
 			elif _building_at_mouse("necro") != null:
 				# A Necromancer tower: the Blood Sacrifice upgrade.
 				_toggle_research_menu("necro")
+			elif _building_at_mouse("mill") != null:
+				# A Lumber mill: The Fancy Arrows.
+				_toggle_research_menu("mill")
 			else:
 				_command_move(_cursor_hit)
 		Mode.RULER:
@@ -1470,7 +1473,7 @@ func _placement_problem(p: Vector3, footprint: float) -> String:
 	for node in get_tree().get_nodes_in_group("caves"):
 		var c := node as Node3D
 		if Vector2(c.global_position.x - p.x, c.global_position.z - p.z).length() < 14.0 + footprint:
-			return "Too close to the goblin cave."
+			return "Too close to the gooblin cave."
 	for node in get_tree().get_nodes_in_group("fields"):
 		if (node as CropField).contains(p, footprint):
 			return "There is a field in the way."
@@ -1886,7 +1889,7 @@ func _update_ui() -> void:
 	if Game.dev_menu:
 		var tree := get_tree()
 		var goblins := tree.get_nodes_in_group("goblins").size()
-		hud.set_stats("Villagers %d (yours %d, soldiers %d)   Goblins %d   Buildings %d\nTrees %d   Rocks %d   Fires %d   FPS %d" % [
+		hud.set_stats("Villagers %d (yours %d, soldiers %d)   Gooblins %d   Buildings %d\nTrees %d   Rocks %d   Fires %d   FPS %d" % [
 			tree.get_nodes_in_group("villagers").size() - goblins, village.population(), village.soldiers(), goblins,
 			tree.get_nodes_in_group("buildings").size(), tree.get_nodes_in_group("trees").size(),
 			tree.get_nodes_in_group("rocks").size(), Game.fire.count(), Engine.get_frames_per_second()])

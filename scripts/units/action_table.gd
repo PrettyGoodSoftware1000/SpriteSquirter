@@ -191,7 +191,7 @@ static func _parse_condition(category: String, condition: String) -> Dictionary:
 		var target := ""
 		if "nothing" in c or "nobody" in c or "no target" in c or "no fire" in c:
 			target = "nothing"
-		elif "enemy building" in c or "goblin building" in c:
+		elif "enemy building" in c or "gooblin building" in c or "goblin building" in c:
 			target = "enemy_building"
 		elif "friendly building" in c or "our building" in c or "our own building" in c:
 			target = "our_building"

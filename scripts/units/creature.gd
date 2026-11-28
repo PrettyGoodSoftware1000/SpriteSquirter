@@ -78,6 +78,8 @@ const SPECIES := {
 	"tortoise": {
 		"name": "Tortoise", "model": "res://assets/creature/creature.glb", "speed": 3.6,
 		"nervous": 0.0, "shell": true,
+		# Born knowing how to fetch every resource (CreatureMind).
+		"knows": ["lumber", "stone", "food"],
 		"eye": Vector3(0.74, 0.5, 1.22), "eye_size": 0.34, "eye_color": Color(0.96, 0.94, 0.84),
 		"lid_color": Color(0.36, 0.38, 0.2), "lid_y": [0.2, 0.14], "lid_tilt": [-0.38, 0.5], "pupil": [1.0, 0.72],
 		# Mouth: half width, height, how far forward, how far its corners curve back.
@@ -294,6 +296,11 @@ var _attack_goal := Vector3.ZERO
 ## What the next blow with the fists is aimed at: the other giant or a
 ## giant bat.
 var _strike_target: Node3D
+## The cave it is bringing down, and until when (Game.now) it keeps at it
+## whatever gooblins come (Balance "creature_siege_seconds"; an order from
+## the player ends it).
+var _siege_cave: Node3D
+var _siege_until := 0.0
 ## In the air: when it next looks about, and the bat it is chasing.
 var _air_scan := 0.0
 var _air_bat: GiantBat
@@ -844,6 +851,7 @@ func place(pos: Vector3, facing: float) -> void:
 
 ## The player sends the creature somewhere. It will stay around there.
 func move_to(pos: Vector3) -> void:
+	_siege_until = 0.0
 	attack_moving = false
 	target = pos
 	has_target = true
@@ -1170,6 +1178,12 @@ func say(text: String, color := Color.WHITE) -> void:
 	tw.tween_callback(label.queue_free)
 
 
+## The creature casts a spell at `pos` (CreatureMind). (The raven puts out
+## its hand at it: RavenGiant.)
+func casting_at(pos: Vector3) -> void:
+	watch(pos)
+
+
 ## Makes the creature look at something startling (such as a fireball
 ## landing) and gasp.
 func watch(pos: Vector3) -> void:
@@ -1453,7 +1467,9 @@ func _update_attacks(delta: float) -> void:
 	# The player's creature goes after any enemy within its aggressiveness
 	# range (Balance "creature_aggro_range" metres of it).
 	var hunt_d := HUNT_RANGE if hostile else Balance.num("creature_aggro_range")
-	for node in get_tree().get_nodes_in_group("goblins"):
+	# Hard at a cave: the gooblins wait (see _siege_until).
+	var sieging := not hostile and Game.now < _siege_until and GoblinRaids.cave_standing(_siege_cave)
+	for node in ([] if sieging else get_tree().get_nodes_in_group("goblins")):
 		var g := node as Villager
 		# (A charmed goblin is on our side for now.)
 		if g.state == Villager.State.HELD or (not hostile and g.charmed()):
@@ -1485,6 +1501,17 @@ func _update_attacks(delta: float) -> void:
 	# A giant bat low enough to reach is swatted too.
 	if focus == null and not hostile:
 		focus = _bat_in_reach()
+	# No enemy about: the gooblins' buildings and caves are next.
+	if focus == null and not hunting and not hostile:
+		var structure := _siege_cave if sieging else _structure_near(Balance.num("creature_aggro_range"))
+		if structure != null:
+			if _flat(structure.global_position, global_position) - _structure_size(structure) < REACH * size + 1.0:
+				focus = structure
+			else:
+				hunting = true
+				var to_us := global_position - structure.global_position
+				to_us.y = 0.0
+				hunt_pos = structure.global_position + to_us.normalized() * (_structure_size(structure) + REACH * size * 0.6)
 	# On an attack move, a flyer takes to the air after bats it cannot reach.
 	if attack_moving and focus == null and not hunting and haste() == "fly" and Game.now >= snared_until:
 		var high := _nearest_bat(Balance.num("creature_aggro_range"))
@@ -1538,8 +1565,11 @@ func _update_attacks(delta: float) -> void:
 	var facing := absf(angle_difference(heading, atan2(to.x, to.z))) < 0.55
 	if not facing or _action_cooldown > 0.0 or _stepping[0] or _stepping[1] or speed > 0.6:
 		return
-	if focus == rival or focus is GiantBat:
+	if focus == rival or focus is GiantBat or _is_structure(focus):
 		_strike_target = focus
+		if focus.is_in_group("caves") and not sieging:
+			_siege_cave = focus
+			_siege_until = Game.now + Balance.num("creature_siege_seconds")
 		_start_strike()
 		return
 	var point := global_position + to.normalized() * minf(to.length(), STOMP_STRIDE * size)
@@ -1600,6 +1630,9 @@ func _start_strike() -> void:
 
 func _update_strike(delta: float) -> void:
 	_action_t += delta
+	if not is_instance_valid(_strike_target):
+		# (What it struck at is gone: a building knocked down, a bat shot.)
+		_strike_target = null
 	var other := 1 - _punch_hand
 	if _action_t < STRIKE_LANDS - 0.15:
 		# The fist drawn back, the other up on guard...
@@ -1611,6 +1644,10 @@ func _update_strike(delta: float) -> void:
 		_arm_one[_punch_hand] = Vector3(0.0, 0.2, 1.0)
 		_arm_one[other] = Vector3(0.35, -0.1, 0.45)
 		_crouch = 0.3
+	if not _struck and _action_t >= STRIKE_LANDS and _is_structure(_strike_target):
+		_struck = true
+		_hit_structure(_strike_target)
+		_strike_target = null
 	if not _struck and _action_t >= STRIKE_LANDS:
 		_struck = true
 		var bat := _strike_target as GiantBat
@@ -1632,6 +1669,51 @@ func _update_strike(delta: float) -> void:
 		_jaw_want = 0.0
 		_arm_want = _spec.arm
 		_arm_one = [null, null]
+
+
+## True for a gooblin building or a standing gooblin cave.
+static func _is_structure(thing: Variant) -> bool:
+	if not is_instance_valid(thing):
+		return false
+	var node := thing as Node3D
+	if node.is_in_group("caves"):
+		return GoblinRaids.cave_standing(node)
+	return node.is_in_group("goblin_buildings") and node is Destructible and not (node as Destructible).destroyed
+
+
+## How far a structure reaches out from its middle.
+static func _structure_size(node: Node3D) -> float:
+	return Villager.CAVE_REACH if node.is_in_group("caves") else (node as Destructible).footprint
+
+
+## The nearest gooblin building or cave within `within` metres, or null.
+func _structure_near(within: float) -> Node3D:
+	var best: Node3D = null
+	var best_d := within
+	for group in ["goblin_buildings", "caves"]:
+		for node in get_tree().get_nodes_in_group(group):
+			var n := node as Node3D
+			if not _is_structure(n):
+				continue
+			var d := _flat(n.global_position, global_position) - _structure_size(n)
+			if d < best_d:
+				best_d = d
+				best = n
+	return best
+
+
+## A strike lands on a gooblin building or cave, if it is in reach.
+func _hit_structure(node: Node3D) -> void:
+	if _flat(node.global_position, global_position) - _structure_size(node) > REACH * size + 2.5:
+		return
+	var harm := Balance.num("creature_strike_damage") * lerpf(0.3, 1.0, size)
+	var at := node.global_position.lerp(global_position, 0.4)
+	if node.is_in_group("caves"):
+		GoblinRaids.hurt_cave(node, harm)
+	else:
+		(node as Destructible).damage(harm, global_position, 4.0)
+	Game.effects.spawn_dust(at + Vector3.UP * 2.0, 2.0 * size)
+	Game.shake(0.5 * size, at)
 
 
 ## A stomp hurts everything round the foot, so it is only allowed when no
@@ -1704,7 +1786,7 @@ static func enemy_name(list: Array) -> String:
 	for node: Variant in list:
 		if not is_instance_valid(node):
 			continue
-		var word := "goblin"
+		var word := "gooblin"
 		if node is Villager and (node as Villager).ogre:
 			word = "ogre"
 		elif node is GiantBat:
@@ -1712,7 +1794,7 @@ static func enemy_name(list: Array) -> String:
 		elif node is Balrog:
 			word = "balrog"
 		counts[word] = counts.get(word, 0) + 1
-	var best := "goblin"
+	var best := "gooblin"
 	var most := 0
 	for word: String in counts:
 		if counts[word] > most:
@@ -1721,12 +1803,12 @@ static func enemy_name(list: Array) -> String:
 	return best
 
 
-## "a goblin", "3 goblins and an ogre", ...
+## "a gooblin", "3 gooblins and an ogre", ...
 func _name_them(list: Array[Villager]) -> String:
-	var counts := {"goblin": 0, "ogre": 0, "villager": 0}
+	var counts := {"gooblin": 0, "ogre": 0, "villager": 0}
 	for v in list:
 		if is_instance_valid(v):
-			counts["ogre" if v.ogre else ("goblin" if v.goblin else "villager")] += 1
+			counts["ogre" if v.ogre else ("gooblin" if v.goblin else "villager")] += 1
 	var parts: PackedStringArray = []
 	for word: String in counts:
 		var n: int = counts[word]

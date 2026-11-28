@@ -21,7 +21,7 @@ const SPELLS := [
 	{"id": "rain", "name": "Rain",
 		"hint": "Makes it rain where the mouse points. Rain puts out fires and soaks the ground."},
 	{"id": "roots", "name": "Roots",
-		"hint": "Grows roots where the mouse points, for 20 seconds. Goblins and the tortoise are held fast; your own people wade through at a quarter of their speed."},
+		"hint": "Grows roots where the mouse points, for 20 seconds. Gooblins and the tortoise are held fast; your own people wade through at a quarter of their speed."},
 	{"id": "lightning", "name": "Chain Lightning",
 		"hint": "Strikes near the mouse and jumps from one to the next. Anything wet from rain or standing in water takes double. It does not spare your own people."},
 	{"id": "blood", "name": "Blood Sacrifice",
@@ -35,7 +35,7 @@ const SPELLS := [
 	{"id": "fey", "name": "Kinky Fey Stuff",
 		"hint": "Click near a villager at work: a pixie flies from the nearest tree, and off they go into a building for 2 minutes. As soon as they go in, births come twice as fast for 2 minutes, and every child born is a winged fey girl."},
 	{"id": "charm", "name": "Charm Offensive",
-		"hint": "Pink hearts fill the spot: about half the goblins caught in it are charmed for 60 seconds and fight their own kind."},
+		"hint": "Pink hearts fill the spot: about half the gooblins caught in it are charmed for 60 seconds and fight their own kind."},
 ]
 
 

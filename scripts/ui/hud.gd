@@ -72,10 +72,10 @@ const SETTING_SLIDERS := [
 	["food_rate", "Food rate", 0.0, 60.0, 1.0, "/worker/min"],
 	["birth_seconds", "Birth timer", 5.0, 300.0, 5.0, "s"],
 	["magicko_rate", "Magicko rate", 0.0, 20.0, 0.1, "/villager/min"],
-	["goblin_rate", "Goblin Spawn Rate", 0.0, 20.0, 0.5, "/cave/min"],
+	["goblin_rate", "Gooblin Spawn Rate", 0.0, 20.0, 0.5, "/cave/min"],
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
-	["goblin_build_speed", "Goblin build speed", 0.25, 10.0, 0.25, "x"],
+	["goblin_build_speed", "Gooblin build speed", 0.25, 10.0, 0.25, "x"],
 	["crop_growth_rate", "Crop growth rate", 0.1, 5.0, 0.1, "x"],
 	["sapling_rate", "Saplings planted", 0.0, 20.0, 0.5, "a minute"],
 	["villager_detail", "Villager detail within", 0.0, 300.0, 10.0, "m"],
@@ -93,10 +93,10 @@ const BAR_COLORS := {"health": Color(0.78, 0.2, 0.18), "stamina": Color(0.3, 0.6
 ## role -> [name in the panel, the building that trains it, one of them]
 const ROLES := {
 	"warrior": ["Warriors", "guard", "warrior"],
-	"archer": ["Archers", "guard", "archer"],
+	"archer": ["Archers", "mill", "archer"],
 	"wizard": ["Mages", "wizard", "mage"],
 	"necromancer": ["Necromancers", "necro", "necromancer"],
-	"fey_archer": ["Fey Archers", "guard", "fey archer"],
+	"fey_archer": ["Fey Archers", "mill", "fey archer"],
 	"banshee": ["Storm Banshees", "storm", "storm banshee"],
 }
 
@@ -1353,8 +1353,7 @@ func _update_jobs(village: PlayerVillage) -> void:
 		var asked := maxi(want, village.count(role) + village.training_progress(role).size())
 		(w.count as Label).text = "%d/%d" % [asked, top]
 		(w.count as Label).tooltip_text = "Trained or training / most"
-		# Each shows once there is a building to train it (archers: once
-		# bows are researched too).
+		# Each shows once there is a building to train it.
 		var known := top > 0 or village.count(role) > 0
 		for part: String in ["label", "row"]:
 			(w[part] as Control).visible = known

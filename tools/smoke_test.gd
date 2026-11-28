@@ -156,10 +156,13 @@ func _run() -> void:
 		var lumber_cap := village.capacity("lumber")
 		village.give("lumber", 5000.0)
 		var stores := 0
+		var lumber_mills := 0
 		for b in get_tree().get_nodes_in_group("player_buildings"):
 			if BuildingCatalog.role(b.get_meta("kind", "")) == "store":
 				stores += 1
-		_check(is_equal_approx(lumber_cap, Balance.num("storehouse_holds") * stores) and village.amount("lumber") == roundi(lumber_cap),
+			elif BuildingCatalog.role(b.get_meta("kind", "")) == "mill":
+				lumber_mills += 1
+		_check(is_equal_approx(lumber_cap, Balance.num("storehouse_holds") * stores + Balance.num("lumber_mill_holds") * lumber_mills) and village.amount("lumber") == roundi(lumber_cap),
 			"each Storehouse holds 300 of each (%d lumber, %d Storehouses)" % [village.amount("lumber"), stores])
 		village.resources.lumber = 80.0
 		_check(village.capacity("magicko") == INF and village.capacity("animus") == INF, "magicko and animus have no limit")
@@ -788,7 +791,7 @@ func _run() -> void:
 		play.day_cycle.process_mode = Node.PROCESS_MODE_DISABLED
 		play.raids.end_raid()
 		_check(not village.barrows, "no wheelbarrows without a Blacksmith")
-		_check(village.start_research("bows") != "", "research needs a Blacksmith")
+		_check(village.start_research("swords") != "", "research needs a Blacksmith")
 		var smithy := BuildingFactory.create("blacksmith", RandomNumberGenerator.new())
 		game.world_root.add_child(smithy)
 		smithy.global_position = village.center + Vector3(-12, 0, -8)
@@ -797,13 +800,23 @@ func _run() -> void:
 		_check(not village.barrows, "a Blacksmith alone brings no wheelbarrows: they are researched")
 		for res in ["lumber", "stone", "food"]:
 			village.give(res, 600.0)
-		_check(village.max_count("archer") == 0, "no archers before bows")
-		_check(village.start_research("bows") == "", "bows can be researched")
+		var archers_before_mill := village.max_count("archer")
+		_check(archers_before_mill == village._role_count("mill") * roundi(Balance.num("archers_per_mill")) and Research.find("bows").is_empty(),
+			"archers come only from Lumber mills (and there are no bows to research)")
+		var lumber_before_mill := village.capacity("lumber")
+		var mill := BuildingFactory.create("store", RandomNumberGenerator.new())
+		game.world_root.add_child(mill)
+		mill.set_meta("kind", "store")
+		mill.global_position = village.center + Vector3(-26, 0, 4)
+		mill.add_to_group("player_buildings")
+		_check(BuildingCatalog.role("store") == "mill" and village.max_count("archer") == archers_before_mill + roundi(Balance.num("archers_per_mill"))
+			and is_equal_approx(village.capacity("lumber"), lumber_before_mill + Balance.num("lumber_mill_holds")),
+			"a Lumber mill (the Stacked houses) allows archers_per_mill archers and stores lumber_mill_holds more lumber (%d allowed)" % village.max_count("archer"))
+		_check(village.start_research("swords") == "", "research can start")
 		_check(village.start_research("axes_1") != "", "one research at a time")
-		village.research_job("bows").t = Research.find("bows").seconds - 2.0
+		village.research_job("swords").t = Research.find("swords").seconds - 2.0
 		await _wait(4.0)
-		_check(village.has_research("bows") and village.max_count("archer") >= PlayerVillage.ARCHERS_PER_GUARD,
-			"bows allow 2 archers per Town guard (%d allowed)" % village.max_count("archer"))
+		_check(village.has_research("swords"), "and finishes")
 		_check(is_equal_approx(Research.find("swords").seconds, 300.0), "sharper swords take 5 minutes")
 		_check(village.start_research("picks_2") != "" or not village.researching("smith").is_empty(), "a tool's second tier waits for its first")
 		play.hud.show_research_menu(true, "smith")
@@ -843,19 +856,30 @@ func _run() -> void:
 		smithy_2.global_position = village.center + Vector3(-22, 0, -14)
 		smithy_2.add_to_group("player_buildings")
 		village.researched.erase("swords")
-		village.researched.erase("bows")
+		village.researched.erase("wheelbarrows")
 		for res in ["lumber", "stone", "food"]:
 			village.give(res, 600.0)
-		_check(village.start_research("swords") == "" and village.start_research("bows") == "" and village.researching("smith").size() == 2,
+		_check(village.start_research("swords") == "" and village.start_research("wheelbarrows") == "" and village.researching("smith").size() == 2,
 			"two Blacksmiths research two things at once")
 		village.researching("smith").clear()
 		village.researched["swords"] = true
-		village.researched["bows"] = true
+		village.researched["wheelbarrows"] = true
+		# The Fancy Arrows, at the Lumber mill.
+		var plain_arrow := Villager.ARROW_DAMAGE
+		for res in ["lumber", "stone", "food"]:
+			village.give(res, 300.0)
+		_check(Research.find("fancy_arrows").place == "mill" and village.start_research("fancy_arrows") == "", "The Fancy Arrows are researched at a Lumber mill")
+		village.research_job("fancy_arrows").t = Research.find("fancy_arrows").seconds - 0.5
+		await _wait(1.5)
 		smithy_2.queue_free()
 		# Overcast is researched at a Wizardry tower (see the spells' checks).
 		_check(Research.find("overcast").place == "wizard" and Research.find("overcast").cost.get("animus", 0) == 10, "Overcast is researched at the Wizardry tower for 10 animus")
 		village.set_wanted("archer", 1)
 		await _wait(village.train_seconds("archer") + 45.0)
+		var bowmen := get_tree().get_nodes_in_group("archers")
+		_check(village.has_research("fancy_arrows") and not bowmen.is_empty()
+			and is_equal_approx((bowmen[0] as Villager).arrow_damage(), plain_arrow * Balance.num("fancy_arrows_damage")),
+			"with The Fancy Arrows an archer's arrows do fancy_arrows_damage as much")
 		_check(village.archers() == 1, "an archer is trained (%d; wanted %s, allowed %d, training %s, raiders %d, workers %d)" % [village.archers(),
 			village.wanted, village.max_count("archer"), village.training_progress("archer"), get_tree().get_nodes_in_group("raiders").size(), village.workers()])
 		village.set_wanted("warrior", 1)
@@ -995,7 +1019,10 @@ func _run() -> void:
 				if v.can_work():
 					v.become_wizard(necro_tower.global_position)
 					break
+		var mages_wanted: int = village.wanted.wizard
 		village.set_wanted("necromancer", 1)
+		_check(village.wanted.necromancer == 1 and village.wanted.wizard == maxi(0, mages_wanted - 1),
+			"asking for a necromancer frees its mage's place at once (%d -> %d mages wanted)" % [mages_wanted, village.wanted.wizard])
 		await _wait(60.0)
 		var necros := get_tree().get_nodes_in_group("necromancers")
 		_check(necros.size() == 1, "a wizard becomes a necromancer (%d)" % necros.size())
@@ -1080,11 +1107,20 @@ func _run() -> void:
 			var g := WorldPopulator.spawn_villager(game.world_root, terrain, storm_at + Vector3(k * 4.0, 0, 0), 0.1, true)
 			g.max_hp = 1000.0
 			g.hp = 1000.0
+			# (Kept still, and not healing, while the bolt jumps along them.)
+			g.process_mode = Node.PROCESS_MODE_DISABLED
 			struck.append(g)
 		struck[1].soak()
 		await _wait(0.2)
 		var hits := ChainLightning.cast(struck[0].global_position)
-		_check(hits >= 3, "chain lightning jumps through the goblins near it (%d hit)" % hits)
+		var first_only := is_equal_approx(1000.0 - struck[0].hp, Balance.num("lightning_damage")) and is_equal_approx(struck[1].hp, 1000.0)
+		await _wait(Balance.num("lightning_jump_seconds") * (hits + 1) + 0.3)
+		var spacing := PackedStringArray()
+		for g in struck:
+			spacing.append("%.1f m %s %s" % [Vector2(g.global_position.x - struck[0].global_position.x, g.global_position.z - struck[0].global_position.z).length(),
+				g.is_in_group("villagers"), g.is_alive()])
+		_check(hits >= 3 and first_only, "chain lightning jumps through the goblins near it, one after another, lightning_jump_seconds apart (%d hit, first only %s; %s; struck %s)" % [hits,
+			first_only, ", ".join(spacing), ChainLightning.last_struck])
 		_check(is_equal_approx(1000.0 - struck[0].hp, Balance.num("lightning_damage")) and is_equal_approx(1000.0 - struck[1].hp, Balance.num("lightning_damage")),
 			"wet or dry, lightning does the same damage (%.0f and %.0f)" % [1000.0 - struck[0].hp, 1000.0 - struck[1].hp])
 		# Two jumps at most: the wet first goblin gives it a third, or not.
@@ -1095,11 +1131,14 @@ func _run() -> void:
 		struck[1].wet_until = 0.0
 		Balance.values["lightning_wet_jump_chance"] = 1.0
 		var wet_hits := ChainLightning.cast(struck[0].global_position)
+		var wet_list := str(ChainLightning.last_struck) + " wet %s" % struck[0].is_wet()
 		Balance.values["lightning_wet_jump_chance"] = 0.0
 		var dry_hits := ChainLightning.cast(struck[0].global_position)
+		var dry_list := str(ChainLightning.last_struck)
+		await _wait(1.0)
 		Balance.values["lightning_jumps"] = jumps_kept
 		Balance.values["lightning_wet_jump_chance"] = wet_chance
-		_check(wet_hits == 3 and dry_hits == 2, "a wet target struck has lightning_wet_jump_chance of giving the bolt one jump more (%d with it, %d without)" % [wet_hits, dry_hits])
+		_check(wet_hits == 3 and dry_hits == 2, "a wet target struck has lightning_wet_jump_chance of giving the bolt one jump more (%d with it, %d without; %s / %s; struck %s)" % [wet_hits, dry_hits, wet_list, dry_list, struck])
 		for g in struck:
 			g.queue_free()
 		_check(SpellBook.index_of("lightning") >= 0 and CreatureMind.SPELLS.has("lightning"), "chain lightning is a spell the creature can learn")
@@ -1532,9 +1571,9 @@ func _run() -> void:
 			break
 		if some_cave != null:
 			var tip := play.raids.cave_tip(some_cave)
-			_check(tip.contains("Spawns") and tip.contains("Goblin archers") and tip.contains("Ogres"), "pointing at a goblin cave shows its spawn rate and every enemy")
+			_check(tip.contains("Spawns") and tip.contains("Gooblin archers") and tip.contains("Ogres"), "pointing at a goblin cave shows its spawn rate and every enemy")
 		_check(GoblinRaids.building_tip("goblin_war_hut").contains("ogre") and GoblinRaids.building_tip("goblin_watchtower").contains("bat")
-			and GoblinRaids.building_tip("goblin_tent").contains("goblins"), "goblin buildings say what they do")
+			and GoblinRaids.building_tip("goblin_tent").contains("gooblins"), "goblin buildings say what they do")
 		_check(SpellCursors.grey_image("fireball").get_pixel(16, 16).s < 0.01 or SpellCursors.grey_image("fireball").get_pixel(16, 16).a == 0.0,
 			"outside the influence the spell pointer is grey")
 		# Advance time: five minutes at once.
@@ -2080,7 +2119,10 @@ func _run() -> void:
 		var march_cave := flagman._flag_cave()
 		var cave_d := flagman._flat_to(march_cave.global_position) if march_cave != null else 0.0
 		await _wait(8.0)
-		_check(march_cave != null and flagman.marching() and (flagman.state == Villager.State.FIGHT or flagman._flat_to(march_cave.global_position) < cave_d - 2.0),
+		# (Marching: fighting on the way, or on its way to the cave, which may be far, round a hill.)
+		_check(march_cave != null and flagman.marching() and (flagman.state == Villager.State.FIGHT or flagman.state == Villager.State.CROSS
+			or flagman._flat_to(march_cave.global_position) < cave_d - 2.0
+			or (flagman.state == Villager.State.WALK and flagman._target.distance_to(march_cave.global_position) < Villager.CAVE_REACH + 1.0)),
 			"with the flag up, a warrior marches on the nearest goblin cave (%.0f m -> %.0f m, state %d, foe %s, target %.0f m from the cave)" % [cave_d,
 			flagman._flat_to(march_cave.global_position) if march_cave != null else 0.0, flagman.state, flagman._foe,
 			flagman._target.distance_to(march_cave.global_position) if march_cave != null else 0.0])
@@ -2095,7 +2137,33 @@ func _run() -> void:
 		# A goblin cave has goblin_cave_health, and is gone at none.
 		var test_cave := WorldPopulator.place_cave(game.world_root, game.terrain, Vector2(village.center.x + 60.0, village.center.z + 60.0), 0.0, RandomNumberGenerator.new(), false, false)
 		play.raids.add_cave(test_cave)
-		var cave_life := GoblinRaids.cave_hp(test_cave)
+		# The creature goes for a cave when no gooblin is about, and keeps at it.
+		var beast_home := beast.global_position
+		var age_was := beast.age
+		beast.age = Game.settings.creature_grow_minutes * 60.0
+		beast.place(test_cave.global_position + Vector3(10, 0, 0), -PI * 0.5)
+		var siege_from := GoblinRaids.cave_hp(test_cave)
+		for k in 8:
+			await _wait(1.0)
+			if GoblinRaids.cave_hp(test_cave) < siege_from:
+				break
+		var hacked := GoblinRaids.cave_hp(test_cave) < siege_from
+		var sticking := beast._siege_until > game.now and beast._siege_cave == test_cave
+		var lure := WorldPopulator.spawn_villager(game.world_root, game.terrain, beast.global_position + Vector3(6, 0, 0), 0.5, true)
+		lure.process_mode = Node.PROCESS_MODE_DISABLED
+		var lure_hp := lure.hp
+		await _wait(3.0)
+		_check(hacked and sticking and is_instance_valid(lure) and lure.hp == lure_hp,
+			"with no gooblin about the creature hits a gooblin cave, and keeps at it for creature_siege_seconds though a gooblin comes (%.0f -> %.0f)" % [siege_from, GoblinRaids.cave_hp(test_cave)])
+		beast.move_to(beast.global_position)
+		_check(beast._siege_until == 0.0, "an order from the player ends it")
+		lure.queue_free()
+		beast.place(beast_home, 0.0)
+		beast.has_target = false
+		beast.age = age_was
+		beast._grow(0.0)
+		var cave_life := Balance.num("goblin_cave_health")
+		test_cave.set_meta("hp", cave_life)
 		GoblinRaids.hurt_cave(test_cave, cave_life - 1.0)
 		var still := GoblinRaids.cave_standing(test_cave)
 		GoblinRaids.hurt_cave(test_cave, 5.0)
@@ -2333,7 +2401,7 @@ func _run() -> void:
 			last_point = point
 		_check(not grid.clear_line(below, above) and walked > 7.0, "the way up goes round the cliff (%.0f m for 8 m)" % walked)
 		climber.queue_free()
-		_check(EditorMode.TOOL_NAMES.has("Expand island") and EditorMode.TOOL_NAMES.has("Cut cliff") and EditorMode.TOOL_NAMES.has("Goblin path"),
+		_check(EditorMode.TOOL_NAMES.has("Expand island") and EditorMode.TOOL_NAMES.has("Cut cliff") and EditorMode.TOOL_NAMES.has("Gooblin path"),
 			"the editor has expand-island, cut and goblin-path brushes")
 		# Goblin paths, drawn from the cave to each start.
 		for marker in get_tree().get_nodes_in_group("start_markers"):
@@ -2701,13 +2769,20 @@ func _run() -> void:
 		guard.global_position = nv.center + Vector3(9.0, 0.0, 0.0)
 		guard.set_meta("kind", guard_kind)
 		nv.adopt(guard)
+		# (Archers are trained at a Lumber mill.)
+		var mill_kind := BuildingCatalog.kind_for_role("mill", "store")
+		var nv_mill := BuildingFactory.create(mill_kind, RandomNumberGenerator.new())
+		game.world_root.add_child(nv_mill)
+		nv_mill.global_position = nv.center + Vector3(-9.0, 0.0, 0.0)
+		nv_mill.set_meta("kind", mill_kind)
+		nv.adopt(nv_mill)
 		nv._staff()
 		var pins := {"food": 0, "lumber": 0, "stone": 0, "": 0}
 		for v in nv.people():
 			if v.can_work() and v.job != "train" and pins.has(v.pin):
 				pins[v.pin] += 1
 		_check(nv.wanted.warrior == nv.max_count("warrior") and nv.wanted.archer == nv.max_count("archer") and nv.max_count("archer") > 0,
-			"it trains as many warriors and archers as its Town guards allow (%d and %d)" % [nv.wanted.warrior, nv.wanted.archer])
+			"it trains as many warriors and archers as its Town guards and Lumber mills allow (%d and %d)" % [nv.wanted.warrior, nv.wanted.archer])
 		_check(pins[""] >= roundi(Balance.num("neutral_keep_workers")) and absi(pins.food - pins.stone) <= 1 and absi(pins.lumber - pins.stone) <= 1,
 			"it keeps neutral_keep_workers workers and puts a third of the rest on each of food, lumber and stone (%s)" % pins)
 		# Worshipers: the creature in the village, and helping it.
@@ -2826,6 +2901,13 @@ func _run() -> void:
 		await _wait(0.4)
 		var clawing: bool = not raven._current().is_empty() and raven._current()[0] in RavenGiant.CLAW_CLIPS
 		await _wait(1.5)
+		raven.casting_at(raven.global_position + Vector3(10, 0, 20))
+		await _wait(0.6)
+		var hand_out := raven._hand_pos(1)
+		var casting: bool = not raven._current().is_empty() and raven._current()[0] == "Cast"
+		_check(casting and Vector2(hand_out.x - raven.global_position.x, hand_out.z - raven.global_position.z).length() > 2.0,
+			"the raven puts out its right hand to cast a spell (Cast)")
+		await _wait(1.5)
 		raven.target = raven.global_position + Vector3(60.0, 0.0, 0.0)
 		raven.has_target = true
 		raven._flight_length = 60.0
@@ -2841,7 +2923,7 @@ func _run() -> void:
 		var walking: bool = env._nr_walk.visible and not env._nr_fly.visible and env._nr_speed > 0.5 \
 			and env._nr_walk_player != null and env._nr_walk_player.is_playing() and env._nr_walk_player.current_animation == "Walk"
 		var clips_there := true
-		for clip in ["Walk", "AttackLeft", "AttackRight", "Throw", "StompLeft", "StompRight"]:
+		for clip in ["Walk", "AttackLeft", "AttackRight", "Throw", "StompLeft", "StompRight", "Cast"]:
 			clips_there = clips_there and env._nr_walk_player.has_animation(clip)
 		env._new_raven("AttackRight")
 		await _wait(0.5)

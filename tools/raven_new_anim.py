@@ -67,8 +67,10 @@ RENDER_DIR = ARGS[1] if len(ARGS) > 1 else ""
 FPS = 30
 WALK_SECONDS = 2.0
 # The raven's walking speed at the model's size (1.7 m tall): the game plays
-# the clip faster or slower to match how fast it really goes.
-WALK_SPEED = 0.475
+# the clip faster or slower to match how fast it really goes. (0.62: a
+# longer stride, 0.6 a second over the 2 s of two steps where it was 0.475;
+# RavenGiant.CLIP_SPEED is the same.)
+WALK_SPEED = 0.6
 WALK_DUTY = 0.62
 STEP_HEIGHT = 0.11
 FLY_SECONDS = 1.2
@@ -85,6 +87,10 @@ THROW_RELEASE = 1.62
 # The stomp: how long, and when the foot lands.
 STOMP_SECONDS = 1.15
 STOMP_IMPACT = 0.8
+# Casting a spell: the right arm out and the palm at the target, fingers
+# spread; how long, and when the hand is up.
+CAST_SECONDS = 1.6
+CAST_UP = 0.45
 
 
 def log(*a):
@@ -750,6 +756,74 @@ def stomp(arm, s):
     return act, frames
 
 
+def cast(arm):
+    """Cast (CAST_SECONDS): the right arm comes up and out ahead at shoulder
+    height (up by CAST_UP), the hand bends back so the palm faces ahead and
+    the fingers spread (as far as the knuckles allow); a moment's hold, and
+    back to rest. In the game the arm is turned on top to point at the
+    spell's target."""
+    body = Body(arm)
+    p = body.pose
+    s = "_r"
+    w0 = body.wrist0[s]
+    p.reset()
+    shoulder = p.head("arm_upper" + s)
+    out = shoulder + Vector((0.1, -0.96 * (body.L1 + body.L2), -0.12))
+    up = CAST_UP
+    reach = track([(0.0, 0.0), (up, 1.0), (up + 0.4, 1.0), (CAST_SECONDS, 0.0)])
+    torso = track([(0.0, 0.0), (up, 1.0), (up + 0.45, 1.0), (CAST_SECONDS, 0.0)])
+
+    def pose_at(t):
+        k = reach(t)
+        body.torso(0.08 * torso(t), 0.04 * torso(t), 0.0, 0.0)
+        body.legs()
+        body.reach(s, w0.lerp(out, k), Vector((1.0, 0.6, -0.2)), 0.0)
+        body.grip(s, -45.0 * k)
+        # The palm down, then the hand bent back: the palm faces ahead.
+        fore = (p.tail("arm_lower" + s) - p.head("arm_lower" + s)).normalized()
+        palm = _palm(p, s)
+        flat = (palm - fore * palm.dot(fore)).normalized()
+        down = (-UP - fore * (-UP).dot(fore)).normalized()
+        roll = math.atan2(flat.cross(down).dot(fore), flat.dot(down))
+        p.turn("hand" + s, fore, roll * k)
+        p.turn("hand" + s, fore.cross(UP), math.radians(65.0) * k)
+        # The fingers spread from the middle one (the knuckles allow a little).
+        middle = (p.tail("middle1" + s) - p.head("middle1" + s)).normalized()
+        palm = _palm(p, s)
+        for name in ("thumb", "index", "ring"):
+            d = (p.tail(name + "1" + s) - p.head(name + "1" + s)).normalized()
+            away = p.head(name + "1" + s) - p.head("middle1" + s)
+            away = (away - palm * away.dot(palm)).normalized()
+            p.turn(name + "1" + s, d.cross(away), math.radians(6.0 if name != "thumb" else 5.0) * k)
+        body.wing(s, 0.5 * k, 0.25 * k)
+        body.head_steady()
+    act, frames = bake(arm, "Cast", CAST_SECONDS, pose_at)
+    p.reset()
+    pose_at(up)
+    tip = p.tail("middle3" + s)
+    log("cast: frames %d, fingertips %.2f above the wrist, palm facing %s, wrist %.2f of the way out (%.2f ahead of the shoulder, %.2f below)" % (frames + 1,
+        tip.z - p.tail("arm_lower" + s).z, tuple(round(c, 2) for c in _palm(p, s)),
+        (p.tail("arm_lower" + s) - shoulder).length / (body.L1 + body.L2), shoulder.y - p.tail("arm_lower" + s).y, shoulder.z - p.tail("arm_lower" + s).z))
+    return act, frames
+
+
+def _palm(p, s):
+    """The way the palm of hand `s` faces: where the fingertips go as they curl."""
+    names = ["%s%d%s" % (f, k, s) for f in ("index", "middle", "ring") for k in (1, 2, 3)]
+    saved = {n: p.q[n].copy() for n in names}
+    before = p.tail("middle3" + s).copy()
+    for n in names:
+        p.q[n] = p.q[n] @ Quaternion(Vector((1, 0, 0)), math.radians(15.0))
+    p.changed()
+    after = p.tail("middle3" + s).copy()
+    for n in names:
+        p.q[n] = saved[n]
+    p.changed()
+    hand = (p.tail("hand" + s) - p.head("hand" + s)).normalized()
+    v = after - before
+    return (v - hand * v.dot(hand)).normalized()
+
+
 # --- The flight ---------------------------------------------------------------------------
 
 def fly():
@@ -922,7 +996,7 @@ def main():
             log("  walk smooth: %-14s max change %.2f deg/frame/frame at frame %d (top speed %.2f deg/frame)" % (w[2], w[0], w[3], w[1]))
         render_frames(arm, "walk", frames, [1, 8, 16, 23, 31, 38, 46, 53])
         last = act
-        for maker, args in ((attack, ("_l",)), (attack, ("_r",)), (throw, ()), (stomp, ("_r",)), (stomp, ("_l",))):
+        for maker, args in ((attack, ("_l",)), (attack, ("_r",)), (throw, ()), (stomp, ("_r",)), (stomp, ("_l",)), (cast, ())):
             last, n = maker(arm, *args)
             worst = smoothness(arm, n, loop=False)
             report[last.name] = worst[:6]

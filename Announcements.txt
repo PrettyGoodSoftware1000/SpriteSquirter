@@ -10,20 +10,20 @@
 
 # --- Messages in the middle of the screen ---
 choose_start = {map}: choose where your village begins. Click a banner.
-raid_started = Midnight: {goblins} goblins are marching on your village!
-raid_started_ogre = Midnight: {goblins} goblins and an ogre are marching on your village!
-raid_started_ogres = Midnight: {goblins} goblins and {ogres} ogres are marching on your village!
-raid_ended = Morning: the goblins go home.
+raid_started = Midnight: {goblins} gooblins are marching on your village!
+raid_started_ogre = Midnight: {goblins} gooblins and an ogre are marching on your village!
+raid_started_ogres = Midnight: {goblins} gooblins and {ogres} ogres are marching on your village!
+raid_ended = Morning: the gooblins go home.
 bat_took = A giant bat has snatched one of your villagers!
 raid_started_balrog = The balrog marches with them!
-balrog_came = A balrog has hatched at a goblin cave. It will guard the cave until it is full grown.
+balrog_came = A balrog has hatched at a gooblin cave. It will guard the cave until it is full grown.
 balrog_grown = The balrog is full grown. It will march with the next raid.
 balrog_died = The balrog is dead!
-flag_raised = The flag is raised! Your fighters march on the goblins' cave. ({animus} animus every {minutes} minutes to keep it up.)
+flag_raised = The flag is raised! Your fighters march on the gooblins' cave. ({animus} animus every {minutes} minutes to keep it up.)
 flag_lowered = The flag is lowered. Your fighters come home.
 flag_no_animus = Not enough animus to keep the flag up: it comes down, and your fighters come home.
 flag_fell = The creature has fallen and the flag with it. Your fighters come home.
-cave_fell = A goblin cave has fallen!
+cave_fell = A gooblin cave has fallen!
 research_done = The {place} has finished: {research}.
 spell_researched = The {place} has taught you a new spell: {spell}.
 spell_unlocked = Your {creature} has grown: you can now cast {spell}.
@@ -37,10 +37,10 @@ creature_died = The {creature} has died! Bring it back to life at a Shrine for {
 creature_resurrected = The {creature} lives again!
 resurrect_no_shrine = The {creature} can only be brought back to life at a Shrine. Build one first.
 resurrect_no_animus = Bringing the {creature} back to life takes {animus} animus. You have {have}.
-raid_neutral = Midnight: {goblins} goblins are marching on the neutral villages!
+raid_neutral = Midnight: {goblins} gooblins are marching on the neutral villages!
 neutral_taken = {village} worships your {creature}: it is yours now!
 neutral_taken_empty = Nobody is left in {village}: its buildings are yours now.
-neutral_fell = The goblins have wiped out {village}. A goblin cave has opened where it stood.
+neutral_fell = The gooblins have wiped out {village}. A gooblin cave has opened where it stood.
 # (These two float up over a neutral village's Storehouse.)
 villager_converted = A villager here now worships the {creature}
 villagers_converted = {count} villagers here now worship the {creature}

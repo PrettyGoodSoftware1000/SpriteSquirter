@@ -67,7 +67,8 @@ const MAX_PER_TARGET := 2
 const TREE_WOOD := 30.0
 const BUSH_WOOD := 10.0
 const WARRIORS_PER_GUARD := 4
-const ARCHERS_PER_GUARD := 2
+## (Archers are trained at Lumber mills since 0.62: Balance "archers_per_mill".)
+const ARCHERS_PER_MILL := 4
 ## (Wizards are called Mages in the game since 0.61; the code still calls
 ## them wizards, and so do balancing.txt's names.)
 const MAGES_PER_TOWER := 4
@@ -88,10 +89,10 @@ const STUCK_REPORTS := 3
 ## comes from balancing.txt too (see per_building() and train_seconds()).
 const ARMY := {
 	"warrior": ["guard", WARRIORS_PER_GUARD],
-	"archer": ["guard", ARCHERS_PER_GUARD],
+	"archer": ["mill", ARCHERS_PER_MILL],
 	"wizard": ["wizard", MAGES_PER_TOWER],
 	"necromancer": ["necro", 2],
-	"fey_archer": ["guard", 0],
+	"fey_archer": ["mill", 0],
 	"banshee": ["storm", 0],
 }
 ## Blood Sacrifice: how long the magicko boost lasts, and how near the
@@ -145,7 +146,7 @@ var researched := {}
 ## towers ("wizard") and the Necromancer towers ("necro"): each a list of
 ## {"id": ..., "t": seconds done}, as many at once as there are buildings
 ## of that kind.
-var research_jobs := {"smith": [], "wizard": [], "necro": []}
+var research_jobs := {"smith": [], "wizard": [], "necro": [], "mill": []}
 ## Spells researched at the Wizardry tower: id -> true.
 var spells_known := {}
 ## The spell bar: each slot's spell id, or "" (0-9 the first row, cast with
@@ -494,7 +495,8 @@ func count(role: String) -> int:
 			return _in_group("fey_archers")
 		"banshee":
 			return _in_group("banshees")
-	return wizards()
+	# (Mages promised to become necromancers count as necromancers already.)
+	return wizards() - clampi(wanted.necromancer - _in_group("necromancers"), 0, wizards())
 
 
 ## The village's grown-up fey (workers and Fey Archers alike).
@@ -511,6 +513,8 @@ func fey_adults() -> int:
 func per_building(role: String) -> int:
 	if role == "banshee":
 		return roundi(Balance.num("banshees_per_spire"))
+	if role == "archer":
+		return roundi(Balance.num("archers_per_mill"))
 	return roundi(Balance.num("necromancers_per_tower")) if role == "necromancer" else ARMY[role][1]
 
 
@@ -519,10 +523,8 @@ func train_seconds(role: String) -> float:
 
 
 ## The most warriors (or archers, or wizards) the village's buildings can
-## train. Archers need bows first.
+## train. (Archers and Fey Archers: at Lumber mills.)
 func max_count(role: String) -> int:
-	if (role == "archer" or role == "fey_archer") and not has_research("bows"):
-		return 0
 	if role == "fey_archer":
 		# As many as there are winged villagers, once archers can be trained.
 		return fey_adults() if not _training_buildings(role).is_empty() else 0
@@ -944,12 +946,25 @@ func workers() -> int:
 ## Sets how many warriors or wizards the player wants (clamped to what the
 ## buildings allow). It only goes up while there is someone free to train:
 ## an unassigned worker (or, for necromancers, a wizard).
+##
+## A necromancer is a mage trained on: asking for one gives up that mage's
+## place at once (one fewer mage wanted), so another mage can be trained
+## while the necromancer trains. Asking for one fewer while one is still in
+## training gives the mage's place back.
 func set_wanted(role: String, value: int) -> void:
 	var top := max_count(role)
-	if value > wanted[role]:
+	var was: int = wanted[role]
+	if value > was:
 		var free_now := free_wizards() if role == "necromancer" else free_workers()
-		top = mini(top, wanted[role] + free_now)
+		top = mini(top, was + free_now)
 	wanted[role] = clampi(value, 0, maxi(top, 0))
+	if role == "necromancer":
+		var more: int = wanted.necromancer - was
+		if more > 0:
+			wanted.wizard = maxi(0, wanted.wizard - more)
+		elif more < 0:
+			var back := mini(-more, training_progress("necromancer").size())
+			wanted.wizard = mini(wanted.wizard + back, max_count("wizard"))
 	_army_timer = 0.0
 
 
@@ -1096,6 +1111,8 @@ func capacity(res: String) -> float:
 			"granary":
 				granaries += 1
 	var most := maxi(stores, 1) * Balance.num("storehouse_holds")
+	if res == "lumber":
+		most += _role_count("mill") * Balance.num("lumber_mill_holds")
 	if res == "food":
 		most += granaries * Balance.num("granary_holds")
 	return most
@@ -1467,9 +1484,9 @@ func work(v: Villager, delta: float) -> void:
 					"banshee":
 						v.become_banshee(post.global_position)
 					"necromancer":
-						# A wizard upgraded: no longer one of the wizards asked for.
+						# A mage upgraded (its place among the mages was given
+						# up when the necromancer was asked for: set_wanted()).
 						v.become_necromancer(post.global_position)
-						wanted.wizard = maxi(0, wanted.wizard - 1)
 					_:
 						v.become_wizard(post.global_position)
 		"tryst":
@@ -1681,6 +1698,16 @@ func _spare_farmer(workers: Array[Villager], field: CropField, farmers: Dictiona
 	return null
 
 
+## How many standing buildings with `role` the village has.
+func _role_count(role: String) -> int:
+	var n := 0
+	for node in get_tree().get_nodes_in_group(buildings_group):
+		var b := node as Destructible
+		if b != null and not b.destroyed and BuildingCatalog.role(b.get_meta("kind", "")) == role:
+			n += 1
+	return n
+
+
 ## The village's standing Storm Spires.
 func storm_spires() -> Array[Destructible]:
 	var out: Array[Destructible] = []
@@ -1778,7 +1805,7 @@ func _manage_army() -> void:
 				training -= 1
 			else:
 				for v in people():
-					if (v.soldier and role == "warrior") or (v.wizard and not v.necromancer and role == "wizard") \
+					if (v.soldier and role == "warrior") or (v.wizard and not v.necromancer and v.job != "train" and role == "wizard") \
 							or (v.fey_archer and role == "fey_archer") or (v.banshee and role == "banshee") \
 							or (v.archer and not v.fey_archer and role == "archer") or (v.necromancer and role == "necromancer"):
 						v.become_worker()

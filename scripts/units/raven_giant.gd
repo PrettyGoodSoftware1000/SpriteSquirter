@@ -18,6 +18,9 @@ extends Creature
 ##                eat them it lifts them the same way and holds them up
 ##   StompLeft,   its stomp: the knee comes up and the foot slams down
 ##   StompRight
+##   Cast         casting a spell: the right arm out, the palm at the
+##                target, fingers spread (the arm turned on top to point at
+##                where the spell goes)
 ##
 ## Each joint bends only the way it can (the clips are made inside the
 ## rig's limits). Code adds only a turn of the head to what it watches and
@@ -30,7 +33,7 @@ const FLY_MODEL := "res://assets/creature/raven_fly.glb"
 const MODEL_SCALE := 8.0
 ## Metres its feet carry it in one second of the walk clip (at MODEL_SCALE
 ## 1): the clip is played this much faster or slower to match its speed.
-const CLIP_SPEED := 0.475
+const CLIP_SPEED := 0.6
 ## Where in the walk clip (a share of its length) each foot comes down:
 ## leg 0 (the "_l" bones, at -X) and leg 1 (the "_r" bones).
 const FOOTFALLS: Array[float] = [0.5, 0.0]
@@ -70,6 +73,8 @@ var _fly_t := 0.0
 ## held]. A new one fades in over the last.
 var _playing: Array[Array] = []
 var _fall := 0.0
+## Where the spell it is casting goes.
+var _cast_at := Vector3.ZERO
 var _shown_flying := false
 
 
@@ -188,6 +193,13 @@ func _start_grab(near: Array[Villager]) -> void:
 		_play("Throw")
 
 
+func casting_at(pos: Vector3) -> void:
+	super.casting_at(pos)
+	if not flying:
+		_cast_at = pos
+		_play("Cast")
+
+
 func _take_off() -> void:
 	super._take_off()
 	_playing.clear()
@@ -295,6 +307,12 @@ func _update_body(delta: float) -> void:
 	for p in _playing:
 		_mix_clip(_walk_skel, p[0], minf(p[1], (_clips[p[0]] as Animation).length), p[2])
 
+	# Casting: the outstretched arm points at where the spell goes.
+	for p in _playing:
+		if p[0] == "Cast":
+			var t: float = p[1]
+			_aim_arm(_cast_at, smoothstep(0.0, 0.45, t) * (1.0 - smoothstep(0.85, 1.4, t)) * float(p[2]))
+
 	# The head turns a little towards whatever it watches.
 	var to := _look_at - global_position
 	var want_yaw := clampf(angle_difference(heading, atan2(to.x, to.z)), -0.7, 0.7) if to.length() > 3.0 else 0.0
@@ -316,6 +334,27 @@ func _throw_time(t: float) -> float:
 	else:
 		clip = THROW_LETS_GO + (t - GRAB_LETS_GO)
 	return minf(clip, THROW_HOLDS) if _eating else clip
+
+
+## Turns the right arm (by `weight`) so the hand points at `target`, but no
+## more than about 80 degrees from where the clip holds it.
+func _aim_arm(target: Vector3, weight: float) -> void:
+	if weight < 0.01:
+		return
+	var sk := _walk_skel
+	var upper: int = _walk_bone["arm_upper_r"]
+	var pose := sk.get_bone_global_pose(upper)
+	var hand := sk.get_bone_global_pose(_walk_bone["hand_r"]).origin
+	var now := hand - pose.origin
+	var want := sk.global_transform.affine_inverse() * (target + Vector3.UP) - pose.origin
+	if now.length_squared() < 1e-6 or want.length_squared() < 1e-6:
+		return
+	var turn := Quaternion(now.normalized(), want.normalized())
+	var angle := turn.get_angle()
+	if angle > 1.4:
+		turn = Quaternion.IDENTITY.slerp(turn, 1.4 / angle)
+	pose.basis = Basis(Quaternion.IDENTITY.slerp(turn, weight)) * pose.basis
+	sk.set_bone_global_pose(upper, pose)
 
 
 ## Turns `bone` about the skeleton's up axis by `angle`, on top of its pose.

@@ -1068,14 +1068,20 @@ func _run() -> void:
 			old.queue_free()
 		# (A few tries: each picks spots at random, and the caves may be crowded.)
 		var goblin_site: ConstructionSite = null
+		# (Gooblin Junk enough to pay for it.)
+		var junk_before := play.raids.junk
+		play.raids.junk = 1.0e6
 		for k in 8:
 			goblin_site = play.raids.start_building()
 			if goblin_site != null:
 				break
-		_check(goblin_site != null and goblin_site.goblin and goblin_site.is_in_group("goblin_sites"), "the goblins mark out a building near their cave")
+		_check(goblin_site != null and goblin_site.goblin and goblin_site.is_in_group("goblin_sites")
+			and is_equal_approx(play.raids.junk, 1.0e6 - GoblinRaids.junk_cost(goblin_site.kind)),
+			"the goblins mark out a building near their cave, and pay its Gooblin Junk (%s)" % (goblin_site.kind if goblin_site != null else "none"))
 		_check(play.raids.start_building() == null, "and start no other until it is finished")
 		if goblin_site:
 			var site_cave := goblin_site.get_meta("cave") as Node3D
+			var goblin_site_kind: String = goblin_site.kind
 			var goblin_built := get_tree().get_nodes_in_group("goblin_buildings").size()
 			var rate_before := play.raids.cave_rate(site_cave)
 			# (Fresh goblins at the cave, so there are builders to send.)
@@ -1093,12 +1099,52 @@ func _run() -> void:
 			await _wait(0.5)
 			_check(get_tree().get_nodes_in_group("goblin_buildings").size() == goblin_built + 1 and get_tree().get_nodes_in_group("player_buildings").filter(
 				func(n: Node) -> bool: return n.is_in_group("goblin_buildings")).is_empty(), "and it becomes a goblin building")
-			_check(is_equal_approx(play.raids.cave_rate(site_cave), rate_before + Balance.num("goblin_rate_per_building")),
+			_check(is_equal_approx(play.raids.cave_rate(site_cave), rate_before + Balance.num(goblin_site_kind + "_spawn")),
 				"each goblin building makes its cave spawn more goblins")
 		for kind: String in BuildingFactory.GOBLIN_KINDS:
 			var shack := BuildingFactory.create(kind, RandomNumberGenerator.new())
 			_check(shack.height > 2.0 and BuildingCatalog.find(kind).name != "", "%s builds" % kind)
 			shack.free()
+		# Gooblin Junk: it comes in faster each day, the gooblins wait until they
+		# can pay, and some buildings bring in more each morning.
+		var junk_day: int = play.day_cycle.day
+		play.day_cycle.day = 1
+		var rate_day_1 := play.raids.junk_rate()
+		play.day_cycle.day = 3
+		var rate_day_3 := play.raids.junk_rate()
+		play.day_cycle.day = junk_day
+		_check(is_equal_approx(rate_day_1, game.settings.goblin_junk_rate) and is_equal_approx(rate_day_3, game.settings.goblin_junk_rate + 2.0 * game.settings.goblin_junk_per_day),
+			"the gooblins get Gooblin Junk at the dev menu's rate, more each day (%.0f a minute on day 1, %.0f on day 3)" % [rate_day_1, rate_day_3])
+		for old in get_tree().get_nodes_in_group("goblin_sites"):
+			old.remove_from_group("goblin_sites")
+			old.queue_free()
+		play.raids._kinds_left.clear()
+		play.raids.junk = 0.0
+		var unpaid := play.raids.start_building()
+		play.raids._kinds_left.clear()
+		play.raids.junk = 0.0
+		var cheapest := ""
+		for kind: String in BuildingFactory.GOBLIN_KINDS:
+			if cheapest == "" or GoblinRaids.junk_cost(kind) < GoblinRaids.junk_cost(cheapest):
+				cheapest = kind
+		play.raids.junk = GoblinRaids.junk_cost(cheapest)
+		var paid: ConstructionSite = null
+		for k in 8:
+			paid = play.raids.start_building()
+			if paid != null:
+				break
+		_check(unpaid == null and paid != null and paid.kind == cheapest and play.raids.junk < 1.0,
+			"without the junk they build nothing; with it, the cheapest kind first (%s)" % cheapest)
+		if paid != null:
+			paid.remove_from_group("goblin_sites")
+			paid.queue_free()
+		var junk_then := play.raids.junk
+		play.raids._daily_junk()
+		var junk_makers := 0.0
+		for kind: String in BuildingFactory.GOBLIN_KINDS:
+			junk_makers += Balance.num(kind + "_junk_per_day") * play.raids.standing(kind).size()
+		_check(is_equal_approx(play.raids.junk - junk_then, junk_makers), "each morning the buildings that make junk bring it in (%.0f)" % junk_makers)
+		play.raids.junk = junk_before
 
 		# Chain lightning jumps from one to the next; a wet one may give it a jump more.
 		var storm_at := village.center + Vector3(60, 0, 60)
@@ -1474,8 +1520,10 @@ func _run() -> void:
 		_check(chosen != null and Vector2(chosen.global_position.x - village.center.x, chosen.global_position.z - village.center.z).length() > PlayerVillage.WORK_REACH,
 			"there is no limit to how far lumberjacks go for wood")
 		far_tree.queue_free()
-		_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 1.5) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 1.0)
-			and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"), "the owner's sliders are the defaults: Goblin Spawn Rate 1, goblin build speed 1.5")
+		_check(is_equal_approx(Game.DEFAULT_SETTINGS.goblin_build_speed, 5.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_rate, 1.0)
+			and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_junk_rate, 50.0) and is_equal_approx(Game.DEFAULT_SETTINGS.goblin_junk_per_day, 25.0)
+			and not Game.DEFAULT_SETTINGS.has("goblin_rate_growth"),
+			"the owner's sliders are the defaults: Goblin Spawn Rate 1, gooblin build speed 5, Gooblin Junk 50 a minute and 25 more each day")
 		_check(is_equal_approx(Game.DEFAULT_SETTINGS.day_minutes, 5.0) and play.day_cycle.clock_text().contains(":"), "a day is 5 minutes by default (%s)" % play.day_cycle.clock_text())
 		_check(DayCycle.twelve_hour(16.0) == "4:00 pm" and DayCycle.twelve_hour(0.5) == "12:30 am" and DayCycle.twelve_hour(12.25) == "12:15 pm"
 			and DayCycle.twelve_hour(9.0) == "9:00 am" and (play.day_cycle.clock_text().ends_with(" am") or play.day_cycle.clock_text().ends_with(" pm")),
@@ -2834,6 +2882,13 @@ func _run() -> void:
 				if g._raid_goal.distance_to(other.center) < 15.0:
 					at_neutral += 1
 		_check(at_neutral > 0, "the goblins raid the neutral villages too (%d of %d raiders)" % [at_neutral, get_tree().get_nodes_in_group("raiders").size()])
+		var late_cave: Node3D = null
+		for cave in play.raids._caves:
+			if is_instance_valid(cave):
+				late_cave = cave
+				break
+		var late := play.raids.spawn_at(late_cave) if late_cave != null else null
+		_check(late != null and late.raiding, "a gooblin that crawls out during the night goes straight after the raid")
 		play.raids.end_raid()
 		# Saved and loaded, the neutral villages come back.
 		var data7 := SaveGame.collect(play)

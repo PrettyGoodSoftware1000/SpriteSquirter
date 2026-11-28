@@ -76,6 +76,8 @@ const SETTING_SLIDERS := [
 	["creature_food", "Creature food", 0.0, 100.0, 1.0, "/min full grown"],
 	["creature_grow_minutes", "Creature grows in", 0.5, 60.0, 0.5, "min"],
 	["goblin_build_speed", "Gooblin build speed", 0.25, 10.0, 0.25, "x"],
+	["goblin_junk_rate", "Gooblin Junk rate", 0.0, 500.0, 5.0, "/min"],
+	["goblin_junk_per_day", "Gooblin Junk growth", 0.0, 250.0, 5.0, "/min each day"],
 	["crop_growth_rate", "Crop growth rate", 0.1, 5.0, 0.1, "x"],
 	["sapling_rate", "Saplings planted", 0.0, 20.0, 0.5, "a minute"],
 	["villager_detail", "Villager detail within", 0.0, 300.0, 10.0, "m"],

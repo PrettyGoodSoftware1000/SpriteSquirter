@@ -288,13 +288,39 @@ skeleton_share = 0.5                # its health and damage, as a share of who i
 # --- Gooblin buildings -----------------------------------------------------------
 goblin_build_minutes = 5            # the gooblins start a new building this often
 goblin_buildings_max = 40          # and stop when they have this many
-goblin_rate_per_building = 5      # every finished gooblin building adds this many gooblins a minute at its cave
+# Gooblin Junk (0.64): what the gooblins build with. They get the dev
+# menu's Gooblin Junk rate a minute (50) and its Gooblin Junk growth (25)
+# more a minute for every day gone by. Each building costs <kind>_junk,
+# paid when they mark it out (they build the kinds cheapest first, and
+# wait until they can pay); once finished it makes its cave spawn
+# <kind>_spawn more gooblins a minute, and <kind>_junk_per_day brings in
+# that much junk every morning.
+# At 50 + 25 a day, with a 5-minute day and 3-minute night, they get about
+# 400 junk on day 1, 600 on day 2, 800 on day 3 ... so: a tent on day 1,
+# the potion hut early on day 2 and the forge by its end, the war hut (and
+# its ogre) about day 4, the watchtower (and its bats) about day 5, then
+# round again. Most gooblins die each night, so each raid is about one
+# day's spawning: about 15 on night 1, 35 on night 2, 55 on night 3, 100
+# with an ogre on night 4, 140 on night 5, then more with bats.
+goblin_tent_junk = 200
+goblin_tent_spawn = 2
+goblin_potion_hut_junk = 350
+goblin_potion_hut_spawn = 2
+goblin_potion_hut_junk_per_day = 10
+goblin_forge_junk = 500
+goblin_forge_spawn = 2
+goblin_forge_junk_per_day = 10
+goblin_war_hut_junk = 1500
+goblin_war_hut_spawn = 10
+goblin_watchtower_junk = 2000
+goblin_watchtower_spawn = 10
 # Gooblin population bounce back: with fewer gooblins than this left alive,
 goblin_bounce_below = 5
 goblin_bounce_rate = 5              # the caves spawn at least this many a minute in all
 goblin_bounce_until = 6             # until there are this many again
-# The gooblins do not pay for theirs, but the bigger the number the longer
-# it takes them (build_work_per_resource above applies to them too).
+# How much building work each takes (not what it costs: that is junk,
+# above); the bigger the number the longer it takes them
+# (build_work_per_resource above applies to them too).
 goblin_tent_resources = 150
 goblin_war_hut_resources = 150
 goblin_forge_resources = 150

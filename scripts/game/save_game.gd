@@ -122,7 +122,7 @@ static func collect(play: PlayMode) -> Dictionary:
 		"cooldowns": play._cooldowns.duplicate(),
 		"day": {"time": play.day_cycle.time, "day": play.day_cycle.day},
 		"raids": {"nights": play.raids.nights, "build_timer": play.raids._build_timer, "balrog_timer": play.raids._balrog_timer,
-			"kinds_left": Array(play.raids._kinds_left)},
+			"kinds_left": Array(play.raids._kinds_left), "junk": play.raids.junk},
 		"buildings": [], "bridges": [], "sites": [], "fields": [], "people": [], "others": [], "goblins": [], "balrogs": [],
 	}
 	# The neutral villages (their buildings, people and so on say which).
@@ -405,6 +405,7 @@ static func restore(play: PlayMode, d: Dictionary) -> void:
 	play.raids._build_timer = float(rd.get("build_timer", 0.0))
 	play.raids._balrog_timer = float(rd.get("balrog_timer", 3.0))
 	play.raids._kinds_left.assign(rd.get("kinds_left", []))
+	play.raids.junk = float(rd.get("junk", 0.0))
 
 	# Buildings, then the bridges between them and what is being built.
 	var made: Array[Destructible] = []

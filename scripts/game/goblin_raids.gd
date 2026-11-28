@@ -5,8 +5,9 @@ extends Node
 ## Every cave that was there when the game began spawns goblins all the
 ## time, at Game.settings.goblin_rate per minute (it does not rise by the
 ## night). Every finished goblin building adds
-## Balance "goblin_rate_per_building" more at its cave. At nightfall every
-## goblin leaves its cave and marches on the village; in the morning the
+## Balance "<kind>_spawn" more at its cave. At nightfall (midnight) every
+## goblin leaves its cave and marches on the village (and any that crawl
+## out during the night go straight after them); in the morning the
 ## survivors go home. Call setup() with the DayCycle.
 ##
 ## Ogres and giant bats come from what the goblins have built. Every war
@@ -21,15 +22,22 @@ extends Node
 ## cave while it grows, and marches with the raids once it is full grown.
 ## When one dies the next hatches "balrog_respawn_minutes" later.
 ##
-## The goblins build, too. Every Balance "goblin_build_minutes" (divided by
-## the dev menu's goblin build speed, which also hurries the builders) they
-## mark out one of BuildingFactory.GOBLIN_KINDS near one of their caves (one
-## at a time: not until the last one is finished), and up to BUILDERS
-## goblins put it up, going back to the cave now and then for what they
-## build with (the goblins' resources are not counted). Builders stay at
+## The goblins build, too, with **Gooblin Junk** (0.64). Junk piles up all
+## the time: Game.settings.goblin_junk_rate a minute, and
+## goblin_junk_per_day more a minute for every day gone by (both dev menu
+## sliders); and every morning each standing building of a kind with
+## Balance "<kind>_junk_per_day" adds that much. Every
+## "goblin_build_minutes" (divided by the dev menu's goblin build speed,
+## which also hurries the builders) they mark out one of
+## BuildingFactory.GOBLIN_KINDS near one of their caves, if they have the
+## junk it costs ("<kind>_junk", paid as it is marked out; otherwise they
+## wait for it), one at a time: not until the last one is finished. Up to
+## BUILDERS goblins put it up, going back to the cave now and then. Each
+## finished building makes its cave spawn "<kind>_spawn" more goblins a
+## minute. Builders stay at
 ## home when the others raid, and keep at it until the building is
 ## finished. They stop at "goblin_buildings_max" buildings. They build one
-## of each kind, in a random order, before starting on the kinds again.
+## of each kind, cheapest first, before starting on the kinds again.
 ## When there is no room where they first look they look further from the
 ## cave, and if there is still none they try again a little later.
 ##
@@ -89,17 +97,43 @@ var _site_timer := 0.0
 var _balrog_timer := 3.0
 ## The kinds of building the goblins have yet to put up in this round.
 var _kinds_left: Array[String] = []
+## The goblins' Gooblin Junk, what they build with.
+var junk := 0.0
+var _day_cycle: DayCycle
 ## Balrogs that set out with the raid that is on.
 var marching := 0
 
 
 func setup(day_cycle: DayCycle) -> void:
+	_day_cycle = day_cycle
 	day_cycle.nightfall.connect(func() -> void:
 		nights += 1
 		start_raid())
-	day_cycle.morning.connect(end_raid)
+	day_cycle.morning.connect(func() -> void:
+		end_raid()
+		_daily_junk())
 	for node in get_tree().get_nodes_in_group("caves"):
 		_caves.append(node as Node3D)
+
+
+## Gooblin Junk a minute now: the dev menu's goblin_junk_rate, and
+## goblin_junk_per_day more for every day gone by.
+func junk_rate() -> float:
+	var days := (_day_cycle.day - 1) if _day_cycle != null else 0
+	return maxf(0.0, float(Game.settings.get("goblin_junk_rate", 50.0)) + float(Game.settings.get("goblin_junk_per_day", 25.0)) * days)
+
+
+## What a goblin building of `kind` costs in junk.
+static func junk_cost(kind: String) -> float:
+	return Balance.num(kind + "_junk")
+
+
+## Every morning, the junk the buildings that make it bring in.
+func _daily_junk() -> void:
+	for kind: String in BuildingFactory.GOBLIN_KINDS:
+		var each := Balance.num(kind + "_junk_per_day")
+		if each > 0.0:
+			junk += each * standing(kind).size()
 
 
 ## Goblins each starting cave spawns per minute before its buildings add
@@ -171,11 +205,16 @@ func add_cave(cave: Node3D) -> void:
 ## Goblins `cave` spawns per minute: spawn_rate(), and more for each
 ## finished goblin building that belongs to it.
 func cave_rate(cave: Node3D) -> float:
-	var built := 0
+	return spawn_rate() + _buildings_rate(cave)
+
+
+## Goblins a minute that `cave`'s standing buildings add.
+func _buildings_rate(cave: Node3D) -> float:
+	var more := 0.0
 	for node in get_tree().get_nodes_in_group("goblin_buildings"):
-		if node.get_meta("cave", null) == cave:
-			built += 1
-	return spawn_rate() + built * Balance.num("goblin_rate_per_building")
+		if node.get_meta("cave", null) == cave and not (node as Destructible).destroyed:
+			more += Balance.num(String(node.get_meta("kind", "")) + "_spawn")
+	return more
 
 
 func _process(delta: float) -> void:
@@ -191,6 +230,7 @@ func _process(delta: float) -> void:
 			spawn_at(cave)
 		_spawned[cave] = due
 	_bounce_back(delta)
+	junk += junk_rate() / 60.0 * delta
 	if get_tree().get_nodes_in_group("balrogs").size() < roundi(Balance.num("balrogs")):
 		_balrog_timer -= delta
 		if _balrog_timer <= 0.0:
@@ -201,7 +241,7 @@ func _process(delta: float) -> void:
 	if _build_timer >= every:
 		_build_timer = 0.0
 		if start_building() == null and _wants_to_build():
-			# Nowhere to put it: look again in a few seconds.
+			# Not enough junk yet, or nowhere to put it: look again in a few seconds.
 			_build_timer = maxf(0.0, every - RETRY_SECONDS)
 	_site_timer -= delta
 	if _site_timer <= 0.0:
@@ -225,6 +265,7 @@ func advance(seconds: float) -> void:
 		_spawned[cave] = minf(due, 1.0)
 	_balrog_timer -= seconds
 	_build_timer += seconds
+	junk += junk_rate() / 60.0 * seconds
 
 
 ## How many goblins there are (alive, not charmed; ogres not counted).
@@ -302,9 +343,10 @@ func _wants_to_build() -> bool:
 	return false
 
 
-## Marks out a new goblin building near a cave (`kind`, or one picked at
-## random). Returns its site, or null if the goblins have enough, are
-## still busy on the last one, or there is no room. It tries spots further
+## Marks out a new goblin building near a cave (`kind`, free, or the next
+## in their round, for its junk). Returns its site, or null if the goblins
+## have enough, are still busy on the last one, cannot pay for it yet, or
+## there is no room. It tries spots further
 ## and further from the caves until one fits.
 func start_building(kind := "") -> ConstructionSite:
 	var tree := get_tree()
@@ -317,12 +359,16 @@ func start_building(kind := "") -> ConstructionSite:
 			caves.append(cave)
 	if caves.is_empty() or have >= roundi(Balance.num("goblin_buildings_max")):
 		return null
+	var cost := 0.0
 	if kind == "":
-		# Each kind once, in a random order, before any comes round again.
+		# Each kind once, cheapest first, before any comes round again.
 		if _kinds_left.is_empty():
 			_kinds_left.assign(BuildingFactory.GOBLIN_KINDS)
-			_kinds_left.shuffle()
+		_kinds_left.sort_custom(func(a: String, b: String) -> bool: return junk_cost(a) > junk_cost(b))
 		kind = _kinds_left.back()
+		cost = junk_cost(kind)
+		if junk < cost:
+			return null
 	var footprint := 3.4
 	var terrain := Game.terrain
 	for attempt in 160:
@@ -345,6 +391,7 @@ func start_building(kind := "") -> ConstructionSite:
 			if Vector2(t.global_position.x - p.x, t.global_position.z - p.z).length() < footprint + 1.5:
 				t.fell()
 		var site := ConstructionSite.new()
+		junk -= cost
 		site.setup(kind, randi(), {"resources": Balance.num(kind + "_resources")}, true)
 		site.set_meta("cave", cave)
 		# The finished building belongs to the cave, and makes it spawn more.
@@ -486,6 +533,9 @@ func spawn_at(cave: Node3D) -> Villager:
 	g.global_position = Vector3(mouth.x, Game.terrain.get_height(mouth.x, mouth.z), mouth.z)
 	if randf() < Balance.num("goblin_archer_chance"):
 		g.become_goblin_archer()
+	if raiding:
+		# (Out in the night: straight off after the others.)
+		_send(g)
 	return g
 
 
@@ -500,7 +550,8 @@ func cave_tip(cave: Node3D) -> String:
 			built += 1
 	var lines: PackedStringArray = ["Gooblin cave", "Spawns %s gooblins a minute" % _num(cave_rate(cave) if _caves.has(cave) else 0.0)]
 	if built > 0:
-		lines.append("(%s of them from its %d buildings)" % [_num(built * Balance.num("goblin_rate_per_building")), built])
+		lines.append("(%s of them from its %d buildings)" % [_num(_buildings_rate(cave)), built])
+	lines.append("Gooblin Junk %d (+%s a minute)" % [floori(junk), _num(junk_rate())])
 	var goblins := 0
 	var archers := 0
 	var ogres := 0
@@ -524,7 +575,9 @@ func cave_tip(cave: Node3D) -> String:
 
 ## What pointing at one of the goblins' buildings shows: what it does.
 static func building_tip(kind: String) -> String:
-	var more := "Makes %s more gooblins spawn a minute" % _num(Balance.num("goblin_rate_per_building"))
+	var more := "Makes %s more gooblins spawn a minute" % _num(Balance.num(kind + "_spawn"))
+	if Balance.num(kind + "_junk_per_day") > 0.0:
+		more += "\nBrings in %s Gooblin Junk a day" % _num(Balance.num(kind + "_junk_per_day"))
 	match kind:
 		OGRE_HOME:
 			var n := roundi(Balance.num("ogres_per_war_hut"))
@@ -560,10 +613,7 @@ func start_raid() -> void:
 		# Builders stay behind to finish what they are building.
 		if g.job == "build" and is_instance_valid(g.job_target):
 			continue
-		var a := randf() * TAU
-		var goal := targets[randi() % targets.size()]
-		var near := goal.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0)
-		g.start_raid(near, _route_for(g.home) if goal == village else PackedVector3Array())
+		var goal := _send(g, targets)
 		if not g.raiding:
 			continue
 		if goal != village:
@@ -591,6 +641,23 @@ func start_raid() -> void:
 			for n in roundi(Balance.num("bats_per_watchtower")):
 				get_tree().create_timer(6.0 + 9.0 * k + randf() * 4.0, false).timeout.connect(launch_bat.bind(tower))
 				k += 1
+
+
+## Sends goblin `g` off on the raid, to the player's village or one of the
+## neutral ones (`targets`; all of them, if not given), at random. Returns
+## the village it goes for.
+func _send(g: Villager, targets: Array[PlayerVillage] = []) -> PlayerVillage:
+	var village := Game.village
+	if targets.is_empty():
+		targets = [village]
+		for node in get_tree().get_nodes_in_group("neutral_villages"):
+			if (node as NeutralVillage).founded:
+				targets.append(node as PlayerVillage)
+	var a := randf() * TAU
+	var goal := targets[randi() % targets.size()]
+	var near := goal.center + Vector3(cos(a), 0.0, sin(a)) * randf_range(2.0, 10.0)
+	g.start_raid(near, _route_for(g.home) if goal == village else PackedVector3Array())
+	return goal
 
 
 ## A giant bat flies off `from` (a watchtower, or else one of the caves) to

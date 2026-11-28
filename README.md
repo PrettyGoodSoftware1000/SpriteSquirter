@@ -225,15 +225,30 @@ starts; they carry over into it.
 7. **Grow.** A tiny villager is born every *birth timer* seconds while there
    is housing (10, plus what your Homes add) and food. Children grow up in a minute
    and then start working.
-8. **Survive the night.** The night is half as long as the daylight. Halfway
-   through it every gooblin leaves its cave and marches on your village,
-   swimming rivers on the way. They attack villagers first, then buildings,
+8. **Survive the night.** The night is half as long as the daylight. The
+   moment it falls, at midnight, every gooblin leaves its cave and
+   marches on your village, swimming rivers on the way (and any that
+   crawl out during the night go straight after them). They attack villagers first, then buildings,
    and go home in the morning. Every cave that was there when the game
    began keeps spawning gooblins (1 a minute, the dev menu's gooblin
    spawn, and 2 more for every neutral village there was at the start),
-   and every gooblin building finished near a cave adds
-   `goblin_rate_per_building` a minute more there. Only their buildings
-   make them spawn faster; the nights alone do not.
+   and every gooblin building finished near a cave adds more a minute
+   there: 2 for a tent, potion hut or forge, 10 for a war hut or
+   watchtower (`<kind>_spawn`). Only their buildings make them spawn
+   faster; the nights alone do not.
+   **Gooblin Junk.** The gooblins build with junk: 50 a minute on the
+   first day and 25 a minute more every day after (the dev menu's
+   **Gooblin Junk rate** and **Gooblin Junk growth**), and 10 more every
+   morning for each potion hut and forge. They build each kind once,
+   cheapest first, and wait until they can pay for the next: a tent (200
+   junk), a potion hut (350), a forge (500), a war hut (1,500), a
+   watchtower (2,000), then round again (`<kind>_junk`). With the
+   standard 5-minute day and 3-minute night that is a tent on day 1, the
+   potion hut and forge on day 2, the war hut about day 4 and the
+   watchtower about day 5, so each night's raid is bigger than the last:
+   about 15 gooblins on night 1, 35 on night 2, 55 on night 3, 100 and an
+   ogre on night 4, 140 on night 5, then giant bats too. Pointing at a
+   cave shows their junk and how fast it comes in.
    **Ogres and giant bats come from gooblin buildings.** Every **war hut**
    the gooblins finish adds an **ogre** with a spiked club (ten times a
    gooblin's health, three times its damage, too big to pick up or throw,
@@ -588,7 +603,9 @@ before a game starts.
 | Gooblin Spawn Rate | Gooblins each starting cave spawns per minute before its buildings add more (each finished gooblin building adds `goblin_rate_per_building`, and every neutral village at the start `neutral_goblin_spawn`). 1 by default. **Gooblin population bounce back**: with fewer than 5 gooblins left, the caves spawn 5 a minute until there are 6 (`goblin_bounce_...` in `balancing.txt`) |
 | Creature food | Food a full-grown creature eats per minute (default 20) |
 | Creature grows in | Minutes for the creature to reach full size (default 30) |
-| Gooblin build speed | How many times as fast the gooblins start and finish buildings (1.5 by default; every neutral village at the start adds `neutral_goblin_build_speed`) |
+| Gooblin build speed | How many times as fast the gooblins start and finish buildings (5 by default; every neutral village at the start adds `neutral_goblin_build_speed`) |
+| Gooblin Junk rate | Gooblin Junk the gooblins get a minute on the first day (50) |
+| Gooblin Junk growth | How much more junk a minute they get for every day after (25) |
 | Construction rate | How many times as fast your buildings go up |
 | Training time | Multiplies every training time |
 | Starting influence / Influence per person | How far the village's influence reaches at first, and how much further for every villager |
